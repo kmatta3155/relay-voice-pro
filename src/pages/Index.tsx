@@ -167,6 +167,7 @@ function NavBar() {
         <nav className="hidden md:flex items-center gap-6 text-sm">
           <a href="#features" className="hover:opacity-80">Features</a>
           <a href="#pricing" className="hover:opacity-80">Pricing</a>
+          <a href="#demo" className="hover:opacity-80">Demo</a>
           <a href="#faq" className="hover:opacity-80">FAQ</a>
           <a href="#security" className="hover:opacity-80 inline-flex items-center gap-1"><Lock className="w-4 h-4" /> Security</a>
           <a href="#analytics" className="hover:opacity-80">Analytics</a>
@@ -174,10 +175,10 @@ function NavBar() {
           <a href="#knowledge" className="hover:opacity-80">Knowledge</a>
           <a href="#settings" className="hover:opacity-80">Settings</a>
           <a href="#billing" className="hover:opacity-80">Billing</a>
-          <a href="https://status.TODO_domain" target="_blank" rel="noreferrer" className="hover:opacity-80 inline-flex items-center gap-1"><ActivitySquare className="w-4 h-4" /> Status</a>
+          <a href={`https://status.${CONFIG.DOMAIN}`} target="_blank" rel="noreferrer" className="hover:opacity-80 inline-flex items-center gap-1"><ActivitySquare className="w-4 h-4" /> Status</a>
         </nav>
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost"><a href="#contact">Contact</a></Button>
+          <Button asChild variant="ghost"><a href="#signin">Sign in</a></Button>
           <Button asChild className="rounded-2xl"><a href="#app">Get started</a></Button>
         </div>
       </div>
@@ -196,8 +197,9 @@ function Hero() {
           RelayAI answers calls, handles FAQs, and books appointments for your business—24/7. Built for salons, auto shops, med spas, home services, and more.
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          <Button asChild size="lg" className="rounded-2xl"><a href="#get-started" className="inline-flex items-center gap-2">Try it free <ArrowRight className="w-4 h-4" /></a></Button>
+          <Button asChild size="lg" className="rounded-2xl"><a href="#app" className="inline-flex items-center gap-2">Try it free <ArrowRight className="w-4 h-4" /></a></Button>
           <Button asChild variant="outline" size="lg" className="rounded-2xl"><a href="#demo">Watch demo</a></Button>
+          <Button asChild variant="ghost" size="lg" className="rounded-2xl"><a href={`tel:${CONFIG.PHONE}`}>Call sales</a></Button>
         </div>
         <ConsentNote />
         <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">

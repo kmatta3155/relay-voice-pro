@@ -9,7 +9,7 @@ export const CONFIG = {
   WEBHOOK_SECRET: "",
   // 🔧 NEW: Cal.com integration (set ONE of these)
   CAL_HANDLE: "",            // e.g., "relayai"  (will use https://cal.com/relayai)
-  CAL_EVENT_PATH: "",        // optional: e.g., "relayai/demo"  (uses https://cal.com/relayai/demo)
+  CAL_EVENT_PATH: "relayai/demo",        // optional: e.g., "relayai/demo"  (uses https://cal.com/relayai/demo)
   CAL_URL: ""                // optional: full override URL if you want to paste it directly
 };
 
