@@ -27,6 +27,11 @@ import calendlyLogo from "@/assets/logos/calendly.svg";
 import outlookLogo from "@/assets/logos/outlook.svg";
 import { getDashboardMetrics } from "@/lib/analytics";
 import { startCheckout } from "@/lib/billing";
+import AnalyticsPage from "@/pages/AnalyticsPage";
+import MessagesPage from "@/pages/MessagesPage";
+import KnowledgePage from "@/pages/KnowledgePage";
+import SettingsPage from "@/pages/SettingsPage";
+import BillingPage from "@/pages/BillingPage";
 // SEO head tags (title, description, canonical)
 function SEOHead() {
   React.useEffect(() => {
@@ -57,12 +62,22 @@ function SEOHead() {
   return null;
 }
 
-/**
- * Production-ready Lovable.dev landing + pages for an AI Receptionist
- * - Tailwind + shadcn/ui + lucide-react + Framer Motion
- * - Added: Security page, Status link, recording-consent copy, JSON-LD, and a Cal.com demo embed
- * - Replace placeholders like TODO_domain, TODO_company, TODO_cal_handle before publishing
- */
+function useHashTab(defaultTab: string) {
+  const [tab, setTab] = React.useState<string>(() =>
+    typeof window !== "undefined" ? window.location.hash.replace("#", "") || defaultTab : defaultTab
+  );
+  React.useEffect(() => {
+    const onHash = () => setTab(window.location.hash.replace("#", "") || defaultTab);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [defaultTab]);
+  const go = (t: string) => {
+    setTab(t);
+    if (typeof window !== "undefined") window.location.hash = t;
+  };
+  return [tab, go] as const;
+}
+
 
 const features = [
   { icon: <Phone className="w-6 h-6" aria-hidden />, title: "Answer Every Call", text: "Friendly, on-brand voice 24/7—never miss a booking." },
@@ -98,23 +113,33 @@ function SectionHeader({ kicker, title, subtitle }: { kicker?: string; title: st
 }
 
 export default function AIReceptionistApp() {
+  const [tab] = useHashTab("overview");
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted text-foreground">
       <SEOHead />
       <SEOJsonLD />
       <NavBar />
       <main>
-        <Hero />
-        <TrustLogos />
-        <MetricsOverview />
-        <Features />
-        <Pricing />
-        <UpgradeCTA />
-        <Demo />
-        <GetStarted />
-        <FAQ />
-        <Security />
-        <Legal />
+        {(!tab || tab === 'overview') && (
+          <>
+            <Hero />
+            <TrustLogos />
+            <MetricsOverview />
+            <Features />
+            <Pricing />
+            <UpgradeCTA />
+            <Demo />
+            <GetStarted />
+            <FAQ />
+            <Security />
+            <Legal />
+          </>
+        )}
+        {tab === 'analytics' && <AnalyticsPage />}
+        {tab === 'messages' && <MessagesPage />}
+        {tab === 'knowledge' && <KnowledgePage />}
+        {tab === 'settings' && <SettingsPage />}
+        {tab === 'billing' && <BillingPage />}
       </main>
       <Footer />
       <div id="contact" className="fixed bottom-4 right-4"><ContactFloating /></div>
@@ -137,6 +162,11 @@ function NavBar() {
           <a href="#pricing" className="hover:opacity-80">Pricing</a>
           <a href="#faq" className="hover:opacity-80">FAQ</a>
           <a href="#security" className="hover:opacity-80 inline-flex items-center gap-1"><Lock className="w-4 h-4" /> Security</a>
+          <a href="#analytics" className="hover:opacity-80">Analytics</a>
+          <a href="#messages" className="hover:opacity-80">Messages</a>
+          <a href="#knowledge" className="hover:opacity-80">Knowledge</a>
+          <a href="#settings" className="hover:opacity-80">Settings</a>
+          <a href="#billing" className="hover:opacity-80">Billing</a>
           <a href="https://status.TODO_domain" target="_blank" rel="noreferrer" className="hover:opacity-80 inline-flex items-center gap-1"><ActivitySquare className="w-4 h-4" /> Status</a>
         </nav>
         <div className="flex items-center gap-2">
