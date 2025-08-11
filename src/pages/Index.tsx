@@ -25,6 +25,8 @@ import vagaroLogo from "@/assets/logos/vagaro.svg";
 import acuityLogo from "@/assets/logos/acuity.svg";
 import calendlyLogo from "@/assets/logos/calendly.svg";
 import outlookLogo from "@/assets/logos/outlook.svg";
+import { getDashboardMetrics } from "@/lib/analytics";
+import { startCheckout } from "@/lib/billing";
 // SEO head tags (title, description, canonical)
 function SEOHead() {
   React.useEffect(() => {
@@ -104,8 +106,10 @@ export default function AIReceptionistApp() {
       <main>
         <Hero />
         <TrustLogos />
+        <MetricsOverview />
         <Features />
         <Pricing />
+        <UpgradeCTA />
         <Demo />
         <GetStarted />
         <FAQ />
@@ -208,6 +212,50 @@ function TrustLogos() {
             </div>
           )
         )}
+      </div>
+    </section>
+  );
+}
+
+function MetricsOverview() {
+  const leads = React.useMemo(() => [{ score: 85 }, { score: 60 }, { score: 92 }], []);
+  const appointments = React.useMemo(() => [{}, {}], []);
+  const messages = React.useMemo(() => Array.from({ length: 7 }, () => ({})), []);
+  const metrics = getDashboardMetrics({ leads, appointments, messages });
+  return (
+    <section className="max-w-6xl mx-auto px-4 pb-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 bg-white rounded-xl shadow">
+          <div className="text-sm text-gray-500">Conversion Rate</div>
+          <div className="text-2xl font-bold">{metrics.conversionRate}%</div>
+        </div>
+        <div className="p-4 bg-white rounded-xl shadow">
+          <div className="text-sm text-gray-500">Hot Leads</div>
+          <div className="text-2xl font-bold">{metrics.hotLeads}</div>
+        </div>
+        <div className="p-4 bg-white rounded-xl shadow">
+          <div className="text-sm text-gray-500">Appointments</div>
+          <div className="text-2xl font-bold">{metrics.totalAppointments}</div>
+        </div>
+        <div className="p-4 bg-white rounded-xl shadow">
+          <div className="text-sm text-gray-500">Messages</div>
+          <div className="text-2xl font-bold">{metrics.totalMessages}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UpgradeCTA() {
+  return (
+    <section className="max-w-6xl mx-auto px-4 py-6">
+      <div className="flex justify-center">
+        <button
+          className="bg-blue-600 text-white px-4 py-2 rounded"
+          onClick={() => startCheckout("plan_receptionist_crm")}
+        >
+          Upgrade to Receptionist + CRM
+        </button>
       </div>
     </section>
   );

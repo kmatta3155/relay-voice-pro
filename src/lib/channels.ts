@@ -1,25 +1,20 @@
-// src/lib/channels.ts
-import { postWebhook } from "@/lib/webhooks";
-
-export async function ingestChannelMessage(channel: string, msg: any, setThreads: (fn: any) => void) {
-  const formatted = {
-    from: msg.from || "unknown",
-    at: msg.at || new Date().toISOString(),
-    text: msg.text || "",
-    channel,
-  };
-
+export function ingestChannelMessage(channel: string, message: any, setThreads: any) {
   setThreads((cur: any[]) => {
-    const id = `${channel}-${msg.from}`;
+    const id = cur.find((t) => t.with === message.from)?.id || `${channel}-${Date.now()}`;
     const next = cur.find((t) => t.id === id)
       ? cur.map((t) =>
-          t.id === id ? { ...t, thread: [...t.thread, formatted] } : t
+          t.id === id
+            ? { ...t, thread: [...t.thread, { from: channel, at: new Date().toISOString(), text: message.text }] }
+            : t
         )
-      : [...cur, { id, with: msg.from, channel, thread: [formatted] }];
+      : [
+          ...cur,
+          {
+            id,
+            with: message.from,
+            thread: [{ from: channel, at: new Date().toISOString(), text: message.text }],
+          },
+        ];
     return next;
   });
-
-  try {
-    await postWebhook({ type: "channel.message", channel, message: formatted });
-  } catch {}
 }

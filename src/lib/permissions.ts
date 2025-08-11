@@ -1,21 +1,13 @@
-// src/lib/permissions.ts
-export type Role = "owner" | "staff" | "viewer";
-
-export function canViewLeads(role: Role) {
-  return role === "owner" || role === "staff";
+export function canViewLeads(role: string) {
+  return ["admin", "manager", "owner"].includes(role);
 }
-
-export function canEditLeads(role: Role) {
-  return role === "owner" || role === "staff";
+export function canEditLeads(role: string) {
+  return ["admin", "manager"].includes(role);
 }
-
-export function canViewAnalytics(role: Role) {
-  return role === "owner";
-}
-
-export function routeNotification(lead: any, staffList: any[]) {
-  if (lead.score === "Hot") {
-    return staffList.find((s) => s.role === "staff") || null;
+export function routeNotification(lead: any, staff: any[]) {
+  if (lead.score >= 80) {
+    const manager = staff.find((u) => u.role === "manager");
+    return manager || null;
   }
   return null;
 }
