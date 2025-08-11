@@ -81,22 +81,51 @@ function SignInScreen(){
   );
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AuthGate>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthGate>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+function DashboardShell(){
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Index />} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
 
-export default App;
+function MarketingSite(){
+  return <Index />;
+}
+
+export default function RelayAIPlatformApp() {
+  const [mode, setMode] = useState<'site'|'app'|'signin'>(() => {
+    if (typeof window === 'undefined') return 'site';
+    const h = (location.hash || '').replace('#','');
+    return (h==='app' || h==='signin') ? (h as any) : 'site';
+  });
+
+  useEffect(() => {
+    const onHash = () => {
+      const h = (location.hash || '').replace('#','');
+      setMode((h==='app' || h==='signin') ? (h as any) : 'site');
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const content = mode === 'app'
+    ? <AuthGate><DashboardShell /></AuthGate>
+    : mode === 'signin'
+      ? <SignInScreen />
+      : <MarketingSite />;
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        {content}
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
