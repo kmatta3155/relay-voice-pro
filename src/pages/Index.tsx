@@ -15,6 +15,7 @@ import {
   ArrowRight,
   Lock,
   ActivitySquare,
+  LayoutDashboard,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
@@ -176,6 +177,7 @@ function NavBar() {
           <a href="#settings" className="hover:opacity-80">Settings</a>
           <a href="#billing" className="hover:opacity-80">Billing</a>
           <a href={`https://status.${CONFIG.DOMAIN}`} target="_blank" rel="noreferrer" className="hover:opacity-80 inline-flex items-center gap-1"><ActivitySquare className="w-4 h-4" /> Status</a>
+          <a href="#app" className="hover:opacity-80 inline-flex items-center gap-1"><LayoutDashboard className="w-4 h-4" /> Dashboard</a>
         </nav>
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost"><a href="#signin">Sign in</a></Button>
@@ -349,11 +351,11 @@ function Pricing() {
 
 function Demo() {
   // Build a Cal.com URL from CONFIG (CAL_URL wins, then EVENT_PATH, then HANDLE)
+  const ep = (CONFIG.CAL_EVENT_PATH?.trim?.() ? CONFIG.CAL_EVENT_PATH.trim() : "");
+  const handle = (CONFIG.CAL_HANDLE?.trim?.() ? CONFIG.CAL_HANDLE.trim() : "");
   const calSrc =
     (CONFIG.CAL_URL?.trim?.() ? CONFIG.CAL_URL.trim() : "") ||
-    (CONFIG.CAL_EVENT_PATH?.trim?.()
-      ? `https://cal.com/${CONFIG.CAL_EVENT_PATH.trim()}`
-      : (CONFIG.CAL_HANDLE?.trim?.() ? `https://cal.com/${CONFIG.CAL_HANDLE.trim()}` : ""));
+    (ep ? (ep.startsWith("http") ? ep : `https://cal.com/${ep}`) : (handle ? `https://cal.com/${handle}` : ""));
 
   // Inject Cal.com embed script once so iframe resizes properly
   React.useEffect(() => {

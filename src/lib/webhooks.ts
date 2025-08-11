@@ -7,10 +7,10 @@ export const CONFIG = {
   GA_MEASUREMENT_ID: "G-XXXXXXX",
   WEBHOOK_URL: "https://hooks.zapier.com/hooks/catch/xxxxxxx/xxxxxxx/",
   WEBHOOK_SECRET: "",
-  // 🔧 NEW: Cal.com integration (set ONE of these)
-  CAL_HANDLE: "",            // e.g., "relayai"  (will use https://cal.com/relayai)
-  CAL_EVENT_PATH: "relayai/demo",        // optional: e.g., "relayai/demo"  (uses https://cal.com/relayai/demo)
-  CAL_URL: ""                // optional: full override URL if you want to paste it directly
+  // Cal.com settings — recommended approach
+  CAL_HANDLE: "",
+  CAL_EVENT_PATH: "https://cal.com/relayai/30min", // ✅ recommended: points straight to your Demo event
+  CAL_URL: ""
 };
 
 export async function postWebhook(body: any) {
