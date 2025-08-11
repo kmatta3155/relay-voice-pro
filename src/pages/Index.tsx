@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-import { emitLeadCreated, emitMessageSent } from "@/lib/webhooks";
+import { postWebhook } from "@/lib/webhooks";
 import freshaLogo from "@/assets/logos/fresha.svg";
 import squareLogo from "@/assets/logos/square.svg";
 import vagaroLogo from "@/assets/logos/vagaro.svg";
@@ -300,7 +300,7 @@ function GetStarted() {
         url: window.location.href,
         ts: new Date().toISOString(),
       };
-      await emitLeadCreated(lead);
+      await postWebhook({ type: "lead.created", lead });
       toast({ title: "Request sent", description: "We’ll be in touch shortly." });
       setBusiness("");
       setEmail("");
@@ -446,7 +446,11 @@ function ContactFloating() {
     e.preventDefault();
     setLoading(true);
     try {
-      await emitMessageSent("hello@TODO_domain", { name, email, message, source: "contact_widget", url: window.location.href, ts: new Date().toISOString() });
+      await postWebhook({
+        type: "message.sent",
+        to: "hello@TODO_domain",
+        message: { name, email, message, source: "contact_widget", url: window.location.href, ts: new Date().toISOString() },
+      });
       toast({ title: "Message sent", description: "We’ll reply shortly." });
       setName("");
       setEmail("");
