@@ -17,7 +17,8 @@ import {
   ActivitySquare,
 } from "lucide-react";
 import { motion } from "framer-motion";
-
+import { useToast } from "@/components/ui/use-toast";
+import { emitLeadCreated, emitMessageSent } from "@/lib/webhooks";
 // SEO head tags (title, description, canonical)
 function SEOHead() {
   React.useEffect(() => {
@@ -266,6 +267,39 @@ function Demo() {
 }
 
 function GetStarted() {
+  const { toast } = useToast();
+  const [business, setBusiness] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [website, setWebsite] = React.useState("");
+  const [details, setDetails] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const lead = {
+        business,
+        email,
+        website,
+        details,
+        source: "trial_form",
+        url: window.location.href,
+        ts: new Date().toISOString(),
+      };
+      await emitLeadCreated(lead);
+      toast({ title: "Request sent", description: "We’ll be in touch shortly." });
+      setBusiness("");
+      setEmail("");
+      setWebsite("");
+      setDetails("");
+    } catch (err) {
+      toast({ title: "Error", description: "Could not send your request. Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <section id="get-started" className="px-4 py-16 md:py-24 bg-card">
       <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
@@ -284,12 +318,12 @@ function GetStarted() {
             <p className="text-sm text-muted-foreground">No credit card required. Cancel anytime.</p>
           </CardHeader>
           <CardContent>
-            <form className="grid gap-3" onSubmit={(e) => e.preventDefault()}>
-              <Input placeholder="Business name" required />
-              <Input type="email" placeholder="Work email" required />
-              <Input placeholder="Website (optional)" />
-              <Textarea rows={3} placeholder="Describe your services & hours" />
-              <Button className="rounded-2xl">Create my AI receptionist</Button>
+            <form className="grid gap-3" onSubmit={onSubmit}>
+              <Input placeholder="Business name" required value={business} onChange={(e) => setBusiness(e.target.value)} />
+              <Input type="email" placeholder="Work email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input placeholder="Website (optional)" value={website} onChange={(e) => setWebsite(e.target.value)} />
+              <Textarea rows={3} placeholder="Describe your services & hours" value={details} onChange={(e) => setDetails(e.target.value)} />
+              <Button className="rounded-2xl" disabled={loading}>{loading ? "Sending..." : "Create my AI receptionist"}</Button>
             </form>
           </CardContent>
         </Card>
@@ -389,6 +423,28 @@ function ChatBubble({ user = false, name, text }: { user?: boolean; name: string
 }
 
 function ContactFloating() {
+  const { toast } = useToast();
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [message, setMessage] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await emitMessageSent("hello@TODO_domain", { name, email, message, source: "contact_widget", url: window.location.href, ts: new Date().toISOString() });
+      toast({ title: "Message sent", description: "We’ll reply shortly." });
+      setName("");
+      setEmail("");
+      setMessage("");
+    } catch (err) {
+      toast({ title: "Error", description: "Could not send your message. Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Card className="rounded-2xl shadow-xl">
       <CardHeader className="pb-2">
@@ -396,11 +452,11 @@ function ContactFloating() {
         <p className="text-xs text-muted-foreground">We usually reply within minutes.</p>
       </CardHeader>
       <CardContent>
-        <form className="grid gap-2" onSubmit={(e) => e.preventDefault()}>
-          <Input placeholder="Name" required />
-          <Input type="email" placeholder="Email" required />
-          <Textarea rows={3} placeholder="How can we help?" />
-          <Button className="rounded-2xl w-full">Send</Button>
+        <form className="grid gap-2" onSubmit={onSubmit}>
+          <Input placeholder="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+          <Input type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Textarea rows={3} placeholder="How can we help?" value={message} onChange={(e) => setMessage(e.target.value)} />
+          <Button className="rounded-2xl w-full" disabled={loading}>{loading ? "Sending..." : "Send"}</Button>
           <p className="text-[11px] text-muted-foreground text-center">Or email us: <a className="underline" href="mailto:hello@TODO_domain">hello@TODO_domain</a></p>
         </form>
       </CardContent>
