@@ -1,3 +1,5 @@
+import { CONFIG, postWebhook } from "@/lib/webhooks";
+
 export async function followUpLeadExternal(
   ld,
   setThreads,
@@ -20,5 +22,36 @@ export async function followUpLeadExternal(
       );
     }
     return [...cur, { id: `M-${Date.now()}`, with: ld.phone, thread: [msg] }];
+  });
+}
+
+// New utility: safe to import from pages/components
+export async function followUpLead(ld: any, setThreads: (updater: any) => void) {
+  const payload = {
+    type: "instant_followup",
+    lead: ld,
+    message: `Hi ${ld?.name?.split(" ")[0] || ""}! You can book here: https://www.${CONFIG.DOMAIN}/book`,
+  };
+
+  try {
+    await postWebhook(payload);
+  } catch {
+    // no-op on webhook failure
+  }
+
+  // also mirror into the Messages inbox
+  setThreads((cur: any[]) => {
+    const id = cur.find((t: any) => t.with === ld.phone)?.id || `M-${Date.now()}`;
+    const next = cur.find((t: any) => t.id === id)
+      ? cur.map((t: any) =>
+          t.id === id
+            ? { ...t, thread: [...t.thread, { from: "agent", at: new Date().toISOString(), text: payload.message }] }
+            : t
+        )
+      : [
+          ...cur,
+          { id, with: ld.phone, thread: [{ from: "agent", at: new Date().toISOString(), text: payload.message }] },
+        ];
+    return next;
   });
 }
