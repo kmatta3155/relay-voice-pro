@@ -2,8 +2,15 @@
 export const CONFIG = {
   COMPANY: "TODO_company",
   DOMAIN: "TODO_domain",
+  PHONE: "+1-555-555-5555",
+  ADDRESS: { street: "TODO street", city: "Morrisville", region: "NC", postal: "27560", country: "US" },
+  GA_MEASUREMENT_ID: "G-XXXXXXX",
   WEBHOOK_URL: "https://hooks.zapier.com/hooks/catch/xxxxxxx/xxxxxxx/",
-  WEBHOOK_SECRET: "", // optional: HMAC signing
+  WEBHOOK_SECRET: "",
+  // 🔧 NEW: Cal.com integration (set ONE of these)
+  CAL_HANDLE: "",            // e.g., "relayai"  (will use https://cal.com/relayai)
+  CAL_EVENT_PATH: "",        // optional: e.g., "relayai/demo"  (uses https://cal.com/relayai/demo)
+  CAL_URL: ""                // optional: full override URL if you want to paste it directly
 };
 
 export async function postWebhook(body: any) {

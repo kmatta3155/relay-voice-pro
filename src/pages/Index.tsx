@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-import { postWebhook } from "@/lib/webhooks";
+import { postWebhook, CONFIG } from "@/lib/webhooks";
 import freshaLogo from "@/assets/logos/fresha.svg";
 import squareLogo from "@/assets/logos/square.svg";
 import vagaroLogo from "@/assets/logos/vagaro.svg";
@@ -178,7 +178,7 @@ function NavBar() {
         </nav>
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost"><a href="#contact">Contact</a></Button>
-          <Button asChild className="rounded-2xl"><a href="#get-started">Get started</a></Button>
+          <Button asChild className="rounded-2xl"><a href="#app">Get started</a></Button>
         </div>
       </div>
     </header>
@@ -346,18 +346,60 @@ function Pricing() {
 }
 
 function Demo() {
+  // Build a Cal.com URL from CONFIG (CAL_URL wins, then EVENT_PATH, then HANDLE)
+  const calSrc =
+    (CONFIG.CAL_URL?.trim?.() ? CONFIG.CAL_URL.trim() : "") ||
+    (CONFIG.CAL_EVENT_PATH?.trim?.()
+      ? `https://cal.com/${CONFIG.CAL_EVENT_PATH.trim()}`
+      : (CONFIG.CAL_HANDLE?.trim?.() ? `https://cal.com/${CONFIG.CAL_HANDLE.trim()}` : ""));
+
+  // Inject Cal.com embed script once so iframe resizes properly
+  React.useEffect(() => {
+    if (!calSrc) return;
+    const id = "cal-embed-script";
+    if (document.getElementById(id)) return;
+    const s = document.createElement("script");
+    s.id = id;
+    s.async = true;
+    s.src = "https://cal.com/embed.js";
+    document.head.appendChild(s);
+  }, [calSrc]);
+
   return (
     <section id="demo" className="px-4 py-16 md:py-24">
-      <SectionHeader kicker="See it in action" title="Book a live demo" subtitle="We’ll tailor the AI to your services and show real call flows." />
+      <SectionHeader kicker="See it in action" title="Book a live demo" subtitle="We’ll tailor the AI and show the CRM dashboard." />
       <div className="max-w-4xl mx-auto mt-10">
-        {/* Cal.com/Calendly embed (replace URL) */}
         <div className="rounded-2xl overflow-hidden shadow-sm bg-card ring-1 ring-border">
-          <iframe
-            title="Book a demo"
-            src="https://cal.com/TODO_cal_handle/demo?embed=1&hide_event_type_details=1"
-            className="w-full h-[720px]"
-            loading="lazy"
-          />
+
+          {calSrc ? (
+            // Cal.com embed — works with handle or full event path
+            <iframe
+              title="Book a demo"
+              src={`${calSrc}?embed=1&hide_event_type_details=1`}
+              className="w-full h-[720px] cal-embed"
+              loading="lazy"
+              // Cal.com looks for these attributes for auto-resize/theme
+              data-cal-namespace="demo"
+              data-cal-link={calSrc.replace("https://cal.com/","")}
+              data-cal-config='{"layout":"month_view"}'
+            />
+          ) : (
+            // Clean fallback if not configured yet
+            <div className="p-8 text-center">
+              <p className="text-muted-foreground">
+                Demo scheduling isn’t configured yet. Add your Cal handle in <code>CONFIG.CAL_HANDLE</code> or a direct link in <code>CONFIG.CAL_URL</code>.
+              </p>
+              <div className="mt-6">
+                <Button asChild className="rounded-2xl">
+                  <a href="#contact">Contact us</a>
+                </Button>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                Example: <code>CAL_HANDLE: "your-company"</code> or <code>CAL_EVENT_PATH: "your-company/demo"</code>.
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
     </section>
