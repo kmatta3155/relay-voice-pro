@@ -1,13 +1,13 @@
 export function canViewLeads(role: string) {
-  return ["admin", "manager", "owner"].includes(role);
+  return ["owner", "manager", "agent"].includes(role);
 }
 export function canEditLeads(role: string) {
-  return ["admin", "manager"].includes(role);
+  return ["owner", "manager"].includes(role);
 }
-export function routeNotification(lead: any, staff: any[]) {
+export function routeNotification(lead: any, staffList: any[]) {
   if (lead.score >= 80) {
-    const manager = staff.find((u) => u.role === "manager");
-    return manager || null;
+    const manager = staffList.find((s) => s.role === "manager");
+    return manager ? { type: "hot_lead", id: manager.id } : null;
   }
   return null;
 }

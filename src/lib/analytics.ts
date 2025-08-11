@@ -4,8 +4,8 @@ export function getDashboardMetrics({ leads, appointments, messages }: any) {
     ? Math.round((appointments.length / leads.length) * 100)
     : 0;
   return {
-    conversionRate,
     hotLeads,
+    conversionRate,
     totalAppointments: appointments.length,
     totalMessages: messages.length,
   };
