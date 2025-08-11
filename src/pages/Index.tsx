@@ -19,6 +19,12 @@ import {
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 import { emitLeadCreated, emitMessageSent } from "@/lib/webhooks";
+import freshaLogo from "@/assets/logos/fresha.svg";
+import squareLogo from "@/assets/logos/square.svg";
+import vagaroLogo from "@/assets/logos/vagaro.svg";
+import acuityLogo from "@/assets/logos/acuity.svg";
+import calendlyLogo from "@/assets/logos/calendly.svg";
+import outlookLogo from "@/assets/logos/outlook.svg";
 // SEO head tags (title, description, canonical)
 function SEOHead() {
   React.useEffect(() => {
@@ -189,11 +195,32 @@ function ConsentNote() {
 }
 
 function TrustLogos() {
+  const logos = [
+    { name: "Fresha", src: freshaLogo },
+    { name: "Square", src: squareLogo },
+    { name: "Vagaro", src: vagaroLogo },
+    { name: "Acuity", src: acuityLogo },
+    { name: "Calendly", src: calendlyLogo },
+    { name: "Outlook", src: outlookLogo },
+  ];
   return (
     <section className="max-w-6xl mx-auto px-4 pb-8">
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-6 opacity-70">
-        {["Fresha", "Square", "Vagaro", "Acuity", "Calendly", "Outlook"].map((logo) => (
-          <div key={logo} className="p-4 rounded-2xl bg-card text-center text-sm shadow-sm">{logo}</div>
+      {/* Mobile: swipeable strip */}
+      <div className="md:hidden -mx-4 px-4">
+        <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory py-2 [scrollbar-width:none] [-ms-overflow-style:none]">
+          {logos.concat(logos).map((l, i) => (
+            <div key={`${l.name}-${i}`} className="snap-start shrink-0 w-[160px] rounded-2xl bg-card ring-1 ring-border shadow-sm grid place-items-center p-3 hover-scale animate-fade-in">
+              <img src={l.src} alt={`${l.name} logo`} width={160} height={48} loading="lazy" />
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Desktop: static grid */}
+      <div className="hidden md:grid grid-cols-6 gap-6 opacity-70">
+        {logos.map((l) => (
+          <div key={l.name} className="p-4 rounded-2xl bg-card text-center shadow-sm ring-1 ring-border hover-scale animate-fade-in">
+            <img src={l.src} alt={`${l.name} logo`} width={160} height={48} loading="lazy" className="mx-auto" />
+          </div>
         ))}
       </div>
     </section>
