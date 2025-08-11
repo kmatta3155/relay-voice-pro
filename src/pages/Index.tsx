@@ -63,16 +63,23 @@ function SEOHead() {
 }
 
 function useHashTab(defaultTab: string) {
-  const [tab, setTab] = React.useState<string>(() =>
-    typeof window !== "undefined" ? window.location.hash.replace("#", "") || defaultTab : defaultTab
+  const allowed = React.useMemo(
+    () => new Set(["overview", "analytics", "messages", "knowledge", "settings", "billing"]),
+    []
   );
+  const getTabFromHash = () => {
+    const raw = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
+    return allowed.has(raw) ? (raw as string) : defaultTab;
+  };
+  const [tab, setTab] = React.useState<string>(getTabFromHash);
   React.useEffect(() => {
-    const onHash = () => setTab(window.location.hash.replace("#", "") || defaultTab);
+    const onHash = () => setTab(getTabFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, [defaultTab]);
+  }, [defaultTab, allowed]);
   const go = (t: string) => {
-    setTab(t);
+    const next = allowed.has(t) ? t : defaultTab;
+    setTab(next);
     if (typeof window !== "undefined") window.location.hash = t;
   };
   return [tab, go] as const;
