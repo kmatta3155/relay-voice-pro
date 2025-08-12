@@ -18,6 +18,30 @@ function getQueryParam(name: string) {
   try { return new URL(window.location.href).searchParams.get(name) || ""; } catch { return ""; }
 }
 
+function parseDoubleHashAuth() {
+  // Handles URLs like: https://.../#auth#access_token=...&refresh_token=...&type=recovery
+  const raw = window.location.hash || "";
+  if (!raw) return null;
+
+  // If there's no second hash, nothing to parse
+  const firstHashIdx = raw.indexOf("#");
+  const secondHashIdx = raw.indexOf("#", firstHashIdx + 1);
+  if (secondHashIdx === -1) return null;
+
+  const afterSecond = raw.slice(secondHashIdx + 1); // "access_token=...&refresh_token=...&type=recovery"
+  const params = new URLSearchParams(afterSecond);
+
+  const access_token = params.get("access_token") || "";
+  const refresh_token = params.get("refresh_token") || "";
+  const type = params.get("type") || "";
+  const expires_at = params.get("expires_at") || "";
+  const token_type = params.get("token_type") || "bearer";
+
+  if (!access_token || !refresh_token) return null;
+
+  return { access_token, refresh_token, type, expires_at, token_type };
+}
+
 function AuthGate({ children }: { children: any }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
@@ -185,33 +209,37 @@ function AuthCallback(){
   React.useEffect(()=> {
     (async ()=>{
       try{
-        // New-style (v2) email links put ?code=...&type=recovery|magiclink|invite
+        // Case A: Newer flow (?code=...) — keep supporting this if you move to it later
         const code = getQueryParam("code");
-        const type = getQueryParam("type");
-
+        const typeQ = getQueryParam("type"); // e.g., recovery|magiclink|invite
         if (code) {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-
-          // If this is a password recovery link, push user to reset screen
-          if (type === "recovery") {
-            console.log("[AuthCallback] Recovery flow → #reset");
-            location.hash = "#reset";
-            return;
-          }
-
-          console.log("[AuthCallback] Session established → #app");
-          location.hash = "#app";
-          return;
+          if (typeQ === "recovery") { location.hash = "#reset"; return; }
+          location.hash = "#app"; return;
         }
 
-        // Legacy/edge: some links land with tokens in the hash fragment
-        // e.g. #access_token=...&refresh_token=...&type=recovery
+        // Case B: Current double-hash flow (#auth#access_token=...&type=recovery)
+        const parsed = parseDoubleHashAuth();
+        if (parsed) {
+          console.log("[AuthCallback] Double-hash tokens detected:", parsed.type);
+          const { access_token, refresh_token, type } = parsed;
+          // Set session explicitly since the SDK won't parse the second hash segment automatically
+          const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (error) throw error;
+          // Clean up URL hash so your router isn't confused
+          history.replaceState(null, "", `${window.location.origin}/#auth`);
+          if (type === "recovery") { location.hash = "#reset"; return; }
+          location.hash = "#app"; return;
+        }
+
+        // Case C: Legacy single-hash tokens (#access_token=...)
         const hash = window.location.hash || "";
         if (hash.includes("access_token") || hash.includes("refresh_token")) {
           const isRecovery = hash.includes("type=recovery");
-          console.log("[AuthCallback] Hash tokens detected. isRecovery:", isRecovery);
-          // Supabase SDK usually picks this up via onAuthStateChange, but route explicitly:
+          console.log("[AuthCallback] Single-hash tokens detected. isRecovery:", isRecovery);
+          // Supabase usually sets session automatically via onAuthStateChange, but be explicit if needed:
+          // (Optional) You can parse and call setSession here as well like above.
           location.hash = isRecovery ? "#reset" : "#app";
           return;
         }
@@ -268,12 +296,19 @@ function ResetPasswordScreen(){
 export default function RelayAIPlatformApp() {
   const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'|'auth'|'reset'>(() => {
     if (typeof window === 'undefined') return 'site';
-    const h = (location.hash || '').replace('#','');
+    const raw = location.hash || "";
+    // Force auth mode if tokens are in the hash anywhere (double-hash safe)
+    if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) return "auth";
+    const h = raw.replace('#','');
     return (['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site');
   });
   useEffect(() => {
     const onHash = () => {
-      const h = (location.hash || '').replace('#','');
+      const raw = location.hash || "";
+      if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) {
+        setMode("auth"); return;
+      }
+      const h = raw.replace('#','');
       setMode((['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site'));
     };
     window.addEventListener('hashchange', onHash);
