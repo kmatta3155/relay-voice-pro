@@ -422,37 +422,71 @@ function Demo() {
   );
 }
 
+function useLeadForm(defaults: Record<string,string> = {}){
+  const [submitting,setSubmitting]=React.useState(false);
+  const [done,setDone]=React.useState<string|null>(null);
+  const [error,setError]=React.useState<string|null>(null);
+
+  const utm = React.useMemo(()=>{ 
+    const p=new URLSearchParams(typeof window!=='undefined'? window.location.search : '');
+    return { utm_source:p.get('utm_source')||'', utm_medium:p.get('utm_medium')||'', utm_campaign:p.get('utm_campaign')||'', utm_term:p.get('utm_term')||'', utm_content:p.get('utm_content')||'' };
+  },[]);
+
+  async function submit(payload: Record<string,string>){
+    setSubmitting(true); setError(null); setDone(null);
+    try{
+      const { data: sess } = await supabase.auth.getSession();
+      let tenant: string | null = null;
+      if (sess.session) {
+        const { data: prof } = await supabase.from("profiles").select("active_tenant_id").eq("id", sess.session.user.id).single();
+        tenant = prof?.active_tenant_id || null;
+      }
+      if (tenant) {
+        const leadPayload = {
+          tenant_id: tenant,
+          name: payload.name || payload.business || "(no name)",
+          phone: payload.phone || payload.mobile || "",
+          email: payload.email || "",
+          source: defaults.form === "contact" ? "WebContact" : "WebTrial",
+          status: "New",
+          notes: payload.message || payload.details || payload.description || "",
+          created_at: new Date().toISOString()
+        } as any;
+        await supabase.from("leads").insert(leadPayload);
+        const withHandle = leadPayload.phone || leadPayload.email || leadPayload.name;
+        const { data: th } = await supabase.from("threads").insert({ tenant_id: tenant, with: withHandle, channel: "web" }).select("*").single();
+        if (th) {
+          await supabase.from("messages").insert({ tenant_id: tenant, thread_id: th.id, from: "lead", text: leadPayload.notes || "New inquiry", at: new Date().toISOString() });
+        }
+      }
+      if (CONFIG.WEBHOOK_URL) {
+        await fetch(CONFIG.WEBHOOK_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ ...defaults, ...utm, ...payload, page: typeof window!=='undefined'? window.location.href : '' }) });
+      }
+      setDone("Thanks! We'll be in touch shortly.");
+    }catch(e:any){
+      setError('Something went wrong. Please try again or email us.');
+    } finally{
+      setSubmitting(false);
+    }
+  }
+  return { submitting, done, error, submit } as const;
+}
+
 function GetStarted() {
   const { toast } = useToast();
   const [business, setBusiness] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [website, setWebsite] = React.useState("");
   const [details, setDetails] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
+  const form = useLeadForm({ form: 'trial' });
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    try {
-      const lead = {
-        business,
-        email,
-        website,
-        details,
-        source: "trial_form",
-        url: window.location.href,
-        ts: new Date().toISOString(),
-      };
-      await postWebhook({ type: "lead.created", lead });
-      toast({ title: "Request sent", description: "We’ll be in touch shortly." });
-      setBusiness("");
-      setEmail("");
-      setWebsite("");
-      setDetails("");
-    } catch (err) {
-      toast({ title: "Error", description: "Could not send your request. Please try again.", variant: "destructive" });
-    } finally {
-      setLoading(false);
+    await form.submit({ business, email, website, details });
+    if (form.error) toast({ title: "Error", description: form.error, variant: "destructive" });
+    if (form.done) {
+      toast({ title: "Request sent", description: form.done });
+      setBusiness(""); setEmail(""); setWebsite(""); setDetails("");
     }
   }
 
@@ -479,7 +513,7 @@ function GetStarted() {
               <Input type="email" placeholder="Work email" required value={email} onChange={(e) => setEmail(e.target.value)} />
               <Input placeholder="Website (optional)" value={website} onChange={(e) => setWebsite(e.target.value)} />
               <Textarea rows={3} placeholder="Describe your services & hours" value={details} onChange={(e) => setDetails(e.target.value)} />
-              <Button className="rounded-2xl" disabled={loading}>{loading ? "Sending..." : "Create my AI receptionist"}</Button>
+              <Button className="rounded-2xl" disabled={form.submitting}>{form.submitting ? "Sending..." : "Create my AI receptionist"}</Button>
             </form>
           </CardContent>
         </Card>
@@ -530,7 +564,7 @@ function Security() {
           <CardHeader><CardTitle className="flex items-center gap-2"><ActivitySquare className="w-5 h-5" /> Reliability & status</CardTitle></CardHeader>
           <CardContent className="text-muted-foreground">
             <p>We target 99.9% availability with active monitoring and vendor failover. For real‑time updates, visit our public status page.</p>
-            <p className="mt-2"><a className="underline" href="https://status.TODO_domain" target="_blank" rel="noreferrer">status.TODO_domain</a></p>
+            <p className="mt-2"><a className="underline" href={`https://status.${CONFIG.DOMAIN}`} target="_blank" rel="noreferrer">{`status.${CONFIG.DOMAIN}`}</a></p>
           </CardContent>
         </Card>
       </div>
@@ -552,15 +586,17 @@ function Legal() {
 }
 
 function Footer() {
+  const session = useSessionState();
   return (
     <footer className="px-4 pb-12">
       <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6 items-center">
-        <div className="text-sm text-muted-foreground">© {new Date().getFullYear()} TODO_company. All rights reserved.</div>
+        <div className="text-sm text-muted-foreground">© {new Date().getFullYear()} {CONFIG.COMPANY}. All rights reserved.</div>
         <div className="flex gap-4 justify-start md:justify-end text-sm">
           <a href="#legal" className="underline">Terms</a>
           <a href="#legal" className="underline">Privacy</a>
           <a href="#security" className="underline">Security</a>
-          <a href="#contact" className="underline">Contact</a>
+          <a href="#app" className="underline">Dashboard</a>
+          {session && <a href="#admin" className="underline">Admin</a>}
         </div>
       </div>
     </footer>
@@ -583,25 +619,15 @@ function ContactFloating() {
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [message, setMessage] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
+  const form = useLeadForm({ form: 'contact' });
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    try {
-      await postWebhook({
-        type: "message.sent",
-        to: "hello@TODO_domain",
-        message: { name, email, message, source: "contact_widget", url: window.location.href, ts: new Date().toISOString() },
-      });
-      toast({ title: "Message sent", description: "We’ll reply shortly." });
-      setName("");
-      setEmail("");
-      setMessage("");
-    } catch (err) {
-      toast({ title: "Error", description: "Could not send your message. Please try again.", variant: "destructive" });
-    } finally {
-      setLoading(false);
+    await form.submit({ name, email, message });
+    if (form.error) toast({ title: "Error", description: form.error, variant: "destructive" });
+    if (form.done) {
+      toast({ title: "Message sent", description: form.done });
+      setName(""); setEmail(""); setMessage("");
     }
   }
 
@@ -616,8 +642,8 @@ function ContactFloating() {
           <Input placeholder="Name" required value={name} onChange={(e) => setName(e.target.value)} />
           <Input type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <Textarea rows={3} placeholder="How can we help?" value={message} onChange={(e) => setMessage(e.target.value)} />
-          <Button className="rounded-2xl w-full" disabled={loading}>{loading ? "Sending..." : "Send"}</Button>
-          <p className="text-[11px] text-muted-foreground text-center">Or email us: <a className="underline" href="mailto:hello@TODO_domain">hello@TODO_domain</a></p>
+          <Button className="rounded-2xl w-full" disabled={form.submitting}>{form.submitting ? "Sending..." : "Send"}</Button>
+          <p className="text-[11px] text-muted-foreground text-center">Or email us: <a className="underline" href={`mailto:hello@${CONFIG.DOMAIN}`}>hello@{CONFIG.DOMAIN}</a></p>
         </form>
       </CardContent>
     </Card>

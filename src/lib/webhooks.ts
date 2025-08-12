@@ -1,17 +1,23 @@
 // src/lib/webhooks.ts
 export const CONFIG = {
-  COMPANY: "TODO_company",
-  DOMAIN: "TODO_domain",
+  COMPANY: "RelayAI",
+  DOMAIN: "relayai.example",                   // <-- set your domain (used for mailto/status links)
   PHONE: "+1-555-555-5555",
-  ADDRESS: { street: "TODO street", city: "Morrisville", region: "NC", postal: "27560", country: "US" },
-  GA_MEASUREMENT_ID: "G-XXXXXXX",
-  WEBHOOK_URL: "https://hooks.zapier.com/hooks/catch/xxxxxxx/xxxxxxx/",
-  WEBHOOK_SECRET: "",
-  // Cal.com settings — recommended approach
+  ADDRESS: { street: "100 Main St", city: "Morrisville", region: "NC", postal: "27560", country: "US" },
+  GA_MEASUREMENT_ID: "",                       // leave blank to disable GA
+  WEBHOOK_URL: "https://hooks.zapier.com/hooks/catch/xxxxxxx/xxxxxxx/", // optional
+  WEBHOOK_SECRET: "",                          // optional HMAC for webhook
+
+  // Cal.com — recommended: direct to your Demo event
   CAL_HANDLE: "",
-  CAL_EVENT_PATH: "https://cal.com/relayai/30min", // ✅ recommended: points straight to your Demo event
-  CAL_URL: ""
+  CAL_EVENT_PATH: "relayai/demo",              // <-- set this to your event, e.g. "yourhandle/demo"
+  CAL_URL: "",
+
+  // Edge Functions (Stripe etc.) — optional serverless backend integration
+  EDGE_CREATE_CHECKOUT_URL: "https://YOUR_SUPABASE_PROJECT.functions.supabase.co/create-checkout", // optional
+  EDGE_PORTAL_URL: "https://YOUR_SUPABASE_PROJECT.functions.supabase.co/customer-portal"           // optional
 };
+
 
 export async function postWebhook(body: any) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };

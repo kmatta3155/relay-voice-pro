@@ -49,24 +49,35 @@ function AuthGate({ children }: { children: any }) {
   );
 }
 
+function useSessionState(){
+  const [session,setSession]=useState<any>(null);
+  useEffect(()=>{ (async()=>{
+    const { data } = await supabase.auth.getSession();
+    setSession(data.session);
+    supabase.auth.onAuthStateChange((_e,s)=> setSession(s));
+  })(); },[]);
+  return session;
+}
+
+async function _isSiteAdmin() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data } = await (supabase as any).from("profiles").select("is_site_admin").eq("id", user.id).single();
+  return !!(data as any)?.is_site_admin;
+}
+
 function AdminGate({ children }:{ children:any }) {
   const [ready,setReady]=useState(false);
   const [ok,setOk]=useState(false);
   useEffect(()=>{ (async()=>{
     const { data } = await supabase.auth.getSession();
     if(!data.session){ location.hash = "#signin"; return; }
-    setOk(await isSiteAdmin());
+    setOk(await _isSiteAdmin());
     setReady(true);
   })(); },[]);
   if(!ready) return <div className="p-6">Checking admin…</div>;
   if(!ok) return <div className="p-6">403 — Admins only</div>;
   return children;
-}
-
-function useSessionState(){
-  const [session,setSession]=useState<any>(null);
-  useEffect(()=>{ (async()=>{ const { data } = await supabase.auth.getSession(); setSession(data.session); onAuth((s)=> setSession(s)); })(); },[]);
-  return session;
 }
 
 function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants:any; onSwitch:(id:string)=>void; onSignOut:()=>void }){
@@ -124,6 +135,7 @@ function AdminPanel(){
       supabaseUrl: !!import.meta.env.VITE_SUPABASE_URL,
       supabaseKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
       cal: !!(CONFIG.CAL_URL || CONFIG.CAL_EVENT_PATH || CONFIG.CAL_HANDLE),
+      domain: !!CONFIG.DOMAIN,
     } as const;
     setInfo({ tenants, leads, appts, calls, leads24: leads24||0, uid, env });
     setLoading(false);
@@ -139,6 +151,7 @@ function AdminPanel(){
             <li>Supabase URL: <b>{info.env.supabaseUrl ? "OK" : "Missing"}</b></li>
             <li>Supabase Key: <b>{info.env.supabaseKey ? "OK" : "Missing"}</b></li>
             <li>Cal.com configured: <b>{info.env.cal ? "Yes" : "No"}</b></li>
+            <li>Domain set: <b>{info.env.domain ? "Yes" : "No"}</b></li>
           </ul>
         </div>
         <div className="rounded-2xl bg-white shadow ring-1 ring-black/5 p-4">
