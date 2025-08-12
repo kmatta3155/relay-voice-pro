@@ -13,6 +13,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SignInScreen from "@/components/SignInScreen";
 import Dashboard from "@/pages/Dashboard";
+import Admin from "@/pages/Admin";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
@@ -321,7 +322,7 @@ export default function RelayAIPlatformApp() {
     : mode === 'signin'
       ? <SignInScreen />
       : mode === 'admin'
-        ? <AdminGate><AdminPanel /></AdminGate>
+        ? <AuthGate><Admin /></AuthGate>
         : mode === 'auth'
           ? <AuthCallback />
           : mode === 'reset'
