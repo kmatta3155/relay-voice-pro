@@ -14,6 +14,11 @@ import NotFound from "./pages/NotFound";
 import SignInScreen from "@/components/SignInScreen";
 const queryClient = new QueryClient();
 
+function getQueryParam(name: string) {
+  const u = new URL(window.location.href);
+  return u.searchParams.get(name) || "";
+}
+
 function AuthGate({ children }: { children: any }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
@@ -174,16 +179,86 @@ function MarketingSite(){
   return <Index />;
 }
 
+function AuthCallback(){
+  const [state, setState] = React.useState<"working"|"error">("working");
+  const [err, setErr] = React.useState<string>("");
+
+  React.useEffect(()=> {
+    (async ()=>{
+      try{
+        const code = getQueryParam("code");
+        const type = getQueryParam("type");
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          if (type === "recovery") { location.hash = "#reset"; return; }
+          location.hash = "#app";
+          return;
+        }
+        const hash = window.location.hash || "";
+        if (hash.includes("access_token") || hash.includes("type=recovery")) {
+          if (hash.includes("type=recovery")) { location.hash = "#reset"; return; }
+          location.hash = "#app";
+          return;
+        }
+        throw new Error("Invalid auth callback URL.");
+      }catch(e:any){
+        setErr(e.message||"Auth callback failed.");
+        setState("error");
+      }
+    })();
+  },[]);
+
+  if(state==="working") return <div className="p-6">Signing you in…</div>;
+  return <div className="p-6">Auth error: {err} <a className="underline" href="#signin">Back to sign in</a></div>;
+}
+
+function ResetPasswordScreen(){
+  const [pw1, setPw1] = React.useState("");
+  const [pw2, setPw2] = React.useState("");
+  const [err, setErr] = React.useState<string|null>(null);
+  const [msg, setMsg] = React.useState<string|null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function updatePw(){
+    setErr(null); setMsg(null);
+    if (!pw1 || pw1.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (pw1 !== pw2) { setErr("Passwords do not match."); return; }
+    setBusy(true);
+    try{
+      const { error } = await supabase.auth.updateUser({ password: pw1 });
+      if (error) throw error;
+      setMsg("Password updated. Redirecting…");
+      setTimeout(()=> { location.hash = "#app"; }, 800);
+    }catch(e:any){ setErr(e.message||"Could not update password."); }
+    finally{ setBusy(false); }
+  }
+
+  return (
+    <div className="min-h-screen grid place-items-center p-6">
+      <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow">
+        <h1 className="text-xl font-semibold mb-3">Set a new password</h1>
+        <input className="border rounded-xl px-3 py-2 w-full mb-2" placeholder="New password" type="password" value={pw1} onChange={(e)=> setPw1(e.target.value)} />
+        <input className="border rounded-xl px-3 py-2 w-full mb-3" placeholder="Confirm new password" type="password" value={pw2} onChange={(e)=> setPw2(e.target.value)} />
+        {err && <div className="text-sm text-red-700 mb-2">{err}</div>}
+        {msg && <div className="text-sm text-green-700 mb-2">{msg}</div>}
+        <button className="w-full rounded-xl px-4 py-2 bg-black text-white" disabled={busy} onClick={updatePw}>{busy? "Updating…" : "Update password"}</button>
+        <div className="text-xs text-slate-500 mt-3"><a className="underline" href="#signin">Back to sign in</a></div>
+      </div>
+    </div>
+  );
+}
+
 export default function RelayAIPlatformApp() {
-  const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'>(() => {
+  const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'|'auth'|'reset'>(() => {
     if (typeof window === 'undefined') return 'site';
     const h = (location.hash || '').replace('#','');
-    return (['app','signin','admin'].includes(h) ? (h as any) : 'site');
+    return (['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site');
   });
   useEffect(() => {
     const onHash = () => {
       const h = (location.hash || '').replace('#','');
-      setMode((['app','signin','admin'].includes(h) ? (h as any) : 'site'));
+      setMode((['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site'));
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -195,7 +270,11 @@ export default function RelayAIPlatformApp() {
       ? <SignInScreen />
       : mode === 'admin'
         ? <AdminGate><AdminPanel /></AdminGate>
-        : <MarketingSite />;
+        : mode === 'auth'
+          ? <AuthCallback />
+          : mode === 'reset'
+            ? <ResetPasswordScreen />
+            : <MarketingSite />;
 
   return (
     <QueryClientProvider client={queryClient}>
