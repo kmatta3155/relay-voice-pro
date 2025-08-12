@@ -10,7 +10,7 @@ export const CONFIG = {
 
   // Cal.com — recommended: direct to your Demo event
   CAL_HANDLE: "",
-  CAL_EVENT_PATH: "relayai/demo",              // <-- set this to your event, e.g. "yourhandle/demo"
+  CAL_EVENT_PATH: "relayai/30min",              // <-- set this to your event, e.g. "yourhandle/demo"
   CAL_URL: "",
 
   // Edge Functions (Stripe etc.) — optional serverless backend integration
