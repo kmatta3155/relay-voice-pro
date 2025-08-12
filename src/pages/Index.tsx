@@ -175,15 +175,12 @@ function NavBar() {
           <a href="#demo" className="hover:opacity-80">Demo</a>
           <a href="#faq" className="hover:opacity-80">FAQ</a>
           <a href="#security" className="hover:opacity-80 inline-flex items-center gap-1"><Lock className="w-4 h-4" /> Security</a>
-          {authed && <>
-            <a href="#analytics" className="hover:opacity-80">Analytics</a>
-            <a href="#messages" className="hover:opacity-80">Messages</a>
-            <a href="#knowledge" className="hover:opacity-80">Knowledge</a>
-            <a href="#settings" className="hover:opacity-80">Settings</a>
-            <a href="#billing" className="hover:opacity-80">Billing</a>
-            <a href="#app" className="hover:opacity-80 inline-flex items-center gap-1"><LayoutDashboard className="w-4 h-4" /> Dashboard</a>
-            <a href="#admin" className="hover:opacity-80">Admin</a>
-          </>}
+          {authed && (
+            <>
+              <a href="#app" className="hover:opacity-80 inline-flex items-center gap-1"><LayoutDashboard className="w-4 h-4" /> Dashboard</a>
+              <a href="#admin" className="hover:opacity-80">Admin</a>
+            </>
+          )}
         </nav>
         <div className="flex items-center gap-2">
           {!authed ? (
