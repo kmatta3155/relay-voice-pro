@@ -12,6 +12,7 @@ import { CONFIG } from "@/lib/webhooks";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SignInScreen from "@/components/SignInScreen";
+import Dashboard from "@/pages/Dashboard";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
@@ -316,7 +317,7 @@ export default function RelayAIPlatformApp() {
   }, []);
 
   const content = mode === 'app'
-    ? <AuthGate><DashboardShell /></AuthGate>
+    ? <AuthGate><Dashboard /></AuthGate>
     : mode === 'signin'
       ? <SignInScreen />
       : mode === 'admin'
