@@ -77,13 +77,14 @@ export default function SignInScreen() {
     setError("");
     setOk("");
     try {
-      const redirectTo = `${window.location.origin}/#signin`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      // IMPORTANT: send the user back to our auth-callback route
+      const redirect = `${window.location.origin}/#auth`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirect });
       if (error) throw error;
-      setOk("Password reset email sent. Check your inbox for the link.");
+      setOk("Password reset link sent. Check your email.");
       setStage("login");
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || "Could not send reset email.");
     } finally {
       setLoading(false);
     }

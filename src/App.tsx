@@ -15,8 +15,7 @@ import SignInScreen from "@/components/SignInScreen";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
-  const u = new URL(window.location.href);
-  return u.searchParams.get(name) || "";
+  try { return new URL(window.location.href).searchParams.get(name) || ""; } catch { return ""; }
 }
 
 function AuthGate({ children }: { children: any }) {
@@ -186,24 +185,41 @@ function AuthCallback(){
   React.useEffect(()=> {
     (async ()=>{
       try{
+        // New-style (v2) email links put ?code=...&type=recovery|magiclink|invite
         const code = getQueryParam("code");
         const type = getQueryParam("type");
+
         if (code) {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-          if (type === "recovery") { location.hash = "#reset"; return; }
+
+          // If this is a password recovery link, push user to reset screen
+          if (type === "recovery") {
+            console.log("[AuthCallback] Recovery flow → #reset");
+            location.hash = "#reset";
+            return;
+          }
+
+          console.log("[AuthCallback] Session established → #app");
           location.hash = "#app";
           return;
         }
+
+        // Legacy/edge: some links land with tokens in the hash fragment
+        // e.g. #access_token=...&refresh_token=...&type=recovery
         const hash = window.location.hash || "";
-        if (hash.includes("access_token") || hash.includes("type=recovery")) {
-          if (hash.includes("type=recovery")) { location.hash = "#reset"; return; }
-          location.hash = "#app";
+        if (hash.includes("access_token") || hash.includes("refresh_token")) {
+          const isRecovery = hash.includes("type=recovery");
+          console.log("[AuthCallback] Hash tokens detected. isRecovery:", isRecovery);
+          // Supabase SDK usually picks this up via onAuthStateChange, but route explicitly:
+          location.hash = isRecovery ? "#reset" : "#app";
           return;
         }
-        throw new Error("Invalid auth callback URL.");
+
+        throw new Error("Invalid or expired auth callback URL.");
       }catch(e:any){
-        setErr(e.message||"Auth callback failed.");
+        console.error("[AuthCallback] Error:", e);
+        setErr(e.message || "Auth callback failed.");
         setState("error");
       }
     })();
