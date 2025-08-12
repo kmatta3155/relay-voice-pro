@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 type Counts = { tenants:number; leads:number; appts:number; calls:number; leads24h:number };
 
 export default function Admin() {
-  // read from the live client (Lovable doesn't use .env for this)
+  // Derive config from the actual Supabase client (Lovable doesn't use .env for this)
   const clientUrl =
     ((supabase as any)?.rest?.url) ||
     ((supabase as any)?.storage?.url) ||
@@ -23,7 +23,6 @@ export default function Admin() {
     try {
       const { error } = await supabase.from("tenants").select("id", { head:true, count:"exact" });
       if (error) {
-        // 42P01 = undefined_table
         if ((error as any)?.code === "42P01") { setDbReachable("missing-tables"); return; }
         setDbReachable("no"); return;
       }
@@ -43,7 +42,6 @@ export default function Admin() {
         return count || 0;
       } catch { return 0; }
     };
-
     const since = new Date(Date.now() - 24*60*60*1000).toISOString();
     const [tenants, leads, appts, calls] = await Promise.all([
       c("tenants"), c("leads"), c("appointments"), c("calls")
@@ -60,13 +58,13 @@ export default function Admin() {
       const user = ures?.user;
       if (!user) throw new Error("No signed-in user");
 
-      // tenant
+      // Create tenant
       const slug = `demo-${Date.now().toString(36)}`;
       const { data: tenant, error: terr } =
         await supabase.from("tenants").insert({ name:"Demo Auto Shop", slug }).select().single();
       if (terr) throw terr;
 
-      // profile link (insert if missing)
+      // Ensure profile row and link to tenant
       const { error: updErr } =
         await supabase.from("profiles").update({ active_tenant_id: tenant.id }).eq("id", user.id);
       if (updErr) {
@@ -92,7 +90,7 @@ export default function Admin() {
         summary:"Asked price for oil change; confirmed Friday 2:15pm with Alex."
       });
 
-      setMsg(`Seed complete. Tenant created and linked. Go to #app.`);
+      setMsg(`Seed complete. Tenant created and linked. Open #app to view.`);
       await refreshCounts();
     }catch(e:any){
       setMsg(`Seed error: ${e?.code ? e.code + ": " : ""}${e?.message || e}`);
@@ -137,22 +135,19 @@ export default function Admin() {
         <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button onClick={refreshCounts} variant="outline" className="rounded-2xl">Refresh</Button>
-          <Button onClick={seedDemo} disabled={busy || dbReachable==="no" || dbReachable==="unknown"} className="rounded-2xl">
+          <Button onClick={seedDemo} disabled={busy || dbReachable!=="yes"} className="rounded-2xl">
             {busy? "Seeding…" : "Seed Demo Data"}
           </Button>
         </CardContent>
       </Card>
 
-      <FooterNote />
       {msg && <div className="text-sm">{msg}</div>}
       <WhoAmI />
+      <p className="text-xs text-slate-500">Admin-only. Protect with RLS/roles in production.</p>
     </div>
   );
 }
 
-function FooterNote(){
-  return <p className="text-xs text-slate-500">Admin-only. Protect with RLS/roles in production.</p>;
-}
 function WhoAmI(){
   const [uid,setUid]=useState<string>("");
   useEffect(()=>{ supabase.auth.getUser().then(r=> setUid(r.data.user?.id||"")); },[]);
