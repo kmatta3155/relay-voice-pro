@@ -1,13 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function SignInScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [stage, setStage] = useState("login"); // login -> mfa
+  const [stage, setStage] = useState<"login" | "mfa">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    document.title = "Sign in | RelayAI Receptionist";
+  }, []);
 
   const handleLogin = async () => {
     setLoading(true);
@@ -45,55 +54,82 @@ export default function SignInScreen() {
   };
 
   return (
-    <div className="max-w-sm mx-auto p-6 bg-white rounded shadow">
-      {stage === "login" && (
-        <>
-          <h2 className="text-lg font-bold mb-4">Sign in</h2>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="border p-2 w-full mb-2"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="border p-2 w-full mb-4"
-          />
-          {error && <p className="text-red-500 mb-2">{error}</p>}
-          <button
-            onClick={handleLogin}
-            disabled={loading}
-            className="bg-blue-500 text-white px-4 py-2 rounded w-full"
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
-        </>
-      )}
+    <main className="min-h-screen bg-background grid place-items-center px-4 py-10">
+      <Card className="w-full max-w-md">
+        {stage === "login" && (
+          <>
+            <CardHeader>
+              <CardTitle>Welcome back</CardTitle>
+              <CardDescription>Sign in with your email and password.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertTitle>Sign in failed</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+              </div>
+              <Button onClick={handleLogin} disabled={loading} className="w-full">
+                {loading ? "Signing in…" : "Sign in"}
+              </Button>
+            </CardContent>
+          </>
+        )}
 
-      {stage === "mfa" && (
-        <>
-          <h2 className="text-lg font-bold mb-4">Enter MFA Code</h2>
-          <input
-            type="text"
-            placeholder="6-digit code"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            className="border p-2 w-full mb-4"
-          />
-          {error && <p className="text-red-500 mb-2">{error}</p>}
-          <button
-            onClick={handleVerifyOtp}
-            disabled={loading}
-            className="bg-blue-500 text-white px-4 py-2 rounded w-full"
-          >
-            {loading ? "Verifying..." : "Verify Code"}
-          </button>
-        </>
-      )}
-    </div>
+        {stage === "mfa" && (
+          <>
+            <CardHeader>
+              <CardTitle>Multi‑factor authentication</CardTitle>
+              <CardDescription>Enter the 6‑digit code from your authenticator app.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertTitle>Verification failed</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="otp">Authenticator code</Label>
+                <Input
+                  id="otp"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                />
+              </div>
+              <Button onClick={handleVerifyOtp} disabled={loading} className="w-full">
+                {loading ? "Verifying…" : "Verify code"}
+              </Button>
+            </CardContent>
+          </>
+        )}
+      </Card>
+    </main>
   );
 }
