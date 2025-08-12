@@ -34,6 +34,7 @@ import KnowledgePage from "@/pages/KnowledgePage";
 import SettingsPage from "@/pages/SettingsPage";
 import BillingPage from "@/pages/BillingPage";
 import { useSessionState } from "@/hooks/useSessionState";
+import { supabase } from "@/lib/supabaseClient";
 // SEO head tags (title, description, canonical)
 function SEOHead() {
   React.useEffect(() => {
