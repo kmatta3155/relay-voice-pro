@@ -1,12 +1,28 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export async function startCheckout(planId: string) {
-  const { data, error } = await supabase.functions.invoke("create-checkout", {
-    body: { planId },
+async function getTenantId(): Promise<string> {
+  const { data } = await supabase.auth.getUser();
+  const uid = data.user?.id;
+  if (!uid) throw new Error("Not signed in");
+  const { data: prof } = await supabase.from("profiles").select("active_tenant_id").eq("id", uid).single();
+  if (!prof?.active_tenant_id) throw new Error("No active tenant on profile");
+  return prof.active_tenant_id as string;
+}
+
+export async function openCheckout(priceId: string) {
+  const tenantId = await getTenantId();
+  const { data, error } = await supabase.functions.invoke("billing", {
+    body: { action: "checkout", tenantId, priceId }
   });
   if (error) throw error;
-  if (data?.url) {
-    // Open in a new tab per guidance
-    window.open(data.url, "_blank");
-  }
+  if (data?.url) window.location.href = data.url;
+}
+
+export async function openCustomerPortal() {
+  const tenantId = await getTenantId();
+  const { data, error } = await supabase.functions.invoke("billing", {
+    body: { action: "portal", tenantId }
+  });
+  if (error) throw error;
+  if (data?.url) window.location.href = data.url;
 }
