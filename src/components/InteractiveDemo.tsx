@@ -1,8 +1,9 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Phone, Bot } from "lucide-react";
+import { Phone, Bot, Volume2, VolumeX } from "lucide-react";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DemoProps {
   className?: string;
@@ -13,6 +14,8 @@ export function InteractiveDemo({ className }: DemoProps) {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [transcript, setTranscript] = React.useState<{speaker: string, text: string, timestamp: string}[]>([]);
   const [currentMessage, setCurrentMessage] = React.useState(0);
+  const [audioEnabled, setAudioEnabled] = React.useState(true);
+  const [currentAudio, setCurrentAudio] = React.useState<HTMLAudioElement | null>(null);
 
   const scenarios = [
     {
@@ -85,6 +88,40 @@ export function InteractiveDemo({ className }: DemoProps) {
     }
   ];
 
+  // Function to generate and play TTS for RelayAI messages
+  const playTTS = async (text: string) => {
+    if (!audioEnabled) return;
+    
+    try {
+      // Stop any currently playing audio
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+
+      const { data, error } = await supabase.functions.invoke('text-to-speech', {
+        body: { 
+          text,
+          voice_id: 'EXAVITQu4vr4xnSDxMaL' // Sarah - professional female voice
+        }
+      });
+
+      if (error) throw error;
+
+      // Create audio element and play
+      const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
+      setCurrentAudio(audio);
+      
+      audio.onended = () => {
+        setCurrentAudio(null);
+      };
+      
+      await audio.play();
+    } catch (error) {
+      console.error('TTS Error:', error);
+    }
+  };
+
   React.useEffect(() => {
     if (!isPlaying) return;
     
@@ -94,13 +131,20 @@ export function InteractiveDemo({ className }: DemoProps) {
       return;
     }
 
-    const timer = setTimeout(() => {
-      setTranscript(prev => [...prev, currentConvo[currentMessage]]);
+    const timer = setTimeout(async () => {
+      const message = currentConvo[currentMessage];
+      setTranscript(prev => [...prev, message]);
+      
+      // Play TTS for RelayAI messages
+      if (message.speaker === 'RelayAI') {
+        await playTTS(message.text);
+      }
+      
       setCurrentMessage(prev => prev + 1);
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [isPlaying, currentMessage, currentScenario]);
+  }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
   const startDemo = () => {
     setTranscript([]);
@@ -112,6 +156,12 @@ export function InteractiveDemo({ className }: DemoProps) {
     setIsPlaying(false);
     setTranscript([]);
     setCurrentMessage(0);
+    // Stop any playing audio
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      setCurrentAudio(null);
+    }
   };
 
   return (
@@ -120,7 +170,18 @@ export function InteractiveDemo({ className }: DemoProps) {
         {/* Demo Controls */}
         <div className="space-y-6">
           <Card className="p-6">
-            <h3 className="text-xl font-semibold mb-4">Choose a Scenario</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Choose a Scenario</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAudioEnabled(!audioEnabled)}
+                className="flex items-center gap-2"
+              >
+                {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                {audioEnabled ? 'Audio On' : 'Audio Off'}
+              </Button>
+            </div>
             <div className="space-y-3">
               {scenarios.map((scenario, index) => (
                 <Button
@@ -148,6 +209,15 @@ export function InteractiveDemo({ className }: DemoProps) {
                 Reset
               </Button>
             </div>
+            
+            {audioEnabled && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Volume2 className="w-4 h-4" />
+                  <span>🎙️ AI voice powered by ElevenLabs</span>
+                </div>
+              </div>
+            )}
           </Card>
 
           {/* AI Insights */}
@@ -217,9 +287,17 @@ export function InteractiveDemo({ className }: DemoProps) {
                 <Phone className="w-5 h-5" />
                 Live Call Transcript
               </h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`}></div>
-                {isPlaying ? 'Recording' : 'Idle'}
+              <div className="flex items-center gap-4">
+                {currentAudio && audioEnabled && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    Speaking
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                  {isPlaying ? 'Recording' : 'Idle'}
+                </div>
               </div>
             </div>
             
