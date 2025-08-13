@@ -35,6 +35,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import BillingPage from "@/pages/BillingPage";
 import { useSessionState } from "@/hooks/useSessionState";
 import { supabase } from "@/lib/supabaseClient";
+import { InteractiveDemo } from "@/components/InteractiveDemo";
 // SEO head tags (title, description, canonical)
 function SEOHead() {
   React.useEffect(() => {
@@ -139,6 +140,14 @@ export default function AIReceptionistApp() {
             <Pricing />
             <UpgradeCTA />
             <Demo />
+            <section id="interactive-demo" className="px-4 py-16 md:py-24 bg-muted/30">
+              <div className="text-center mb-10">
+                <p className="uppercase tracking-widest text-sm text-muted-foreground mb-2">Interactive Demo</p>
+                <h2 className="text-3xl md:text-4xl font-semibold leading-tight">See RelayAI in Action</h2>
+                <p className="mt-3 text-muted-foreground">Watch real conversations showing how our AI handles different scenarios</p>
+              </div>
+              <InteractiveDemo />
+            </section>
             <GetStarted />
             <FAQ />
             <Security />
