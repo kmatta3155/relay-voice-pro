@@ -18,7 +18,7 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { postWebhook, CONFIG } from "@/lib/webhooks";
 import freshaLogo from "@/assets/logos/fresha.svg";
 import squareLogo from "@/assets/logos/square.svg";
@@ -622,6 +622,7 @@ function ChatBubble({ user = false, name, text }: { user?: boolean; name: string
 }
 
 function ContactFloating() {
+  const [isOpen, setIsOpen] = React.useState(false);
   const { toast } = useToast();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -635,25 +636,63 @@ function ContactFloating() {
     if (form.done) {
       toast({ title: "Message sent", description: form.done });
       setName(""); setEmail(""); setMessage("");
+      setIsOpen(false); // Close after sending
     }
   }
 
   return (
-    <Card className="rounded-2xl shadow-xl">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2"><Phone className="w-4 h-4" /> Talk to us</CardTitle>
-        <p className="text-xs text-muted-foreground">We usually reply within minutes.</p>
-      </CardHeader>
-      <CardContent>
-        <form className="grid gap-2" onSubmit={onSubmit}>
-          <Input placeholder="Name" required value={name} onChange={(e) => setName(e.target.value)} />
-          <Input type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Textarea rows={3} placeholder="How can we help?" value={message} onChange={(e) => setMessage(e.target.value)} />
-          <Button className="rounded-2xl w-full" disabled={form.submitting}>{form.submitting ? "Sending..." : "Send"}</Button>
-          <p className="text-[11px] text-muted-foreground text-center">Or email us: <a className="underline" href={`mailto:hello@${CONFIG.DOMAIN}`}>hello@{CONFIG.DOMAIN}</a></p>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="relative">
+      {/* Chat Toggle Button */}
+      <Button
+        onClick={() => setIsOpen(!isOpen)}
+        size="lg"
+        className="rounded-full h-14 w-14 shadow-lg hover:shadow-xl transition-all duration-200"
+      >
+        <MessageSquare className="w-6 h-6" />
+      </Button>
+
+      {/* Contact Form - Only show when open */}
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.9 }}
+          className="absolute bottom-16 right-0 w-80"
+        >
+          <Card className="rounded-2xl shadow-xl">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone className="w-4 h-4" /> Talk to us
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsOpen(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  ×
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">We usually reply within minutes.</p>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-2" onSubmit={onSubmit}>
+                <Input placeholder="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+                <Input type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Textarea rows={3} placeholder="How can we help?" value={message} onChange={(e) => setMessage(e.target.value)} />
+                <Button className="rounded-2xl w-full" disabled={form.submitting}>
+                  {form.submitting ? "Sending..." : "Send"}
+                </Button>
+                <p className="text-[11px] text-muted-foreground text-center">
+                  Or email us: <a className="underline" href={`mailto:hello@${CONFIG.DOMAIN}`}>hello@{CONFIG.DOMAIN}</a>
+                </p>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+    </div>
   );
 }
 
