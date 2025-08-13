@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 type Counts = { tenants:number; leads:number; appts:number; calls:number; leads24h:number };
 
 export default function Admin() {
-  // Derive config from the actual Supabase client (Lovable doesn't use .env for this)
   const clientUrl =
     ((supabase as any)?.rest?.url) ||
     ((supabase as any)?.storage?.url) ||
@@ -27,13 +26,11 @@ export default function Admin() {
         setDbReachable("no"); return;
       }
       setDbReachable("yes");
-    } catch {
-      setDbReachable("no");
-    }
+    } catch { setDbReachable("no"); }
   }
 
   async function refreshCounts(){
-    const c = async (table: "tenants" | "leads" | "appointments" | "calls", filter?: (q:any)=>any) => {
+    const c = async (table:string, filter?: (q:any)=>any) => {
       try {
         let q:any = (supabase as any).from(table).select("*", { head:true, count:"exact" });
         if (filter) q = filter(q);
@@ -58,18 +55,26 @@ export default function Admin() {
       const user = ures?.user;
       if (!user) throw new Error("No signed-in user");
 
-      // Create tenant
       const slug = `demo-${Date.now().toString(36)}`;
       const { data: tenant, error: terr } =
-        await supabase.from("tenants").insert({ name:"Demo Auto Shop", slug }).select().single();
+        await supabase.from("tenants").insert({
+          name:"Demo Auto Shop",
+          slug,
+          created_by: user.id
+        }).select().single();
       if (terr) throw terr;
 
-      // Ensure profile row and link to tenant
+      // Link profile -> active tenant (insert if missing)
       const { error: updErr } =
         await supabase.from("profiles").update({ active_tenant_id: tenant.id }).eq("id", user.id);
       if (updErr) {
         await supabase.from("profiles").insert({ id: user.id, active_tenant_id: tenant.id });
       }
+
+      // Ensure membership (owner)
+      (supabase as any).from("tenant_members").upsert({
+        tenant_id: tenant.id, user_id: user.id, role: "owner"
+      });
 
       const nowISO = new Date().toISOString();
       await supabase.from("leads").insert([
@@ -90,7 +95,7 @@ export default function Admin() {
         summary:"Asked price for oil change; confirmed Friday 2:15pm with Alex."
       });
 
-      setMsg(`Seed complete. Tenant created and linked. Open #app to view.`);
+      setMsg(`Seed complete. Tenant created, you are owner. Open #app to view.`);
       await refreshCounts();
     }catch(e:any){
       setMsg(`Seed error: ${e?.code ? e.code + ": " : ""}${e?.message || e}`);
@@ -143,7 +148,7 @@ export default function Admin() {
 
       {msg && <div className="text-sm">{msg}</div>}
       <WhoAmI />
-      <p className="text-xs text-slate-500">Admin-only. Protect with RLS/roles in production.</p>
+      <p className="text-xs text-slate-500">Admin-only. RLS + roles enforced in DB.</p>
     </div>
   );
 }
