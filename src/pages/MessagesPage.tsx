@@ -67,7 +67,7 @@ export default function MessagesPage() {
     try {
       const { error } = await supabase
         .from("messages")
-        .insert({ tenant_id: tenantId, thread_id: activeThread.id, from: "agent", text: newMsg.text, at: newMsg.at });
+        .insert({ tenant_id: tenantId, thread_id: activeThread.id, from: "agent", text: newMsg.text, sent_at: newMsg.at });
       if (error) throw error;
       await supabase.from("threads").update({ updated_at: newMsg.at }).eq("id", activeThread.id);
     } catch (e) {

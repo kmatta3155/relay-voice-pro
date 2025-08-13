@@ -454,7 +454,7 @@ function useLeadForm(defaults: Record<string,string> = {}){
         const withHandle = leadPayload.phone || leadPayload.email || leadPayload.name;
         const { data: th } = await supabase.from("threads").insert({ tenant_id: tenant, with: withHandle, channel: "web" }).select("*").single();
         if (th) {
-          await supabase.from("messages").insert({ tenant_id: tenant, thread_id: th.id, from: "lead", text: leadPayload.notes || "New inquiry", at: new Date().toISOString() });
+          await supabase.from("messages").insert({ tenant_id: tenant, thread_id: th.id, from: "lead", text: leadPayload.notes || "New inquiry", sent_at: new Date().toISOString() });
         }
       }
       if (CONFIG.WEBHOOK_URL) {

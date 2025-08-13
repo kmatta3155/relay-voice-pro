@@ -43,7 +43,7 @@ export async function listMessages(thread_id:string){
 }
 export async function sendMessage(thread:any, text:string){
   const t = await activeTenantId(); if (!t) throw new Error("No active tenant");
-  await supabase.from("messages").insert({ tenant_id:t, thread_id:thread.id, from:"agent", text, at:new Date().toISOString() });
+  await supabase.from("messages").insert({ tenant_id:t, thread_id:thread.id, from:"agent", text, sent_at:new Date().toISOString() });
   await supabase.from("threads").update({ updated_at: new Date().toISOString() }).eq("id", thread.id);
 }
 
