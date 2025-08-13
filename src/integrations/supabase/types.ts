@@ -607,6 +607,14 @@ export type Database = {
         Args: { tid: string }
         Returns: boolean
       }
+      purge_old: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      refresh_kpis: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       role: "OWNER" | "MANAGER" | "AGENT" | "VIEWER"
