@@ -146,7 +146,7 @@ export default function AIReceptionistApp() {
                 <h2 className="text-3xl md:text-4xl font-semibold leading-tight">See RelayAI in Action</h2>
                 <p className="mt-3 text-muted-foreground">Watch real conversations showing how our AI handles different scenarios</p>
               </div>
-              <InteractiveDemo />
+              <InteractiveDemo className="mt-10" />
             </section>
             <GetStarted />
             <FAQ />
