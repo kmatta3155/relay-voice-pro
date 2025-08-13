@@ -302,7 +302,9 @@ export type Database = {
       messages: {
         Row: {
           at: string | null
+          body: string | null
           conversation_id: string | null
+          direction: string | null
           from: string
           id: string
           sent_at: string
@@ -312,7 +314,9 @@ export type Database = {
         }
         Insert: {
           at?: string | null
+          body?: string | null
           conversation_id?: string | null
+          direction?: string | null
           from: string
           id?: string
           sent_at: string
@@ -322,7 +326,9 @@ export type Database = {
         }
         Update: {
           at?: string | null
+          body?: string | null
           conversation_id?: string | null
+          direction?: string | null
           from?: string
           id?: string
           sent_at?: string
@@ -424,6 +430,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_invites: {
+        Row: {
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          role: Database["public"]["Enums"]["role_kind"]
+          tenant_id: string | null
+          token: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          expires_at: string
+          id?: string
+          role?: Database["public"]["Enums"]["role_kind"]
+          tenant_id?: string | null
+          token?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["role_kind"]
+          tenant_id?: string | null
+          token?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_invites_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -533,7 +577,14 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      mv_kpis_7d: {
+        Row: {
+          bookings_7d: number | null
+          calls_7d: number | null
+          leads_7d: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       _is_active_tenant: {
