@@ -20,28 +20,66 @@ const DEMO_CONVERSATIONS = [
     id: 'call1',
     customer: 'Sarah Johnson',
     phone: '+1 (555) 123-4567',
+    scenario: 'Spa Appointment Booking',
     messages: [
-      { speaker: 'customer', text: "Hi, I'd like to book an appointment for a consultation.", confidence: 0.95 },
-      { speaker: 'ai', text: "Hello Sarah! I'd be happy to help you book a consultation. What type of consultation are you looking for?", intent: 'appointment_booking' },
-      { speaker: 'customer', text: "I need a business strategy consultation for my startup.", confidence: 0.92 },
-      { speaker: 'ai', text: "Perfect! I can see we have business strategy consultations available. What day works best for you this week?", intent: 'availability_check' },
-      { speaker: 'customer', text: "How about Thursday afternoon?", confidence: 0.88 },
-      { speaker: 'ai', text: "Thursday afternoon looks great! I have 2:00 PM and 4:00 PM available. Which time preference do you have?", intent: 'time_selection' },
-      { speaker: 'customer', text: "2 PM works perfectly.", confidence: 0.94 },
-      { speaker: 'ai', text: "Excellent! I've booked your business strategy consultation for Thursday at 2:00 PM. You'll receive a confirmation email shortly. Is there anything else I can help you with today?", intent: 'booking_confirmation' }
+      { speaker: 'customer', text: "Hi, I'd like to book a massage appointment please.", confidence: 0.95 },
+      { speaker: 'ai', text: "Hello Sarah! I'd be happy to help you book a massage. What type of massage are you interested in today?", intent: 'appointment_booking' },
+      { speaker: 'customer', text: "I think a deep tissue massage would be perfect. I've been really stressed with work lately.", confidence: 0.92 },
+      { speaker: 'ai', text: "A deep tissue massage is excellent for stress relief! We have 60-minute and 90-minute sessions available. Which would you prefer?", intent: 'service_selection' },
+      { speaker: 'customer', text: "90 minutes sounds amazing. What's your availability this week?", confidence: 0.91 },
+      { speaker: 'ai', text: "Perfect choice! For 90-minute deep tissue massages, I have Thursday at 2:00 PM, Friday at 11:00 AM, or Saturday at 4:00 PM available. Which works best for you?", intent: 'availability_check' },
+      { speaker: 'customer', text: "Thursday at 2 PM would be ideal!", confidence: 0.94 },
+      { speaker: 'ai', text: "Wonderful! I've booked your 90-minute deep tissue massage for Thursday at 2:00 PM with our senior therapist Emma. The session is $180. Can I get your email for confirmation?", intent: 'booking_confirmation' },
+      { speaker: 'customer', text: "Yes, it's sarah.johnson@email.com", confidence: 0.96 },
+      { speaker: 'ai', text: "Perfect! I've sent your confirmation to sarah.johnson@email.com. Please arrive 15 minutes early to fill out our wellness form. We're looking forward to seeing you Thursday!", intent: 'booking_complete' }
     ]
   },
   {
     id: 'call2', 
     customer: 'Mike Rodriguez',
     phone: '+1 (555) 987-6543',
+    scenario: 'Restaurant Reservation',
     messages: [
-      { speaker: 'customer', text: "Hello, I'm calling about your services. Can you tell me more about what you offer?", confidence: 0.91 },
-      { speaker: 'ai', text: "Hi Mike! Absolutely, I'd love to tell you about our services. We specialize in business consulting, digital transformation, and growth strategy. What specific area interests you most?", intent: 'service_inquiry' },
-      { speaker: 'customer', text: "I'm particularly interested in digital transformation for my manufacturing company.", confidence: 0.89 },
-      { speaker: 'ai', text: "Digital transformation for manufacturing is one of our key specialties! We help companies modernize their operations, implement IoT solutions, and optimize their supply chains. Would you like to schedule a free assessment?", intent: 'lead_qualification' },
-      { speaker: 'customer', text: "Yes, that sounds interesting. What does the assessment involve?", confidence: 0.93 },
-      { speaker: 'ai', text: "Our assessment includes a comprehensive review of your current systems, identification of automation opportunities, and a roadmap for digital transformation. It typically takes about 2 hours. When would be a good time for you?", intent: 'service_explanation' }
+      { speaker: 'customer', text: "Hi, I'd like to make a dinner reservation for tonight if possible.", confidence: 0.91 },
+      { speaker: 'ai', text: "Good evening Mike! I'd be delighted to help you with a dinner reservation. How many people will be joining you tonight?", intent: 'reservation_inquiry' },
+      { speaker: 'customer', text: "It's for 4 people, around 7 or 8 PM would be great.", confidence: 0.89 },
+      { speaker: 'ai', text: "Excellent! For a party of 4 tonight, I have 7:15 PM or 8:30 PM available. We also have a lovely window table at 7:45 PM. Which would you prefer?", intent: 'availability_check' },
+      { speaker: 'customer', text: "The window table at 7:45 sounds perfect! Do you accommodate any dietary restrictions?", confidence: 0.93 },
+      { speaker: 'ai', text: "Absolutely! Our chef is excellent with dietary accommodations. We handle vegetarian, vegan, gluten-free, and most allergies. What dietary needs should I note for your party?", intent: 'dietary_inquiry' },
+      { speaker: 'customer', text: "One person is vegetarian, and another has a shellfish allergy.", confidence: 0.95 },
+      { speaker: 'ai', text: "Perfect! I've reserved the window table for 4 at 7:45 PM tonight under Rodriguez, with notes for one vegetarian and one shellfish allergy. Our kitchen will take excellent care of your guests. See you tonight!", intent: 'reservation_confirmed' }
+    ]
+  },
+  {
+    id: 'call3',
+    customer: 'Emily Chen',
+    phone: '+1 (555) 234-5678',
+    scenario: 'Customer Support Issue',
+    messages: [
+      { speaker: 'customer', text: "Hi, I'm having trouble with my account login. I keep getting an error message.", confidence: 0.94 },
+      { speaker: 'ai', text: "Hi Emily! I'm sorry to hear you're having login troubles. I'm here to help resolve this quickly. What error message are you seeing exactly?", intent: 'technical_support' },
+      { speaker: 'customer', text: "It says 'Invalid credentials' even though I'm sure my password is correct. I even tried resetting it twice.", confidence: 0.92 },
+      { speaker: 'ai', text: "That's frustrating! The 'invalid credentials' error after password resets suggests a few possibilities. Let me check your account status. Can you confirm the email address associated with your account?", intent: 'account_verification' },
+      { speaker: 'customer', text: "Yes, it's emily.chen@company.com", confidence: 0.96 },
+      { speaker: 'ai', text: "Thank you! I can see your account, and I found the issue. Your account was temporarily locked due to multiple failed login attempts. I'm unlocking it now. Can you try logging in again?", intent: 'issue_resolution' },
+      { speaker: 'customer', text: "Oh wow, it worked! I'm logged in now. Thank you so much!", confidence: 0.98 },
+      { speaker: 'ai', text: "Excellent! I'm so glad we got that resolved quickly. To prevent this in the future, remember there's a 'Forgot Password' link if you're ever unsure. Is there anything else I can help you with today?", intent: 'support_complete' }
+    ]
+  },
+  {
+    id: 'call4',
+    customer: 'David Thompson',
+    phone: '+1 (555) 345-6789',
+    scenario: 'Sales Inquiry & Lead Qualification',
+    messages: [
+      { speaker: 'customer', text: "Hello, I saw your ad about marketing automation software. Can you tell me more about it?", confidence: 0.90 },
+      { speaker: 'ai', text: "Hi David! Thanks for your interest in our marketing automation platform. I'd love to show you how it can transform your marketing efforts. What type of business are you running?", intent: 'lead_qualification' },
+      { speaker: 'customer', text: "I run a growing e-commerce business. We're doing about $2 million in annual revenue but our email marketing is all manual right now.", confidence: 0.93 },
+      { speaker: 'ai', text: "That's fantastic growth! At $2M annual revenue, automation could save you 15-20 hours per week and increase email revenue by 25-40%. How many customers are in your email database currently?", intent: 'needs_assessment' },
+      { speaker: 'customer', text: "We have about 15,000 customers on our email list, but we're only sending basic newsletters right now.", confidence: 0.91 },
+      { speaker: 'ai', text: "Perfect! With 15,000 customers, you're sitting on a goldmine. Our platform could help you segment those customers, automate abandoned cart emails, and create personalized product recommendations. Would you like to see a custom demo based on your e-commerce store?", intent: 'demo_qualification' },
+      { speaker: 'customer', text: "Yes, that sounds exactly what we need. When can we schedule that?", confidence: 0.95 },
+      { speaker: 'ai', text: "Excellent! I'm marking you as a qualified lead for our e-commerce automation demo. I can schedule you with our senior e-commerce specialist tomorrow at 2 PM or Thursday at 10 AM. Which works better for you?", intent: 'demo_scheduling' }
     ]
   }
 ];
@@ -100,20 +138,33 @@ export default function Demo() {
       setMessages(prev => [...prev, message]);
       setCurrentMessageIndex(i + 1);
 
-      // Check for booking intent and create appointment
-      if (msg.intent === 'booking_confirmation' && conversation.id === 'call1') {
+      // Check for booking/reservation confirmations
+      if ((msg.intent === 'booking_confirmation' && conversation.id === 'call1') || 
+          (msg.intent === 'reservation_confirmed' && conversation.id === 'call2')) {
         setTimeout(async () => {
-          const newAppointment = {
-            id: `apt_${Date.now()}`,
-            customer: conversation.customer,
-            title: 'Business Strategy Consultation',
-            start: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days from now
-            end: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString(), // 1 hour duration
-            status: 'confirmed'
-          };
-          setAppointment(newAppointment);
+          let appointmentData;
+          if (conversation.id === 'call1') {
+            appointmentData = {
+              id: `apt_${Date.now()}`,
+              customer: conversation.customer,
+              title: '90-min Deep Tissue Massage',
+              start: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+              end: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 90 * 60 * 1000).toISOString(),
+              status: 'confirmed'
+            };
+          } else {
+            appointmentData = {
+              id: `res_${Date.now()}`,
+              customer: conversation.customer,
+              title: 'Dinner Reservation - Table for 4',
+              start: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(), // Tonight
+              end: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(), // 2 hours
+              status: 'confirmed'
+            };
+          }
+          setAppointment(appointmentData);
 
-          // Actually save to database
+          // Save to database
           try {
             const { data: user } = await supabase.auth.getUser();
             if (user.user) {
@@ -121,10 +172,10 @@ export default function Demo() {
               if (profile?.active_tenant_id) {
                 await supabase.from("appointments").insert({
                   tenant_id: profile.active_tenant_id,
-                  title: newAppointment.title,
-                  customer: newAppointment.customer,
-                  start_at: newAppointment.start,
-                  end_at: newAppointment.end
+                  title: appointmentData.title,
+                  customer: appointmentData.customer,
+                  start_at: appointmentData.start,
+                  end_at: appointmentData.end
                 });
               }
             }
@@ -134,21 +185,21 @@ export default function Demo() {
         }, 1000);
       }
 
-      // Check for lead qualification
-      if (msg.intent === 'lead_qualification' && conversation.id === 'call2') {
+      // Check for lead qualification (sales demo)
+      if (msg.intent === 'demo_qualification' && conversation.id === 'call4') {
         setTimeout(async () => {
           const newLead = {
             id: `lead_${Date.now()}`,
             name: conversation.customer,
             phone: conversation.phone,
-            source: 'Inbound Call',
+            source: 'Marketing Ad',
             status: 'qualified',
-            intent: 'Digital Transformation Services',
-            score: 85
+            intent: 'E-commerce Marketing Automation',
+            score: 92
           };
           setLead(newLead);
 
-          // Actually save to database
+          // Save to database
           try {
             const { data: user } = await supabase.auth.getUser();
             if (user.user) {
@@ -194,27 +245,53 @@ export default function Demo() {
           <CardTitle>Demo Scenarios</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 border rounded-xl">
-              <h3 className="font-semibold">Scenario 1: Appointment Booking</h3>
-              <p className="text-sm text-slate-600 mb-3">Customer calls to book a consultation</p>
+              <h3 className="font-semibold">Spa Booking</h3>
+              <p className="text-sm text-slate-600 mb-3">Customer books a massage appointment</p>
               <Button 
                 onClick={() => startCall(0)} 
                 disabled={callStatus !== 'ended'}
-                className="rounded-2xl"
+                className="rounded-2xl w-full"
+                size="sm"
               >
-                Start Appointment Demo
+                Start Demo
               </Button>
             </div>
             <div className="p-4 border rounded-xl">
-              <h3 className="font-semibold">Scenario 2: Lead Qualification</h3>
-              <p className="text-sm text-slate-600 mb-3">Customer inquires about services</p>
+              <h3 className="font-semibold">Restaurant</h3>
+              <p className="text-sm text-slate-600 mb-3">Customer makes dinner reservation</p>
               <Button 
                 onClick={() => startCall(1)} 
                 disabled={callStatus !== 'ended'}
-                className="rounded-2xl"
+                className="rounded-2xl w-full"
+                size="sm"
               >
-                Start Lead Demo
+                Start Demo
+              </Button>
+            </div>
+            <div className="p-4 border rounded-xl">
+              <h3 className="font-semibold">Support</h3>
+              <p className="text-sm text-slate-600 mb-3">Customer needs technical help</p>
+              <Button 
+                onClick={() => startCall(2)} 
+                disabled={callStatus !== 'ended'}
+                className="rounded-2xl w-full"
+                size="sm"
+              >
+                Start Demo
+              </Button>
+            </div>
+            <div className="p-4 border rounded-xl">
+              <h3 className="font-semibold">Sales</h3>
+              <p className="text-sm text-slate-600 mb-3">Lead qualification & follow-up</p>
+              <Button 
+                onClick={() => startCall(3)} 
+                disabled={callStatus !== 'ended'}
+                className="rounded-2xl w-full"
+                size="sm"
+              >
+                Start Demo
               </Button>
             </div>
           </div>
