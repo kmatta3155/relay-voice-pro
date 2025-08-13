@@ -172,7 +172,7 @@ function NavBar() {
         <nav className="hidden md:flex items-center gap-6 text-sm">
           <a href="#features" className="hover:opacity-80">Features</a>
           <a href="#pricing" className="hover:opacity-80">Pricing</a>
-          <a href="#demo" className="hover:opacity-80">Demo</a>
+          <a href="/demo" className="hover:opacity-80">Live Demo</a>
           <a href="#faq" className="hover:opacity-80">FAQ</a>
           <a href="#security" className="hover:opacity-80 inline-flex items-center gap-1"><Lock className="w-4 h-4" /> Security</a>
           {authed && (
@@ -210,7 +210,7 @@ function Hero() {
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button asChild size="lg" className="rounded-2xl"><a href="#app" className="inline-flex items-center gap-2">Try it free <ArrowRight className="w-4 h-4" /></a></Button>
-          <Button asChild variant="outline" size="lg" className="rounded-2xl"><a href="#demo">Watch demo</a></Button>
+          <Button asChild variant="outline" size="lg" className="rounded-2xl"><a href="/demo">Live Demo</a></Button>
           <Button asChild variant="ghost" size="lg" className="rounded-2xl"><a href={`tel:${CONFIG.PHONE}`}>Call sales</a></Button>
         </div>
         <ConsentNote />
