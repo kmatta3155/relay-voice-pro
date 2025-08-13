@@ -1,5 +1,5 @@
 import React from "react";
-import { startCheckout } from "@/lib/billing";
+import { openCheckout } from "@/lib/billing";
 
 export default function BillingPage() {
   return (
@@ -9,7 +9,7 @@ export default function BillingPage() {
         <p className="text-muted-foreground mb-6">Manage your plan and payments.</p>
         <button
           className="bg-blue-600 text-white px-4 py-2 rounded"
-          onClick={() => startCheckout("plan_receptionist_crm")}
+          onClick={() => openCheckout("plan_receptionist_crm")}
         >
           Upgrade to Receptionist + CRM
         </button>

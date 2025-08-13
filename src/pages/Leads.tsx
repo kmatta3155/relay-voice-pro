@@ -31,7 +31,7 @@ export default function LeadsPage(){
 
   async function save(l: Partial<Lead>){
     const tid = await getTenantId();
-    const payload = { ...l, tenant_id: tid };
+    const payload = { ...l, tenant_id: tid, name: l.name || "" };
     if (l.id) await supabase.from("leads").update(payload).eq("id", l.id);
     else await supabase.from("leads").insert(payload);
     setModal(null); await load();

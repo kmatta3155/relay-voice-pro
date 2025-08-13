@@ -18,9 +18,11 @@ export type Database = {
         Row: {
           created_at: string | null
           customer: string
+          end: string | null
           end_at: string
           id: string
           staff: string | null
+          start: string | null
           start_at: string
           tenant_id: string
           title: string
@@ -28,9 +30,11 @@ export type Database = {
         Insert: {
           created_at?: string | null
           customer: string
+          end?: string | null
           end_at: string
           id?: string
           staff?: string | null
+          start?: string | null
           start_at: string
           tenant_id: string
           title: string
@@ -38,9 +42,11 @@ export type Database = {
         Update: {
           created_at?: string | null
           customer?: string
+          end?: string | null
           end_at?: string
           id?: string
           staff?: string | null
+          start?: string | null
           start_at?: string
           tenant_id?: string
           title?: string
@@ -137,6 +143,38 @@ export type Database = {
           },
         ]
       }
+      conversations: {
+        Row: {
+          channel: string
+          contact: string
+          created_at: string | null
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          channel?: string
+          contact: string
+          created_at?: string | null
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          channel?: string
+          contact?: string
+          created_at?: string | null
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           created_at: string | null
@@ -199,6 +237,33 @@ export type Database = {
           },
         ]
       }
+      logs: {
+        Row: {
+          created_at: string | null
+          data: string | null
+          event: string
+          id: number
+          tenant_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data?: string | null
+          event: string
+          id?: number
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data?: string | null
+          event?: string
+          id?: number
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       memberships: {
         Row: {
           created_at: string | null
@@ -237,29 +302,42 @@ export type Database = {
       messages: {
         Row: {
           at: string | null
+          conversation_id: string | null
           from: string
           id: string
+          sent_at: string
           tenant_id: string
           text: string
           thread_id: string
         }
         Insert: {
           at?: string | null
+          conversation_id?: string | null
           from: string
           id?: string
+          sent_at: string
           tenant_id: string
           text: string
           thread_id: string
         }
         Update: {
           at?: string | null
+          conversation_id?: string | null
           from?: string
           id?: string
+          sent_at?: string
           tenant_id?: string
           text?: string
           thread_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -353,26 +431,67 @@ export type Database = {
           },
         ]
       }
+      tenant_members: {
+        Row: {
+          created_at: string | null
+          role: Database["public"]["Enums"]["role_kind"]
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          role?: Database["public"]["Enums"]["role_kind"]
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          role?: Database["public"]["Enums"]["role_kind"]
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string | null
+          created_by: string | null
           id: string
           name: string
+          price_id: string | null
           slug: string
+          stripe_customer_id: string | null
+          subscription_status: string | null
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
+          created_by?: string | null
           id?: string
           name: string
+          price_id?: string | null
           slug: string
+          stripe_customer_id?: string | null
+          subscription_status?: string | null
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
+          created_by?: string | null
           id?: string
           name?: string
+          price_id?: string | null
           slug?: string
+          stripe_customer_id?: string | null
+          subscription_status?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -417,6 +536,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _is_active_tenant: {
+        Args: { tid: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           u: string
@@ -429,9 +552,14 @@ export type Database = {
         Args: { u: string; t: string }
         Returns: boolean
       }
+      is_member_of: {
+        Args: { tid: string }
+        Returns: boolean
+      }
     }
     Enums: {
       role: "OWNER" | "MANAGER" | "AGENT" | "VIEWER"
+      role_kind: "owner" | "admin" | "agent"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -560,6 +688,7 @@ export const Constants = {
   public: {
     Enums: {
       role: ["OWNER", "MANAGER", "AGENT", "VIEWER"],
+      role_kind: ["owner", "admin", "agent"],
     },
   },
 } as const

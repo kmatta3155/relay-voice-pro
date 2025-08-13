@@ -27,7 +27,7 @@ import acuityLogo from "@/assets/logos/acuity.svg";
 import calendlyLogo from "@/assets/logos/calendly.svg";
 import outlookLogo from "@/assets/logos/outlook.svg";
 import { getDashboardMetrics } from "@/lib/analytics";
-import { startCheckout } from "@/lib/billing";
+import { openCheckout } from "@/lib/billing";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import MessagesPage from "@/pages/MessagesPage";
 import KnowledgePage from "@/pages/KnowledgePage";
@@ -303,7 +303,7 @@ function UpgradeCTA() {
       <div className="flex justify-center">
         <button
           className="bg-blue-600 text-white px-4 py-2 rounded"
-          onClick={() => startCheckout("plan_receptionist_crm")}
+          onClick={() => openCheckout("plan_receptionist_crm")}
         >
           Upgrade to Receptionist + CRM
         </button>
