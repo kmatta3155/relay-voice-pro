@@ -138,7 +138,7 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      // Create and play audio with comprehensive debugging
+      // Create and play audio with blob URL approach
       return new Promise((resolve) => {
         let hasResolved = false;
         const safeResolve = () => {
@@ -152,50 +152,73 @@ export function InteractiveDemo({ className }: DemoProps) {
         try {
           console.log(`Creating audio for ${text.substring(0, 30)}... - Audio data length: ${data.audioContent.length}`);
           
-          // Try simple data URL first - more compatible
+          // Convert base64 to blob properly
+          const binaryString = atob(data.audioContent);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          // Create blob with proper MIME type
+          const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          console.log('Created blob URL:', audioUrl);
+          
           const audio = new Audio();
-          audio.crossOrigin = 'anonymous';
           audio.preload = 'auto';
           audio.volume = 0.8;
           
-          // Set up event handlers before setting src
-          audio.onloadstart = () => console.log('Audio load started');
-          audio.oncanplay = () => console.log('Audio can play');
-          audio.onloadeddata = () => console.log('Audio data loaded');
+          // Set up comprehensive event handlers
+          audio.addEventListener('loadstart', () => {
+            console.log('Audio load started');
+          });
           
-          audio.oncanplaythrough = async () => {
-            console.log('Audio ready to play');
+          audio.addEventListener('canplay', () => {
+            console.log('Audio can play');
+          });
+          
+          audio.addEventListener('canplaythrough', async () => {
+            console.log('Audio ready to play through');
             try {
               setCurrentAudio(audio);
+              console.log('Starting audio playback...');
               await audio.play();
               console.log('Audio playing successfully');
             } catch (playError) {
               console.error('Audio play failed:', playError);
+              URL.revokeObjectURL(audioUrl);
               safeResolve();
             }
-          };
+          });
           
-          audio.onended = () => {
-            console.log('Audio ended');
+          audio.addEventListener('ended', () => {
+            console.log('Audio playback ended');
+            URL.revokeObjectURL(audioUrl);
             safeResolve();
-          };
+          });
           
-          audio.onerror = (e) => {
-            console.error('Audio error:', e, audio.error);
+          audio.addEventListener('error', (e) => {
+            console.error('Audio error:', e, 'Audio error details:', audio.error);
+            if (audio.error) {
+              console.error('Error code:', audio.error.code, 'Error message:', audio.error.message);
+            }
+            URL.revokeObjectURL(audioUrl);
             safeResolve();
-          };
+          });
           
-          // Set the data URL source
-          audio.src = `data:audio/mp3;base64,${data.audioContent}`;
+          // Set source and load
+          audio.src = audioUrl;
           audio.load();
           
           // Fallback timeout
           setTimeout(() => {
             if (!hasResolved) {
               console.warn('Audio timeout - continuing demo');
+              URL.revokeObjectURL(audioUrl);
               safeResolve();
             }
-          }, 8000);
+          }, 10000);
           
         } catch (error) {
           console.error('Audio creation failed:', error);
