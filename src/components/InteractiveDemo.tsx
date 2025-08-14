@@ -138,33 +138,71 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      // Simple, reliable audio playback
+      // Simple, reliable audio playback with better debugging
       return new Promise((resolve) => {
         try {
+          console.log(`🎵 Attempting to play: "${text.substring(0, 30)}..."`);
+          
           const audio = new Audio();
           audio.src = `data:audio/mpeg;base64,${data.audioContent}`;
           audio.volume = 0.8;
+          audio.crossOrigin = 'anonymous';
+          
+          let resolved = false;
+          
+          audio.onloadeddata = () => {
+            console.log(`📡 Audio data loaded for: ${voiceId}`);
+          };
+          
+          audio.oncanplay = async () => {
+            console.log(`▶️ Audio can play, starting playback...`);
+            if (!resolved) {
+              try {
+                setCurrentAudio(audio);
+                await audio.play();
+                console.log(`✅ Audio playing: ${voiceId}`);
+              } catch (playError) {
+                console.error(`❌ Play failed:`, playError);
+                resolved = true;
+                setCurrentAudio(null);
+                resolve();
+              }
+            }
+          };
           
           audio.onended = () => {
-            setCurrentAudio(null);
-            resolve();
+            console.log(`🏁 Audio ended: ${voiceId}`);
+            if (!resolved) {
+              resolved = true;
+              setCurrentAudio(null);
+              resolve();
+            }
           };
           
-          audio.onerror = () => {
-            console.warn('Audio failed, continuing demo');
-            setCurrentAudio(null);
-            resolve();
+          audio.onerror = (e) => {
+            console.error(`❌ Audio error:`, e, audio.error);
+            if (!resolved) {
+              resolved = true;
+              setCurrentAudio(null);
+              resolve();
+            }
           };
           
-          setCurrentAudio(audio);
-          audio.play().catch(() => {
-            console.warn('Audio autoplay blocked, continuing demo');
-            setCurrentAudio(null);
-            resolve();
-          });
+          // Load and attempt to play
+          audio.load();
+          
+          // Fallback timeout
+          setTimeout(() => {
+            if (!resolved) {
+              console.warn(`⏰ Audio timeout for: ${voiceId}`);
+              resolved = true;
+              setCurrentAudio(null);
+              resolve();
+            }
+          }, 8000);
           
         } catch (error) {
-          console.warn('Audio setup failed:', error);
+          console.error('🚫 Audio setup failed:', error);
           resolve();
         }
       });
@@ -280,7 +318,19 @@ export function InteractiveDemo({ className }: DemoProps) {
     return () => clearTimeout(timer);
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
-  const startDemo = () => {
+  const startDemo = async () => {
+    // Enable audio playback with user gesture
+    try {
+      // Create and play a silent audio to unlock browser audio
+      const silentAudio = new Audio();
+      silentAudio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvW4hBTuW2/HCtCIEMITT8diJOQcTYLXk8IXQ8dia';
+      silentAudio.volume = 0;
+      await silentAudio.play().catch(() => {});
+      console.log('🔊 Audio context unlocked');
+    } catch (e) {
+      console.warn('⚠️ Could not unlock audio, voices may not work');
+    }
+    
     setTranscript([]);
     setCurrentMessage(-2);
     setCallPhase('dialing');
