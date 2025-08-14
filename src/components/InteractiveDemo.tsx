@@ -138,7 +138,7 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      // Create and play audio with robust browser compatibility
+      // Create and play audio with comprehensive debugging
       return new Promise((resolve) => {
         let hasResolved = false;
         const safeResolve = () => {
@@ -150,56 +150,55 @@ export function InteractiveDemo({ className }: DemoProps) {
         };
         
         try {
-          // Create audio with proper MIME type
-          const audioBlob = new Blob([
-            Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))
-          ], { type: 'audio/mpeg' });
+          console.log(`Creating audio for ${text.substring(0, 30)}... - Audio data length: ${data.audioContent.length}`);
           
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          
-          // Configure audio for better compatibility
+          // Try simple data URL first - more compatible
+          const audio = new Audio();
           audio.crossOrigin = 'anonymous';
           audio.preload = 'auto';
+          audio.volume = 0.8;
           
-          // Set up event handlers
-          audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            safeResolve();
-          };
+          // Set up event handlers before setting src
+          audio.onloadstart = () => console.log('Audio load started');
+          audio.oncanplay = () => console.log('Audio can play');
+          audio.onloadeddata = () => console.log('Audio data loaded');
           
-          audio.onerror = (e) => {
-            console.warn('Audio playback error, continuing demo');
-            URL.revokeObjectURL(audioUrl);
-            safeResolve();
-          };
-          
-          // Play when ready
-          audio.oncanplay = async () => {
+          audio.oncanplaythrough = async () => {
+            console.log('Audio ready to play');
             try {
               setCurrentAudio(audio);
               await audio.play();
+              console.log('Audio playing successfully');
             } catch (playError) {
-              console.warn('Audio play failed, continuing demo:', playError);
-              URL.revokeObjectURL(audioUrl);
+              console.error('Audio play failed:', playError);
               safeResolve();
             }
           };
           
-          // Load the audio
+          audio.onended = () => {
+            console.log('Audio ended');
+            safeResolve();
+          };
+          
+          audio.onerror = (e) => {
+            console.error('Audio error:', e, audio.error);
+            safeResolve();
+          };
+          
+          // Set the data URL source
+          audio.src = `data:audio/mp3;base64,${data.audioContent}`;
           audio.load();
           
           // Fallback timeout
           setTimeout(() => {
             if (!hasResolved) {
               console.warn('Audio timeout - continuing demo');
-              URL.revokeObjectURL(audioUrl);
               safeResolve();
             }
           }, 8000);
           
         } catch (error) {
-          console.warn('Audio creation failed:', error);
+          console.error('Audio creation failed:', error);
           safeResolve();
         }
       });
@@ -316,12 +315,19 @@ export function InteractiveDemo({ className }: DemoProps) {
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
   const startDemo = async () => {
-    // Enable audio context on user interaction
+    // Request user interaction for audio
     try {
+      // Create a small test audio to enable audio context
+      const testAudio = new Audio('data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgQgAOVCjXBdClMBAD0K0Y3VB8DI7IzikxSNTqYjAZZrCAL3AOoHANgBwJuHSfQJAAJoOAOKONxTw8DzZfWFO5BFNM5gSz4wOcEQVyFiCBEKJUHKAeCQbDPJKEmMTJBqAIQgGBIyA');
+      testAudio.volume = 0;
+      await testAudio.play().catch(() => {});
+      
+      // Enable audio context on user interaction
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
       }
+      console.log('Audio context state:', audioContext.state);
     } catch (e) {
       console.warn('Audio context setup failed:', e);
     }
