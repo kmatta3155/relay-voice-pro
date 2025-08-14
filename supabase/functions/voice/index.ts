@@ -1,32 +1,30 @@
-// ===============================================
-// FILE: supabase/functions/voice/index.ts
-// (Supabase Edge Function – ElevenLabs proxy + voice listing)
-// ===============================================
-// SECRETS (Supabase → Project Settings → Functions → Secrets):
-//   ELEVENLABS_API_KEY = <your_eleven_labs_key>
-// OPTIONAL:
-//   ELEVEN_MODEL_ID = eleven_flash_v2_5
-//
-// Deploy:
-// supabase functions deploy voice
-// supabase secrets set ELEVENLABS_API_KEY=xxxxx ELEVEN_MODEL_ID=eleven_flash_v2_5
-// -----------------------------------------------
-
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
-const XI_KEY = Deno.env.get("ELEVENLABS_API_KEY")!;
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const XI_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 const DEFAULT_MODEL = Deno.env.get("ELEVEN_MODEL_ID") ?? "eleven_flash_v2_5";
 
-function toBase64(u8: Uint8Array) {
-  let s = "";
-  for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
-  // deno-lint-ignore no-explicit-any
-  return (btoa as any)(s);
+// Optimized base64 encoding for large audio files
+function toBase64(buffer: ArrayBuffer): string {
+  const uint8Array = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192; // Process in chunks to avoid call stack limits
+  
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.slice(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
 }
 
 async function listVoices() {
   const r = await fetch("https://api.elevenlabs.io/v1/voices", {
-    headers: { "xi-api-key": XI_KEY },
+    headers: { "xi-api-key": XI_KEY! },
   });
   if (!r.ok) throw new Error(`ElevenLabs voices ${r.status}: ${await r.text()}`);
   const json = await r.json();
@@ -43,16 +41,26 @@ async function listVoices() {
 }
 
 serve(async (req) => {
-  if (req.method !== "POST") return new Response("OK");
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
-    if (!XI_KEY) throw new Error("Missing ELEVENLABS_API_KEY secret.");
+    if (!XI_KEY) {
+      console.error("Missing ELEVENLABS_API_KEY");
+      throw new Error("Missing ELEVENLABS_API_KEY secret.");
+    }
+
     const body = await req.json();
+    console.log("Request body:", JSON.stringify(body, null, 2));
 
     // MULTI-ACTION ENTRYPOINT
     if (body?.action === "list_voices") {
+      console.log("Listing voices...");
       const voices = await listVoices();
       return new Response(JSON.stringify({ voices }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -65,7 +73,12 @@ serve(async (req) => {
       voice_settings,
     } = body || {};
 
-    if (!text || !voiceId) throw new Error("Missing text or voiceId");
+    if (!text || !voiceId) {
+      console.error("Missing required parameters:", { text: !!text, voiceId: !!voiceId });
+      throw new Error("Missing text or voiceId");
+    }
+
+    console.log(`Generating TTS for: "${text.slice(0, 50)}..." with voice: ${voiceId}`);
 
     const fmt = (output_format || format || "mp3") as "mp3" | "ulaw_8000";
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
@@ -81,6 +94,8 @@ serve(async (req) => {
       },
     };
 
+    console.log("Calling ElevenLabs API with payload:", JSON.stringify(payload, null, 2));
+
     const r = await fetch(url, {
       method: "POST",
       headers: {
@@ -90,15 +105,36 @@ serve(async (req) => {
       },
       body: JSON.stringify(payload),
     });
-    if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${await r.text()}`);
 
-    const buf = new Uint8Array(await r.arrayBuffer());
+    if (!r.ok) {
+      const errorText = await r.text();
+      console.error(`ElevenLabs API error ${r.status}: ${errorText}`);
+      throw new Error(`ElevenLabs ${r.status}: ${errorText}`);
+    }
+
+    console.log("Successfully received audio from ElevenLabs");
+    const arrayBuffer = await r.arrayBuffer();
+    console.log(`Audio buffer size: ${arrayBuffer.byteLength} bytes`);
+    
+    const audioBase64 = toBase64(arrayBuffer);
     const contentType = fmt === "mp3" ? "audio/mpeg" : "audio/basic";
+    
+    console.log(`Generated base64 audio: ${audioBase64.length} characters`);
+
     return new Response(
-      JSON.stringify({ audioBase64: toBase64(buf), contentType }),
-      { headers: { "Content-Type": "application/json" } }
+      JSON.stringify({ audioBase64, contentType }),
+      { 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      }
     );
   } catch (e) {
-    return new Response(String(e?.message ?? e), { status: 400 });
+    console.error("Edge function error:", e);
+    return new Response(
+      JSON.stringify({ error: String(e?.message ?? e) }), 
+      { 
+        status: 400, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      }
+    );
   }
 });
