@@ -67,15 +67,10 @@ serve(async (req) => {
 
     console.log(`Generated audio: ${arrayBuffer.byteLength} bytes`);
 
-    // Convert to base64 in chunks to avoid memory issues
+    // Convert to base64 properly - don't chunk the conversion as it corrupts the data
     const uint8Array = new Uint8Array(arrayBuffer);
-    let base64Audio = '';
-    const chunkSize = 0x8000; // 32KB chunks
-    
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-      base64Audio += btoa(String.fromCharCode.apply(null, Array.from(chunk)));
-    }
+    const binaryString = Array.from(uint8Array, byte => String.fromCharCode(byte)).join('');
+    const base64Audio = btoa(binaryString);
 
     return new Response(
       JSON.stringify({ 
