@@ -138,7 +138,7 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      // Create and play audio with blob URL approach
+      // Simplified audio playback with better error handling
       return new Promise((resolve) => {
         let hasResolved = false;
         const safeResolve = () => {
@@ -150,78 +150,62 @@ export function InteractiveDemo({ className }: DemoProps) {
         };
         
         try {
-          console.log(`Creating audio for ${text.substring(0, 30)}... - Audio data length: ${data.audioContent.length}`);
+          console.log(`Playing audio for: "${text.substring(0, 30)}..." - Data length: ${data.audioContent.length}`);
           
-          // Convert base64 to blob properly
-          const binaryString = atob(data.audioContent);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          
-          // Create blob with proper MIME type
-          const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
-          const audioUrl = URL.createObjectURL(audioBlob);
-          
-          console.log('Created blob URL:', audioUrl);
-          
-          const audio = new Audio();
+          // Create audio element with data URL (most compatible)
+          const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
+          audio.volume = 0.7;
           audio.preload = 'auto';
-          audio.volume = 0.8;
           
-          // Set up comprehensive event handlers
-          audio.addEventListener('loadstart', () => {
-            console.log('Audio load started');
-          });
-          
-          audio.addEventListener('canplay', () => {
-            console.log('Audio can play');
-          });
-          
-          audio.addEventListener('canplaythrough', async () => {
-            console.log('Audio ready to play through');
+          // Simple event handlers
+          audio.addEventListener('canplay', async () => {
+            console.log('Audio ready, attempting to play...');
             try {
               setCurrentAudio(audio);
-              console.log('Starting audio playback...');
-              await audio.play();
-              console.log('Audio playing successfully');
-            } catch (playError) {
-              console.error('Audio play failed:', playError);
-              URL.revokeObjectURL(audioUrl);
-              safeResolve();
+              // Force play immediately when audio is ready
+              const playPromise = audio.play();
+              if (playPromise !== undefined) {
+                await playPromise;
+                console.log('✓ Audio playing successfully');
+              }
+            } catch (e) {
+              console.error('Play failed:', e.name, e.message);
+              // If autoplay fails, try with user gesture simulation
+              document.addEventListener('click', async () => {
+                try {
+                  await audio.play();
+                  console.log('✓ Audio playing after user interaction');
+                } catch (clickError) {
+                  console.error('Audio failed even with user interaction:', clickError);
+                  safeResolve();
+                }
+              }, { once: true });
             }
           });
           
           audio.addEventListener('ended', () => {
-            console.log('Audio playback ended');
-            URL.revokeObjectURL(audioUrl);
+            console.log('✓ Audio playback completed');
             safeResolve();
           });
           
           audio.addEventListener('error', (e) => {
-            console.error('Audio error:', e, 'Audio error details:', audio.error);
-            if (audio.error) {
-              console.error('Error code:', audio.error.code, 'Error message:', audio.error.message);
-            }
-            URL.revokeObjectURL(audioUrl);
+            console.error('✗ Audio error:', audio.error?.code, audio.error?.message);
             safeResolve();
           });
           
-          // Set source and load
-          audio.src = audioUrl;
+          // Load the audio
           audio.load();
           
-          // Fallback timeout
+          // Timeout fallback
           setTimeout(() => {
             if (!hasResolved) {
-              console.warn('Audio timeout - continuing demo');
-              URL.revokeObjectURL(audioUrl);
+              console.warn('⚠ Audio timeout, continuing...');
               safeResolve();
             }
-          }, 10000);
+          }, 7000);
           
         } catch (error) {
-          console.error('Audio creation failed:', error);
+          console.error('Audio setup failed:', error);
           safeResolve();
         }
       });
@@ -338,12 +322,21 @@ export function InteractiveDemo({ className }: DemoProps) {
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
   const startDemo = async () => {
-    // Request user interaction for audio
+    // Force user interaction for reliable audio playback
     try {
-      // Create a small test audio to enable audio context
-      const testAudio = new Audio('data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgQgAOVCjXBdClMBAD0K0Y3VB8DI7IzikxSNTqYjAZZrCAL3AOoHANgBwJuHSfQJAAJoOAOKONxTw8DzZfWFO5BFNM5gSz4wOcEQVyFiCBEKJUHKAeCQbDPJKEmMTJBqAIQgGBIyA');
-      testAudio.volume = 0;
-      await testAudio.play().catch(() => {});
+      // Create a temporary audio to test browser support
+      const testAudio = new Audio();
+      testAudio.volume = 0.1;
+      testAudio.src = 'data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgQgAOVCjXBdClMBAD0K0Y3VB8DI7IzikxSNTqYjAZZrCAL3AOoHANgBwJuHSfQJAAJoOAOKONxTw8DzZfWFO5BFNM5gSz4wOcEQVyFiCBEKJUHKAeCQbDPJKEmMTJBqAIQgGBIyA';
+      
+      // Attempt to play test audio to enable autoplay for our demos
+      try {
+        await testAudio.play();
+        testAudio.pause();
+        console.log('✓ Audio permissions granted');
+      } catch (playError) {
+        console.warn('Browser may block autoplay - voices might not work:', playError);
+      }
       
       // Enable audio context on user interaction
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -352,7 +345,7 @@ export function InteractiveDemo({ className }: DemoProps) {
       }
       console.log('Audio context state:', audioContext.state);
     } catch (e) {
-      console.warn('Audio context setup failed:', e);
+      console.warn('Audio setup failed - demo will continue without sound:', e);
     }
     
     setTranscript([]);
