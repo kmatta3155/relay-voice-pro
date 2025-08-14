@@ -138,62 +138,54 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      // Create and play audio with enhanced loading and error handling
-      const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
+      // Create and play audio with robust error handling
+      const audio = new Audio();
       
       return new Promise((resolve) => {
-        const cleanup = () => {
-          setCurrentAudio(null);
-          resolve();
-        };
-        
         let hasResolved = false;
         const safeResolve = () => {
           if (!hasResolved) {
             hasResolved = true;
-            cleanup();
+            setCurrentAudio(null);
+            resolve();
           }
         };
         
+        // Set up all event handlers before setting src
         audio.onended = safeResolve;
         audio.onerror = (e) => {
-          console.warn('Audio playback error:', e);
+          console.warn('Audio playback error, continuing demo');
           safeResolve();
         };
         
-        // Ensure audio loads completely before playing
-        audio.oncanplaythrough = () => {
+        // Play immediately when audio can play
+        audio.oncanplay = () => {
           setCurrentAudio(audio);
           audio.play().catch((playError) => {
-            console.warn('Audio play failed:', playError);
+            console.warn('Audio play failed, continuing demo:', playError);
             safeResolve();
           });
         };
         
-        audio.onloadstart = () => {
-          console.log('Audio loading started');
-        };
-        
-        audio.onloadeddata = () => {
-          console.log('Audio data loaded');
-        };
-        
+        // Set the audio source
+        audio.src = `data:audio/mp3;base64,${data.audioContent}`;
+        audio.preload = 'auto';
         audio.load();
         
-        // Increased timeout for better reliability
+        // Fallback timeout to ensure demo continues
         setTimeout(() => {
           if (!hasResolved) {
             console.warn('Audio timeout - continuing demo');
             safeResolve();
           }
-        }, 15000);
+        }, 10000);
       });
     } catch (error) {
       console.warn('TTS Error - continuing demo:', error);
     }
   };
 
-  // Enhanced realistic phone ringing sound
+  // Enhanced American phone ring sound
   const playPhoneRing = (): Promise<void> => {
     if (!audioEnabled) return Promise.resolve();
     
@@ -202,12 +194,12 @@ export function InteractiveDemo({ className }: DemoProps) {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         const masterGain = audioContext.createGain();
         masterGain.connect(audioContext.destination);
-        masterGain.gain.setValueAtTime(0.25, audioContext.currentTime);
+        masterGain.gain.setValueAtTime(0.3, audioContext.currentTime);
         
-        // Create realistic phone ring with multiple harmonics
-        const createRingTone = (startTime: number, duration: number) => {
-          // Standard US ring tone frequencies
-          const frequencies = [480, 620];
+        // Create authentic American phone ring tone
+        const createAmericanRingTone = (startTime: number) => {
+          // Standard North American ring tone: 440Hz + 480Hz sine waves
+          const frequencies = [440, 480];
           
           frequencies.forEach((freq, index) => {
             const oscillator = audioContext.createOscillator();
@@ -219,16 +211,12 @@ export function InteractiveDemo({ className }: DemoProps) {
             oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
             oscillator.type = 'sine';
             
-            // Realistic ring pattern: on for 0.4s, off for 0.2s, on for 0.4s, pause
+            // Classic US ring pattern: 2 seconds on, 4 seconds off
             const envelope = [
               { time: 0, gain: 0 },
-              { time: 0.05, gain: 0.7 + (index * 0.1) },
-              { time: 0.4, gain: 0.7 + (index * 0.1) },
-              { time: 0.45, gain: 0 },
-              { time: 0.65, gain: 0 },
-              { time: 0.7, gain: 0.7 + (index * 0.1) },
-              { time: 1.1, gain: 0.7 + (index * 0.1) },
-              { time: 1.15, gain: 0 }
+              { time: 0.1, gain: 0.8 - (index * 0.1) }, // Slight frequency mixing
+              { time: 2.0, gain: 0.8 - (index * 0.1) },
+              { time: 2.1, gain: 0 }
             ];
             
             envelope.forEach(point => {
@@ -236,15 +224,15 @@ export function InteractiveDemo({ className }: DemoProps) {
             });
             
             oscillator.start(audioContext.currentTime + startTime);
-            oscillator.stop(audioContext.currentTime + startTime + duration);
+            oscillator.stop(audioContext.currentTime + startTime + 2.2);
           });
         };
         
-        // Create 2 ring cycles for realistic phone ringing
-        createRingTone(0, 1.2);
-        createRingTone(1.4, 1.2);
+        // Play American ring pattern - 2 rings
+        createAmericanRingTone(0);
+        createAmericanRingTone(4);
         
-        setTimeout(resolve, 2800);
+        setTimeout(resolve, 6000);
       } catch (error) {
         console.warn('Phone ring audio failed:', error);
         resolve();
