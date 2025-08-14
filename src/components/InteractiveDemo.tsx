@@ -138,75 +138,34 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      // Simplified audio playback with better error handling
+      // Simple, reliable audio playback
       return new Promise((resolve) => {
-        let hasResolved = false;
-        const safeResolve = () => {
-          if (!hasResolved) {
-            hasResolved = true;
+        try {
+          const audio = new Audio();
+          audio.src = `data:audio/mpeg;base64,${data.audioContent}`;
+          audio.volume = 0.8;
+          
+          audio.onended = () => {
             setCurrentAudio(null);
             resolve();
-          }
-        };
-        
-        try {
-          console.log(`Playing audio for: "${text.substring(0, 30)}..." - Data length: ${data.audioContent.length}`);
+          };
           
-          // Create audio element with data URL (most compatible)
-          const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
-          audio.volume = 0.7;
-          audio.preload = 'auto';
+          audio.onerror = () => {
+            console.warn('Audio failed, continuing demo');
+            setCurrentAudio(null);
+            resolve();
+          };
           
-          // Simple event handlers
-          audio.addEventListener('canplay', async () => {
-            console.log('Audio ready, attempting to play...');
-            try {
-              setCurrentAudio(audio);
-              // Force play immediately when audio is ready
-              const playPromise = audio.play();
-              if (playPromise !== undefined) {
-                await playPromise;
-                console.log('✓ Audio playing successfully');
-              }
-            } catch (e) {
-              console.error('Play failed:', e.name, e.message);
-              // If autoplay fails, try with user gesture simulation
-              document.addEventListener('click', async () => {
-                try {
-                  await audio.play();
-                  console.log('✓ Audio playing after user interaction');
-                } catch (clickError) {
-                  console.error('Audio failed even with user interaction:', clickError);
-                  safeResolve();
-                }
-              }, { once: true });
-            }
+          setCurrentAudio(audio);
+          audio.play().catch(() => {
+            console.warn('Audio autoplay blocked, continuing demo');
+            setCurrentAudio(null);
+            resolve();
           });
-          
-          audio.addEventListener('ended', () => {
-            console.log('✓ Audio playback completed');
-            safeResolve();
-          });
-          
-          audio.addEventListener('error', (e) => {
-            console.error('✗ Audio error:', audio.error?.code, audio.error?.message);
-            safeResolve();
-          });
-          
-          // Load the audio
-          audio.load();
-          
-          // Timeout fallback
-          setTimeout(() => {
-            if (!hasResolved) {
-              console.warn('⚠ Audio timeout, continuing...');
-              safeResolve();
-            }
-          }, 7000);
           
         } catch (error) {
-          console.error('Audio setup failed:', error);
-          safeResolve();
+          console.warn('Audio setup failed:', error);
+          resolve();
         }
       });
     } catch (error) {
@@ -321,33 +280,7 @@ export function InteractiveDemo({ className }: DemoProps) {
     return () => clearTimeout(timer);
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
-  const startDemo = async () => {
-    // Force user interaction for reliable audio playback
-    try {
-      // Create a temporary audio to test browser support
-      const testAudio = new Audio();
-      testAudio.volume = 0.1;
-      testAudio.src = 'data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgQgAOVCjXBdClMBAD0K0Y3VB8DI7IzikxSNTqYjAZZrCAL3AOoHANgBwJuHSfQJAAJoOAOKONxTw8DzZfWFO5BFNM5gSz4wOcEQVyFiCBEKJUHKAeCQbDPJKEmMTJBqAIQgGBIyA';
-      
-      // Attempt to play test audio to enable autoplay for our demos
-      try {
-        await testAudio.play();
-        testAudio.pause();
-        console.log('✓ Audio permissions granted');
-      } catch (playError) {
-        console.warn('Browser may block autoplay - voices might not work:', playError);
-      }
-      
-      // Enable audio context on user interaction
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-      console.log('Audio context state:', audioContext.state);
-    } catch (e) {
-      console.warn('Audio setup failed - demo will continue without sound:', e);
-    }
-    
+  const startDemo = () => {
     setTranscript([]);
     setCurrentMessage(-2);
     setCallPhase('dialing');
