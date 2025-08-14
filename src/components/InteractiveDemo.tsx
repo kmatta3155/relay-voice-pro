@@ -106,108 +106,33 @@ export function InteractiveDemo({ className }: DemoProps) {
     }
   ];
 
-  // Enhanced TTS function with better voice settings and error handling
   const playTTS = async (text: string, voiceId: string): Promise<void> => {
     if (!audioEnabled) return;
     
     try {
-      // Map voice names to ElevenLabs voice IDs with premium voices
       const voiceMap: { [key: string]: string } = {
-        'Sarah': 'EXAVITQu4vr4xnSDxMaL',    // Professional female voice for AI
-        'George': 'JBFqnCBsd6RMkjVDRZzb',   // Mature male customer voice
-        'Charlotte': 'XB0fDUnXU5powFXDhCwa', // Young female customer voice 
-        'Liam': 'TX3LPaxmHKxFdv7VOQHJ'      // Young male customer voice
+        'Sarah': 'EXAVITQu4vr4xnSDxMaL',
+        'George': 'JBFqnCBsd6RMkjVDRZzb',
+        'Charlotte': 'XB0fDUnXU5powFXDhCwa',
+        'Liam': 'TX3LPaxmHKxFdv7VOQHJ'
       };
 
-      console.log(`Playing TTS: "${text.substring(0, 30)}..." with voice: ${voiceId}`);
-
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { 
-          text,
-          voice_id: voiceMap[voiceId] || voiceMap['Sarah']
-        }
+        body: { text, voice_id: voiceMap[voiceId] || voiceMap['Sarah'] }
       });
 
-      if (error) {
-        console.warn('TTS API Error - continuing demo without audio:', error);
-        return;
-      }
+      if (error || !data?.audioContent) return;
 
-      if (!data?.audioContent) {
-        console.warn('No audio content received');
-        return;
-      }
-
-      // Simple, reliable audio playback with better debugging
-      return new Promise((resolve) => {
-        try {
-          console.log(`🎵 Attempting to play: "${text.substring(0, 30)}..."`);
-          
-          const audio = new Audio();
-          audio.src = `data:audio/mpeg;base64,${data.audioContent}`;
-          audio.volume = 0.8;
-          audio.crossOrigin = 'anonymous';
-          
-          let resolved = false;
-          
-          audio.onloadeddata = () => {
-            console.log(`📡 Audio data loaded for: ${voiceId}`);
-          };
-          
-          audio.oncanplay = async () => {
-            console.log(`▶️ Audio can play, starting playback...`);
-            if (!resolved) {
-              try {
-                setCurrentAudio(audio);
-                await audio.play();
-                console.log(`✅ Audio playing: ${voiceId}`);
-              } catch (playError) {
-                console.error(`❌ Play failed:`, playError);
-                resolved = true;
-                setCurrentAudio(null);
-                resolve();
-              }
-            }
-          };
-          
-          audio.onended = () => {
-            console.log(`🏁 Audio ended: ${voiceId}`);
-            if (!resolved) {
-              resolved = true;
-              setCurrentAudio(null);
-              resolve();
-            }
-          };
-          
-          audio.onerror = (e) => {
-            console.error(`❌ Audio error:`, e, audio.error);
-            if (!resolved) {
-              resolved = true;
-              setCurrentAudio(null);
-              resolve();
-            }
-          };
-          
-          // Load and attempt to play
-          audio.load();
-          
-          // Fallback timeout
-          setTimeout(() => {
-            if (!resolved) {
-              console.warn(`⏰ Audio timeout for: ${voiceId}`);
-              resolved = true;
-              setCurrentAudio(null);
-              resolve();
-            }
-          }, 8000);
-          
-        } catch (error) {
-          console.error('🚫 Audio setup failed:', error);
-          resolve();
-        }
-      });
+      const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
+      audio.volume = 0.8;
+      
+      audio.onended = () => setCurrentAudio(null);
+      audio.onerror = () => setCurrentAudio(null);
+      
+      setCurrentAudio(audio);
+      await audio.play();
     } catch (error) {
-      console.warn('TTS Error - continuing demo:', error);
+      console.error('Audio playback failed:', error);
     }
   };
 
@@ -318,19 +243,7 @@ export function InteractiveDemo({ className }: DemoProps) {
     return () => clearTimeout(timer);
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
-  const startDemo = async () => {
-    // Enable audio playback with user gesture
-    try {
-      // Create and play a silent audio to unlock browser audio
-      const silentAudio = new Audio();
-      silentAudio.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvW4hBTuW2/HCtCIEMITT8diJOQcTYLXk8IXQ8dia';
-      silentAudio.volume = 0;
-      await silentAudio.play().catch(() => {});
-      console.log('🔊 Audio context unlocked');
-    } catch (e) {
-      console.warn('⚠️ Could not unlock audio, voices may not work');
-    }
-    
+  const startDemo = () => {
     setTranscript([]);
     setCurrentMessage(-2);
     setCallPhase('dialing');
