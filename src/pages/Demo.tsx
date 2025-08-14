@@ -1,350 +1,415 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-// Reliable ElevenLabs voice IDs
-const VOICES = {
-  receptionist: "EXAVITQu4vr4xnSDxMaL", // Sarah - clear female voice
-  caller_female: "XB0fDUnXU5powFXDhCwa", // Charlotte - natural female voice  
-  caller_male: "JBFqnCBsd6RMkjVDRZzb", // George - professional male voice
-};
+// ---------- Hard-mapped ElevenLabs Voice IDs (replace with your real IDs) ----------
+// Recommended voice picks by style (examples): 
+//   AI English (neutral/support): "Adam" / "Aria" / "Rachel"
+//   AI Spanish (neutral): "Sofía" / "Camila"
+//   Caller Female (natural): "Bella" / "Ada"
+//   Caller Male (natural): "Antoni" / "Matthew"
+//   Caller Spanish (natural): "Lucía" / "Alejandro"
+const VOICE_AI_EN = "9BWtsMINqrJLrRacOk9x"; // Aria
+const VOICE_AI_ES = "EXAVITQu4vr4xnSDxMaL"; // Sarah
+const VOICE_CALLER_F = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+const VOICE_CALLER_M = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
+const VOICE_CALLER_ES = "cgSgspJ2msm6clMCkdW9"; // Jessica
 
-const VOICE_SETTINGS = {
+// Default delivery settings (subtle, human)
+const DEFAULT_VOICE_SETTINGS = {
   stability: 0.6,
   similarity_boost: 0.7,
   style: 0.15,
 };
 
-type Line = { 
-  who: "ring" | "receptionist" | "caller"; 
-  text?: string; 
-  voice?: keyof typeof VOICES; 
-  pause?: number 
+type Line = {
+  who: "ring" | "ai" | "caller";
+  text?: string;
+  voiceId?: string;
+  pause?: number; // ms gap after audio
 };
 
-type Scenario = { 
-  id: string; 
-  name: string; 
-  phone: string; 
-  desc: string; 
-  lines: Line[] 
+type Scenario = {
+  id: string;
+  name: string;
+  phone: string;
+  lang: "EN" | "ES" | "BI" | "FR" | "PT";
+  desc: string;
+  sub: string;
+  lines: Line[];
 };
 
-const SCENARIOS: Scenario[] = [
-  {
-    id: "spa",
-    name: "Serenity Spa",
-    phone: "(555) 123-RELAX",
-    desc: "Appointment Booking",
-    lines: [
-      { who: "ring" },
-      { who: "ring" },
-      { who: "receptionist", text: "Thank you for calling Serenity Spa. This is your AI assistant, how may I help you today?", voice: "receptionist", pause: 400 },
-      { who: "caller", text: "Hi! I'd like to book a massage for Friday afternoon.", voice: "caller_female", pause: 300 },
-      { who: "receptionist", text: "I'd be happy to help you book a massage for Friday. What time works best for you?", voice: "receptionist", pause: 300 },
-      { who: "caller", text: "Around 2 PM would be perfect.", voice: "caller_female", pause: 250 },
-      { who: "receptionist", text: "Perfect! I have 2:15 PM available. May I have your name and phone number?", voice: "receptionist", pause: 350 },
-      { who: "caller", text: "It's Sarah Chen, 555-0156.", voice: "caller_female", pause: 250 },
-      { who: "receptionist", text: "Thank you Sarah! You're all set for Friday at 2:15 PM. I'll send a confirmation text.", voice: "receptionist", pause: 400 },
-    ]
-  },
-  {
-    id: "auto",
-    name: "Triangle Auto Care", 
-    phone: "(555) 274-BRAKE",
-    desc: "Service Appointment",
-    lines: [
-      { who: "ring" },
-      { who: "ring" },
-      { who: "receptionist", text: "Thank you for calling Triangle Auto Care. This is your AI assistant. How can I help?", voice: "receptionist", pause: 350 },
-      { who: "caller", text: "My car's brakes are squealing. Can I book a checkup?", voice: "caller_male", pause: 300 },
-      { who: "receptionist", text: "I can schedule a brake inspection today. There's a $49 diagnostic fee. Does 2:30 PM work?", voice: "receptionist", pause: 350 },
-      { who: "caller", text: "That works perfectly. It's a 2016 Honda Civic.", voice: "caller_male", pause: 250 },
-      { who: "receptionist", text: "Great! May I have your name and number for the appointment?", voice: "receptionist", pause: 300 },
-      { who: "caller", text: "Marcus Lee, 919-555-0110.", voice: "caller_male", pause: 250 },
-      { who: "receptionist", text: "Perfect Marcus. You're scheduled for 2:30 PM today. I'll text you directions.", voice: "receptionist", pause: 400 },
-    ]
-  },
-  {
-    id: "dental",
-    name: "Maple Dental",
-    phone: "(555) 350-TEETH", 
-    desc: "New Patient Booking",
-    lines: [
-      { who: "ring" },
-      { who: "ring" },
-      { who: "receptionist", text: "Maple Dental, this is your AI assistant. How can I help you today?", voice: "receptionist", pause: 350 },
-      { who: "caller", text: "Hi, I'm a new patient. Do you take Delta Dental insurance?", voice: "caller_female", pause: 300 },
-      { who: "receptionist", text: "Yes, we're in-network with Delta PPO. I can schedule your cleaning. Monday at 9 AM or Wednesday at 11 AM?", voice: "receptionist", pause: 350 },
-      { who: "caller", text: "Wednesday at 11 works great.", voice: "caller_female", pause: 250 },
-      { who: "receptionist", text: "Perfect! Could I have your full name and date of birth to start your chart?", voice: "receptionist", pause: 300 },
-      { who: "caller", text: "Jamie Patel, January 12th, 1992.", voice: "caller_female", pause: 250 },
-      { who: "receptionist", text: "Thank you Jamie. You're all set for Wednesday at 11 AM. I'll text the new patient forms.", voice: "receptionist", pause: 400 },
-    ]
-  }
+// ---------- Scenarios (curated, multilingual, market-ready) ----------
+const SPA_EN: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Thanks for calling Serenity Spa, this is your virtual receptionist. How can I help you today?", voiceId: VOICE_AI_EN, pause: 420 },
+  { who: "caller", text: "Hi! I'd like to book a ninety-minute massage for Friday afternoon, if possible.", voiceId: VOICE_CALLER_F, pause: 320 },
+  { who: "ai", text: "Absolutely—Friday we have two openings, two fifteen or four thirty. Which works better?", voiceId: VOICE_AI_EN, pause: 280 },
+  { who: "caller", text: "Two fifteen, please. And can I request Maya?", voiceId: VOICE_CALLER_F, pause: 260 },
+  { who: "ai", text: "You got it—two fifteen with Maya. What's your full name and mobile number to confirm?", voiceId: VOICE_AI_EN, pause: 260 },
+  { who: "caller", text: "Jamie Patel, and my number is nine one nine, five five five, zero one nine eight.", voiceId: VOICE_CALLER_F, pause: 260 },
+  { who: "ai", text: "Perfect, Jamie. You're all set for Friday at two fifteen with Maya. I'll text a confirmation and reminder.", voiceId: VOICE_AI_EN, pause: 400 },
 ];
 
+const RESTAURANT_ES: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Gracias por llamar a Bella Vista. ¿En qué puedo ayudarle?", voiceId: VOICE_AI_ES, pause: 360 },
+  { who: "caller", text: "Buenas tardes. Quisiera una reserva para cuatro personas el sábado a las siete.", voiceId: VOICE_CALLER_ES, pause: 280 },
+  { who: "ai", text: "Con gusto. El sábado a las siete tenemos mesa disponible en la terraza. ¿Le parece bien?", voiceId: VOICE_AI_ES, pause: 260 },
+  { who: "caller", text: "Sí, perfecto. A nombre de Ana Rivera.", voiceId: VOICE_CALLER_ES, pause: 260 },
+  { who: "ai", text: "Reserva confirmada: cuatro personas, sábado a las siete, a nombre de Ana Rivera. Le enviaré un mensaje de confirmación. ¡Gracias!", voiceId: VOICE_AI_ES, pause: 420 },
+];
+
+const SUPPORT_BI: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Premier Services, virtual receptionist speaking. How can I help today?", voiceId: VOICE_AI_EN, pause: 360 },
+  { who: "caller", text: "Hi, my water heater stopped working this morning.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "I'm sorry to hear that. I can get a technician out today. May I have your service address?", voiceId: VOICE_AI_EN, pause: 260 },
+  { who: "caller", text: "Sure, 214 Oakwood Drive in Morrisville. También hablo español si es más fácil.", voiceId: VOICE_CALLER_M, pause: 320 },
+  { who: "ai", text: "Claro. ¿A qué hora le viene mejor, entre dos y cuatro de la tarde?", voiceId: VOICE_AI_ES, pause: 260 },
+  { who: "caller", text: "A las tres estaría bien. Gracias.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "Agendado para las tres. Le enviaremos un mensaje con el nombre y la foto del técnico. ¡Hasta pronto!", voiceId: VOICE_AI_ES, pause: 420 },
+];
+
+const AUTO_EN: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Thanks for calling Triangle Auto Care. This is your AI receptionist. How can I help?", voiceId: VOICE_AI_EN, pause: 350 },
+  { who: "caller", text: "Hi, my car's brakes are squealing. Can I get a quote and book a checkup?", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "We can do a same-day inspection. There's a forty-nine dollar diagnostic fee applied to any repair. Does two-thirty today work?", voiceId: VOICE_AI_EN, pause: 300 },
+  { who: "caller", text: "Two-thirty is good. It's a 2016 Honda Civic.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "Great—two-thirty today. What's your name and number?", voiceId: VOICE_AI_EN, pause: 260 },
+  { who: "caller", text: "Marcus Lee, nine one nine, five five five, zero one one zero.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "All set, Marcus. I'll text directions. Please arrive five minutes early.", voiceId: VOICE_AI_EN, pause: 380 },
+];
+
+// Catalog (pick a subset to keep UI tidy; you can add more)
+const SCENARIOS: Scenario[] = [
+  { id: "spa", name: "Serenity Spa", phone: "(555) 123‑RELAX", lang: "EN", desc: "Appointment Booking", sub: "Massage & confirmation", lines: SPA_EN },
+  { id: "restaurant", name: "Bella Vista", phone: "(555) 456‑DINE", lang: "ES", desc: "Reserva (Español)", sub: "Reserva en español", lines: RESTAURANT_ES },
+  { id: "support_bi", name: "Premier Services", phone: "(555) 789‑HELP", lang: "BI", desc: "Support (EN↔ES)", sub: "Bilingual service call", lines: SUPPORT_BI },
+  { id: "auto", name: "Triangle Auto Care", phone: "(555) 274‑BRAKE", lang: "EN", desc: "Brake Inspection", sub: "Quote + same‑day check", lines: AUTO_EN },
+];
+
+// ---------- Playback & audio utils (Lovable/Chrome-safe) ----------
 class AudioQueue {
   private q: (() => Promise<void>)[] = [];
   private running = false;
-  constructor(private setStatus: (s: string) => void) {}
-  async add(task: () => Promise<void>) { 
-    this.q.push(task); 
-    if (!this.running) this.run(); 
-  }
+  constructor(private setNow: (s: string) => void) {}
+  async add(task: () => Promise<void>) { this.q.push(task); if (!this.running) this.run(); }
   private async run() {
     this.running = true;
-    while (this.q.length) { 
-      const fn = this.q.shift()!; 
-      await fn(); 
-    }
+    while (this.q.length) { const fn = this.q.shift()!; await fn(); }
     this.running = false;
-    this.setStatus("Ready");
+    this.setNow("Idle");
   }
 }
 
-async function ringOnce(ms = 1200) {
+async function tts(
+  text: string,
+  voiceId: string,
+  format: "mp3" | "ulaw_8000",
+  onStart?: () => void,
+  onEnded?: () => void,
+  attachToWave?: (el: HTMLAudioElement) => void
+) {
+  const { data, error } = await supabase.functions.invoke("voice", {
+    body: { text, voiceId, output_format: format, voice_settings: DEFAULT_VOICE_SETTINGS },
+    headers: { "Content-Type": "application/json" },
+  });
+  if (error) throw error;
+  const b64 = (data as any).audioBase64 as string;
+  const ct = (data as any).contentType as string;
+  const src = `data:${ct};base64,${b64}`;
+  const audio = new Audio(src);
+  audio.preload = "auto";
+  attachToWave?.(audio);
+  await audio.play().catch(() => {/* Chrome needs resume from user gesture; handled below */});
+  onStart?.();
+  await new Promise<void>((res) => { audio.onended = () => { onEnded?.(); res(); }; });
+}
+
+async function ringOnce(ms = 1100) {
   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  const g = ctx.createGain(); 
-  g.connect(ctx.destination); 
-  g.gain.value = 0.05;
-  const o1 = ctx.createOscillator(); 
-  o1.frequency.value = 440; 
-  o1.connect(g);
-  const o2 = ctx.createOscillator(); 
-  o2.frequency.value = 480; 
-  o2.connect(g);
-  o1.start(); 
-  o2.start(); 
-  await new Promise((r) => setTimeout(r, ms));
-  o1.stop(); 
-  o2.stop(); 
-  g.disconnect(); 
-  ctx.close();
+  if (ctx.state === "suspended") { await ctx.resume(); }
+  const g = ctx.createGain(); g.connect(ctx.destination); g.gain.value = 0.06;
+  const o1 = ctx.createOscillator(); o1.frequency.value = 440; o1.connect(g);
+  const o2 = ctx.createOscillator(); o2.frequency.value = 480; o2.connect(g);
+  o1.start(); o2.start(); await new Promise((r)=> setTimeout(r, ms));
+  o1.stop(); o2.stop(); g.disconnect(); ctx.close();
 }
 
-async function playTTS(text: string, voiceId: string): Promise<void> {
-  console.log(`🎵 Playing TTS: "${text.slice(0, 50)}..." with voice: ${voiceId}`);
-  
-  try {
-    const { data, error } = await supabase.functions.invoke("voice", {
-      body: { 
-        text, 
-        voiceId, 
-        voice_settings: VOICE_SETTINGS, 
-        output_format: "mp3" 
-      },
-      headers: { "Content-Type": "application/json" },
-    });
+// ---------- Waveform (simple Analyser visual on a Canvas) ----------
+function useWaveform() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const srcRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const rafRef = useRef<number | null>(null);
 
-    if (error) {
-      console.error("❌ TTS Error:", error);
-      throw error;
+  async function attach(el: HTMLAudioElement) {
+    // Create/reuse context
+    let ctx = ctxRef.current;
+    if (!ctx) {
+      ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      ctxRef.current = ctx;
     }
+    if (ctx.state === "suspended") { await ctx.resume(); }
 
-    if (!data?.audioBase64) {
-      console.error("❌ No audio data received");
-      throw new Error("No audio data received");
-    }
+    // Cleanup previous
+    if (srcRef.current) try { srcRef.current.disconnect(); } catch {}
+    if (analyserRef.current) try { analyserRef.current.disconnect(); } catch {}
 
-    console.log(`✅ Received audio data: ${data.audioBase64.length} chars`);
+    const source = ctx.createMediaElementSource(el);
+    srcRef.current = source;
 
-    const audioDataUrl = `data:audio/mpeg;base64,${data.audioBase64}`;
-    const audio = new Audio(audioDataUrl);
-    audio.volume = 0.8;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    analyser.connect(ctx.destination);
+    analyserRef.current = analyser;
 
-    await new Promise<void>((resolve, reject) => {
-      audio.oncanplaythrough = () => {
-        console.log("🔊 Audio ready to play");
-        audio.play()
-          .then(() => console.log("▶️ Audio playback started"))
-          .catch(reject);
-      };
-      
-      audio.onended = () => {
-        console.log("✅ Audio playback finished");
-        resolve();
-      };
-      
-      audio.onerror = (e) => {
-        console.error("❌ Audio playback error:", e);
-        reject(new Error("Audio playback failed"));
-      };
-      
-      audio.load();
-    });
-
-  } catch (error) {
-    console.error("❌ TTS playback failed:", error);
-    throw error;
+    draw();
   }
+
+  function draw() {
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+    if (!canvas || !analyser) return;
+    const c = canvas.getContext("2d")!;
+    const w = canvas.width, h = canvas.height;
+    const data = new Uint8Array(analyser.fftSize);
+    const loop = () => {
+      analyser.getByteTimeDomainData(data);
+      c.clearRect(0,0,w,h);
+      c.beginPath();
+      c.moveTo(0, h/2);
+      for (let i=0;i<w;i++) {
+        const v = data[Math.floor(i / w * data.length)] / 128.0 - 1.0;
+        const y = (h/2) + v * (h/2 - 4);
+        c.lineTo(i, y);
+      }
+      c.strokeStyle = "hsl(var(--foreground))";
+      c.lineWidth = 2;
+      c.stroke();
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(loop);
+  }
+
+  useEffect(()=> () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+  return { canvasRef, attach };
 }
 
+// ---------- Demo Page ----------
 export default function DemoPage() {
-  const [selectedScenario, setSelectedScenario] = useState<Scenario>(SCENARIOS[0]);
-  const [status, setStatus] = useState("Ready");
+  const [sel, setSel] = useState<Scenario>(SCENARIOS[0]);
+  const [now, setNow] = useState("Idle");
   const [playing, setPlaying] = useState(false);
+  const [pace, setPace] = useState(1);
+  const [format, setFormat] = useState<"mp3" | "ulaw_8000">("mp3");
   const [transcript, setTranscript] = useState<{ who: string; text: string }[]>([]);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [kpi, setKpi] = useState({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
+  const [ctaShown, setCtaShown] = useState(false);
 
   const qRef = useRef<AudioQueue | null>(null);
+  const wave = useWaveform();
 
-  useEffect(() => { 
-    qRef.current = new AudioQueue(setStatus); 
-  }, []);
+  useEffect(()=> { qRef.current = new AudioQueue(setNow); }, []);
 
-  function reset() {
-    setPlaying(false); 
-    setStatus("Ready"); 
-    setTranscript([]); 
-    setProgress({ current: 0, total: 0 });
-    qRef.current = new AudioQueue(setStatus);
+  // Ensure Chrome/Lovable allows audio after a click
+  async function unlockAudio() {
+    try {
+      const Ctx = (window.AudioContext || (window as any).webkitAudioContext) as any;
+      const ctx = new Ctx();
+      if (ctx.state === "suspended") await ctx.resume();
+      await ctx.close();
+    } catch {}
   }
 
-  async function startDemo() {
+  function reset() {
+    setPlaying(false); setNow("Idle"); setTranscript([]); setCtaShown(false);
+    setKpi({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
+    qRef.current = new AudioQueue(setNow);
+  }
+
+  async function start() {
+    await unlockAudio(); // Important for Lovable/Chrome previews
     reset();
     setPlaying(true);
     const q = qRef.current!;
-    const lines = selectedScenario.lines;
-    setProgress({ current: 0, total: lines.length });
+    const lines = sel.lines;
+    let booked = false;
 
-    const addTranscript = (who: string, text: string) => {
-      setTranscript((prev) => [...prev, { who, text }]);
-      setTimeout(() => {
-        const el = document.getElementById("transcript-scroll");
+    const pushT = (who: string, text: string) => {
+      setTranscript((t) => [...t, { who, text }]);
+      setTimeout(()=> {
+        const el = document.getElementById("demo-transcript");
         if (el) el.scrollTop = el.scrollHeight;
       }, 0);
     };
 
-    let currentStep = 0;
-
     for (const line of lines) {
       if (line.who === "ring") {
-        await q.add(async () => { 
-          setStatus("Phone ringing..."); 
-          await ringOnce(1000); 
-          setProgress({ current: ++currentStep, total: lines.length }); 
-        });
+        await q.add(async ()=> { setNow("Dialing…"); await ringOnce(1100 / pace); });
         continue;
       }
-
-      const whoLabel = line.who === "receptionist" ? "AI Receptionist" : "Caller";
-      const voiceKey = (line.voice ?? (line.who === "receptionist" ? "receptionist" : "caller_female")) as keyof typeof VOICES;
+      const whoLabel = line.who === "ai" ? "Receptionist" : "Caller";
+      const vId = line.voiceId || VOICE_AI_EN;
       const text = line.text || "";
-      const delayAfter = line.pause ?? 250;
+      const delayAfter = Math.max(180, (line.pause ?? 260) / pace);
 
-      await q.add(async () => {
-        setStatus(`${whoLabel} speaking...`);
-        addTranscript(whoLabel, text);
-        
-        try {
-          await playTTS(text, VOICES[voiceKey]);
-          await new Promise((r) => setTimeout(r, delayAfter));
-        } catch (error) {
-          console.error(`Failed to play TTS for: ${text}`, error);
+      await q.add(async ()=> {
+        setNow(`${whoLabel} speaking…`); pushT(whoLabel, text);
+        if (line.who === "ai" && /booked|confirm|reserv|agendad|confirmée|reserva|all set/i.test(text)) {
+          booked = true;
+          setKpi((k)=> ({ ...k, bookings: k.bookings + 1, timeSavedMin: k.timeSavedMin + 6 }));
         }
-        
-        setProgress({ current: ++currentStep, total: lines.length });
+        await tts(text, vId, format, undefined, undefined, wave.attach);
+        await new Promise((r)=> setTimeout(r, delayAfter));
       });
     }
 
-    await q.add(async () => { 
-      setStatus("Call complete"); 
-    });
+    await q.add(async ()=> { setNow("Call complete"); if (booked) setCtaShown(true); });
     setPlaying(false);
   }
 
+  function exportTxt() {
+    const body = transcript.map(t=> `${t.who}: ${t.text}`).join("\n");
+    const blob = new Blob([body], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `relayai-call-${sel.id}.txt`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function simulateFollowUp() {
+    alert("✅ Follow‑up SMS queued: 'Thanks for calling! Here's your confirmation link: https://example.com/book'");
+  }
+
+  const langs = ["ALL","EN","ES","BI"] as const;
+  const [langFilter, setLangFilter] = useState<typeof langs[number]>("ALL");
+  const visibleScenarios = useMemo(
+    ()=> SCENARIOS.filter(s => langFilter==="ALL" ? true : s.lang===langFilter),
+    [langFilter]
+  );
+
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-6 grid lg:grid-cols-2 gap-6">
+      {/* Left: Controls */}
       <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>AI Receptionist Voice Demo</CardTitle>
+        <CardHeader className="space-y-1">
+          <CardTitle>AI Receptionist — Live Demo</CardTitle>
           <div className="text-sm text-muted-foreground">
-            Experience realistic AI-powered phone conversations with ElevenLabs voices
+            Human‑paced, multilingual calls with realistic ring tones, live transcript, KPIs, and a PSTN (μ‑law) toggle to prove real‑world readiness.
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <label className="text-sm font-medium">Choose a Business Scenario</label>
-            <div className="grid md:grid-cols-3 gap-3">
-              {SCENARIOS.map((scenario) => (
-                <button
-                  key={scenario.id}
-                  onClick={() => {
-                    setSelectedScenario(scenario);
-                    reset();
-                  }}
-                  className={`text-left p-4 rounded-xl border transition ${
-                    selectedScenario.id === scenario.id
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-card hover:bg-muted border-border"
-                  }`}
-                >
-                  <div className="text-xs opacity-80">{scenario.phone}</div>
-                  <div className="font-semibold">{scenario.name}</div>
-                  <div className="text-sm opacity-90">{scenario.desc}</div>
-                </button>
-              ))}
+          {/* Language filter */}
+          <div className="flex flex-wrap gap-2">
+            {langs.map(l=> (
+              <Button key={l} variant={langFilter===l?"default":"outline"} className="rounded-2xl" onClick={()=> setLangFilter(l)}>{l}</Button>
+            ))}
+          </div>
+
+          {/* Scenario picker */}
+          <div className="grid md:grid-cols-2 gap-3">
+            {visibleScenarios.map((s)=> (
+              <button key={s.id} onClick={()=> setSel(s)} className={`text-left p-4 rounded-xl border transition ${sel.id===s.id? "bg-primary text-primary-foreground border-primary":"bg-card hover:bg-accent"}`}>
+                <div className="text-xs opacity-80">{s.phone} • {s.lang}</div>
+                <div className="font-semibold">{s.name}</div>
+                <div className="text-sm opacity-90">{s.desc}</div>
+                <div className="text-xs opacity-70">{s.sub}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Pace + Format */}
+          <div className="grid md:grid-cols-2 gap-3 items-end">
+            <div>
+              <label className="text-sm font-medium">Playback pace</label>
+              <input type="range" min={0.8} max={1.3} step={0.05} value={pace} onChange={(e)=> setPace(parseFloat(e.target.value))} className="w-full"/>
+              <div className="text-xs text-muted-foreground">{pace.toFixed(2)}× (lower = slower, more human)</div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Output format</label>
+              <select value={format} onChange={(e)=> setFormat(e.target.value as any)} className="w-full border rounded-lg p-2 bg-background">
+                <option value="mp3">MP3 (High‑quality web)</option>
+                <option value="ulaw_8000">μ‑law 8000Hz (Telephony)</option>
+              </select>
+              <div className="text-xs text-muted-foreground mt-1">
+                {format==="mp3" ? "Rich, natural audio — perfect for web demos." : "8kHz μ‑law — exactly what phone lines deliver."}
+              </div>
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <Button 
-              onClick={startDemo} 
-              disabled={playing}
-              className="flex-1"
-            >
-              {playing ? "Call in Progress..." : "Start Demo Call"}
-            </Button>
-            <Button variant="outline" onClick={reset} disabled={playing}>
-              Reset
-            </Button>
-          </div>
-
-          <div className="text-center p-3 bg-muted/50 rounded-lg">
-            <div className="text-sm font-medium">{status}</div>
-            <div className="text-xs text-muted-foreground">
-              Step {progress.current} of {progress.total}
-            </div>
+          {/* Controls */}
+          <div className="flex gap-2">
+            <Button className="rounded-2xl" onClick={start} disabled={playing}>{playing ? "Dialing…" : "Start Demo Call"}</Button>
+            <Button variant="outline" className="rounded-2xl" onClick={reset} disabled={playing}>Reset</Button>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl shadow-sm">
+      {/* Right: Transcript + Waveform + KPIs */}
+      <Card className="rounded-2xl shadow-sm relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-accent/20 to-transparent" />
         <CardHeader>
-          <CardTitle>Live Call Transcript</CardTitle>
+          <CardTitle>Live Call Experience</CardTitle>
+          <div className="text-xs text-muted-foreground">{now}</div>
         </CardHeader>
         <CardContent>
-          <div 
-            id="transcript-scroll"
-            className="h-64 overflow-auto space-y-2 p-4 bg-muted/30 rounded-xl"
-          >
-            {transcript.length === 0 ? (
+          {/* Waveform */}
+          <div className="mb-3 rounded-xl bg-card/70 p-2 border">
+            <canvas ref={wave.canvasRef} width={800} height={80} style={{ width: "100%", height: 80 }} />
+          </div>
+
+          {/* Transcript */}
+          <div id="demo-transcript" className="h-72 overflow-auto space-y-2 p-1 bg-card/60 rounded-xl">
+            {transcript.length===0 ? (
               <div className="h-full grid place-items-center text-muted-foreground text-sm">
-                Select a scenario and press "Start Demo Call" to begin
+                Pick a scenario and press <b>Start Demo Call</b>.
               </div>
-            ) : (
-              transcript.map((entry, i) => (
-                <div key={i} className={`flex ${entry.who === "AI Receptionist" ? "justify-start" : "justify-end"}`}>
-                  <div className={`px-3 py-2 rounded-xl text-sm shadow-sm max-w-[80%] ${
-                    entry.who === "AI Receptionist"
-                      ? "bg-primary/10 text-primary-foreground border border-primary/20"
-                      : "bg-secondary text-secondary-foreground"
-                  }`}>
-                    <div className="text-[10px] opacity-70 mb-1">{entry.who}</div>
-                    <div>{entry.text}</div>
-                  </div>
+            ) : transcript.map((t,i)=> (
+              <div key={i} className={`flex ${t.who==="Receptionist" ? "justify-start":"justify-end"}`}>
+                <div className={`px-3 py-2 rounded-xl text-sm shadow ${t.who==="Receptionist"?"bg-secondary text-secondary-foreground":"bg-primary text-primary-foreground"}`}>
+                  <div className="text-[10px] opacity-70 mb-1">{t.who}</div>
+                  <div>{t.text}</div>
                 </div>
-              ))
+              </div>
+            ))}
+          </div>
+
+          {/* KPI strip */}
+          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+            <div className="p-3 rounded-xl bg-card shadow-sm">
+              <div className="text-xs text-muted-foreground">Bookings captured</div>
+              <div className="text-2xl font-semibold">{kpi.bookings}</div>
+            </div>
+            <div className="p-3 rounded-xl bg-card shadow-sm">
+              <div className="text-xs text-muted-foreground">Time saved (min)</div>
+              <div className="text-2xl font-semibold">{kpi.timeSavedMin}</div>
+            </div>
+            <div className="p-3 rounded-xl bg-card shadow-sm">
+              <div className="text-xs text-muted-foreground">CSAT (demo)</div>
+              <div className="text-2xl font-semibold">{kpi.csat.toFixed(1)}</div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="outline" className="rounded-2xl" onClick={exportTxt} disabled={transcript.length===0}>Export transcript</Button>
+            <Button variant="outline" className="rounded-2xl" onClick={simulateFollowUp} disabled={playing}>Simulate follow‑up SMS</Button>
+            {ctaShown && (
+              <a href="#get-started" className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">Start Free Trial</a>
             )}
+          </div>
+
+          <div className="text-[11px] text-muted-foreground mt-3">
+            Voices by ElevenLabs • Toggle between <b>MP3</b> and <b>μ‑law telephony</b> to show real‑world readiness.
           </div>
         </CardContent>
       </Card>
-
-      <div className="text-center text-xs text-muted-foreground">
-        Powered by ElevenLabs • High-quality AI voices • Real-time conversation simulation
-      </div>
     </div>
   );
 }
