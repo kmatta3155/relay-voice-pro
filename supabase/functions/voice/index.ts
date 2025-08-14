@@ -11,7 +11,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 const XI_KEY = Deno.env.get("ELEVENLABS_API_KEY")!;
-const DEFAULT_MODEL = Deno.env.get("ELEVEN_MODEL_ID") ?? "eleven_flash_v2_5";
+const DEFAULT_MODEL = Deno.env.get("ELEVEN_MODEL_ID") ?? "eleven_multilingual_v2";
 
 function toBase64(u8: Uint8Array) {
   let s = "";
@@ -47,9 +47,10 @@ serve(async (req) => {
       model_id: modelId,
       output_format: elevenFormat,
       voice_settings: {
-        stability: 0.6,
-        similarity_boost: 0.7,
-        style: 0.15,
+        stability: 0.75,
+        similarity_boost: 0.85,
+        style: 0.25,
+        use_speaker_boost: true,
         ...voice_settings,
       },
     };

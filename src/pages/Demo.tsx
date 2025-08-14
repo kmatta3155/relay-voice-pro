@@ -10,17 +10,18 @@ import { Button } from "@/components/ui/button";
 //   Caller Female (natural): "Bella" / "Ada"
 //   Caller Male (natural): "Antoni" / "Matthew"
 //   Caller Spanish (natural): "Lucía" / "Alejandro"
-const VOICE_AI_EN = "9BWtsMINqrJLrRacOk9x"; // Aria
-const VOICE_AI_ES = "EXAVITQu4vr4xnSDxMaL"; // Sarah
-const VOICE_CALLER_F = "XB0fDUnXU5powFXDhCwa"; // Charlotte
-const VOICE_CALLER_M = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
-const VOICE_CALLER_ES = "cgSgspJ2msm6clMCkdW9"; // Jessica
+const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive female voice (EN)
+const VOICE_AI_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – expressive female voice (works well in Spanish)
+const VOICE_CALLER_F = "Xb7hH8MSUJpSbSDYk0k2"; // Alice – confident female British
+const VOICE_CALLER_M = "pqHfZKP75CvOlQylNhV4"; // Bill – trustworthy older male
+const VOICE_CALLER_ES = "21m00Tcm4TlvDq8ikWAM"; // Rachel (same as AI_EN for consistency)
 
 // Default delivery settings (subtle, human)
 const DEFAULT_VOICE_SETTINGS = {
-  stability: 0.6,
-  similarity_boost: 0.7,
-  style: 0.15,
+  stability: 0.75,
+  similarity_boost: 0.85,
+  style: 0.25,
+  use_speaker_boost: true,
 };
 
 type Line = {
