@@ -109,25 +109,86 @@ class AudioQueue {
 async function tts(
   text: string,
   voiceId: string,
-  format: "mp3" | "ulaw_8000",
-  onStart?: () => void,
+  format: "mp3" | "ulaw_8000" = "mp3",
+  voiceSettings?: any,
   onEnded?: () => void,
   attachToWave?: (el: HTMLAudioElement) => void
 ) {
-  const { data, error } = await supabase.functions.invoke("voice", {
-    body: { text, voiceId, output_format: format, voice_settings: DEFAULT_VOICE_SETTINGS },
-    headers: { "Content-Type": "application/json" },
-  });
-  if (error) throw error;
-  const b64 = (data as any).audioBase64 as string;
-  const ct = (data as any).contentType as string;
-  const src = `data:${ct};base64,${b64}`;
-  const audio = new Audio(src);
-  audio.preload = "auto";
-  attachToWave?.(audio);
-  await audio.play().catch(() => {/* Chrome needs resume from user gesture; handled below */});
-  onStart?.();
-  await new Promise<void>((res) => { audio.onended = () => { onEnded?.(); res(); }; });
+  if (!text?.trim()) {
+    console.log("TTS: Empty text, skipping");
+    return;
+  }
+
+  console.log(`TTS: Starting synthesis for voice ${voiceId}, text: "${text.slice(0, 50)}..."`);
+
+  try {
+    const { data, error } = await supabase.functions.invoke("voice", {
+      body: { text, voiceId, output_format: format, voice_settings: voiceSettings || DEFAULT_VOICE_SETTINGS },
+    });
+
+    if (error) {
+      console.error("TTS: Supabase function error:", error);
+      throw new Error(`Voice function error: ${error.message || error}`);
+    }
+
+    if (!data?.audioBase64) {
+      console.error("TTS: No audio received in response:", data);
+      throw new Error("No audio received from voice service");
+    }
+
+    console.log(`TTS: Audio received, size: ${data.audioBase64.length} chars`);
+
+    const audio = new Audio();
+    audio.src = `data:${data.contentType || "audio/mpeg"};base64,${data.audioBase64}`;
+    audio.volume = 0.8;
+    
+    // Add timeout protection
+    const AUDIO_TIMEOUT = 30000; // 30 seconds max
+    let timeoutId: NodeJS.Timeout;
+    
+    const playPromise = new Promise<void>((resolve, reject) => {
+      timeoutId = setTimeout(() => {
+        console.error("TTS: Audio playback timeout");
+        reject(new Error("Audio playback timeout"));
+      }, AUDIO_TIMEOUT);
+
+      audio.onended = () => {
+        console.log("TTS: Audio playback ended successfully");
+        clearTimeout(timeoutId);
+        onEnded?.();
+        resolve();
+      };
+
+      audio.onerror = (e) => {
+        console.error("TTS: Audio playback error:", e);
+        clearTimeout(timeoutId);
+        reject(new Error("Audio playback failed"));
+      };
+
+      audio.oncanplaythrough = () => {
+        console.log("TTS: Audio can play through");
+      };
+    });
+
+    attachToWave?.(audio);
+    
+    try {
+      console.log("TTS: Starting audio playback");
+      await audio.play();
+      console.log("TTS: Audio.play() resolved");
+    } catch (playError) {
+      console.error("TTS: Audio.play() failed:", playError);
+      clearTimeout(timeoutId);
+      throw new Error(`Audio play failed: ${playError}`);
+    }
+
+    await playPromise;
+    console.log("TTS: Synthesis and playback completed successfully");
+
+  } catch (error) {
+    console.error("TTS: Complete failure:", error);
+    throw error;
+  }
 }
 
 async function ringOnce(ms = 1100) {

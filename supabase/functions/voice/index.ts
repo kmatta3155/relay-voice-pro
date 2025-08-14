@@ -22,9 +22,27 @@ function toBase64(u8: Uint8Array) {
 
 serve(async (req) => {
   if (req.method !== "POST") return new Response("OK");
+  
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
-    if (!XI_KEY) throw new Error("Missing ELEVENLABS_API_KEY secret.");
+    console.log("Voice function called");
+    
+    if (!XI_KEY) {
+      console.error("Missing ELEVENLABS_API_KEY secret");
+      throw new Error("Missing ELEVENLABS_API_KEY secret. Please configure it in Supabase Functions secrets.");
+    }
+    
     const bodyIn = await req.json();
+    console.log("Request body:", JSON.stringify(bodyIn, null, 2));
+    
     // Accept both `format` and `output_format` from client; prefer `output_format`.
     const {
       text,
@@ -34,7 +52,18 @@ serve(async (req) => {
       format,
       voice_settings,
     } = bodyIn || {};
-    if (!text || !voiceId) throw new Error("Missing text or voiceId");
+    
+    if (!text || !voiceId) {
+      console.error("Missing required fields:", { text: !!text, voiceId: !!voiceId });
+      throw new Error("Missing text or voiceId");
+    }
+    
+    console.log(`Processing TTS: voice=${voiceId}, model=${modelId}, text="${text.slice(0, 50)}..."`);
+    
+    // Validate voice ID format (should be alphanumeric, ~20 chars)
+    if (!/^[a-zA-Z0-9]{15,25}$/.test(voiceId)) {
+      console.warn("Voice ID format looks suspicious:", voiceId);
+    }
 
     // Map our friendly formats to ElevenLabs output_format
     const fmt = (output_format || format || "mp3") as string;
@@ -55,6 +84,9 @@ serve(async (req) => {
       },
     };
 
+    console.log("Calling ElevenLabs API:", url);
+    console.log("Request body:", JSON.stringify(requestBody, null, 2));
+    
     const r = await fetch(url, {
       method: "POST",
       headers: {
@@ -64,17 +96,38 @@ serve(async (req) => {
       },
       body: JSON.stringify(requestBody),
     });
-    if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${await r.text()}`);
+    
+    console.log(`ElevenLabs response: ${r.status} ${r.statusText}`);
+    
+    if (!r.ok) {
+      const errorText = await r.text();
+      console.error(`ElevenLabs API error: ${r.status} - ${errorText}`);
+      throw new Error(`ElevenLabs ${r.status}: ${errorText}`);
+    }
 
     const buf = new Uint8Array(await r.arrayBuffer());
+    console.log(`Audio buffer received: ${buf.length} bytes`);
+    
+    const response = {
+      audioBase64: toBase64(buf),
+      contentType: elevenFormat === "ulaw_8000" ? "audio/basic" : "audio/mpeg",
+    };
+    
+    console.log(`Returning audio, base64 length: ${response.audioBase64.length}`);
+    
     return new Response(
-      JSON.stringify({
-        audioBase64: toBase64(buf),
-        contentType: elevenFormat === "ulaw_8000" ? "audio/basic" : "audio/mpeg",
-      }),
-      { headers: { "Content-Type": "application/json" } }
+      JSON.stringify(response),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
-    return new Response(String(e?.message ?? e), { status: 400 });
+    console.error("Voice function error:", e);
+    const errorMessage = String(e?.message ?? e);
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { 
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      }
+    );
   }
 });
