@@ -22,12 +22,16 @@ export function InteractiveDemo({ className }: DemoProps) {
       title: "Spa Appointment Booking",
       description: "Customer calling to book a massage appointment",
       conversation: [
-        { speaker: "Customer", text: "Hi, I'd like to book a deep tissue massage for this Saturday", timestamp: "09:34 AM" },
-        { speaker: "RelayAI", text: "I'd be happy to help you book a deep tissue massage for Saturday. What time would work best for you?", timestamp: "09:34 AM" },
-        { speaker: "Customer", text: "Around 2 PM would be perfect. How much does it cost?", timestamp: "09:35 AM" },
-        { speaker: "RelayAI", text: "Perfect! Our 60-minute deep tissue massage is $120. I have an opening at 2:15 PM with Sarah, our senior therapist. Would you like me to book that for you?", timestamp: "09:35 AM" },
-        { speaker: "Customer", text: "Yes, that sounds great. What's your cancellation policy?", timestamp: "09:36 AM" },
-        { speaker: "RelayAI", text: "We require 24-hour notice for cancellations. I'll need your name, phone number, and email to complete the booking.", timestamp: "09:36 AM" }
+        { speaker: "Customer", text: "Hi, I'd like to book a deep tissue massage for this Saturday", timestamp: "09:34 AM", voice: "George" },
+        { speaker: "RelayAI", text: "Good morning! I'd be delighted to help you book a deep tissue massage for Saturday. What time would work best for you?", timestamp: "09:34 AM", voice: "Sarah" },
+        { speaker: "Customer", text: "Around 2 PM would be perfect. How much does it cost?", timestamp: "09:35 AM", voice: "George" },
+        { speaker: "RelayAI", text: "Perfect! Our 60-minute deep tissue massage is $120. I have an opening at 2:15 PM with Sarah, our senior therapist. She's wonderful and very experienced. Would you like me to book that for you?", timestamp: "09:35 AM", voice: "Sarah" },
+        { speaker: "Customer", text: "Yes, that sounds great. What's your cancellation policy?", timestamp: "09:36 AM", voice: "George" },
+        { speaker: "RelayAI", text: "Excellent choice! We do require 24-hour notice for cancellations to avoid any fees. I'll need your name, phone number, and email to complete the booking. What name should I put this under?", timestamp: "09:36 AM", voice: "Sarah" },
+        { speaker: "Customer", text: "It's Michael Thompson. My number is 555-0192 and email is mthompson@email.com", timestamp: "09:37 AM", voice: "George" },
+        { speaker: "RelayAI", text: "Perfect, Michael! I've got you booked for a 60-minute deep tissue massage this Saturday at 2:15 PM with Sarah. You'll receive a confirmation text shortly. Is there anything specific I should let Sarah know about your preferences or any areas you'd like her to focus on?", timestamp: "09:37 AM", voice: "Sarah" },
+        { speaker: "Customer", text: "Just that I have some tension in my shoulders from work stress.", timestamp: "09:38 AM", voice: "George" },
+        { speaker: "RelayAI", text: "Absolutely, I've made a note about your shoulder tension. Sarah specializes in that area and will take great care of you. We'll see you Saturday at 2:15 PM, Michael. Thank you for choosing us!", timestamp: "09:38 AM", voice: "Sarah" }
       ],
       insights: {
         intent: "Appointment Booking",
@@ -45,12 +49,14 @@ export function InteractiveDemo({ className }: DemoProps) {
       title: "Restaurant Reservation",
       description: "Customer calling for dinner reservation",
       conversation: [
-        { speaker: "Customer", text: "Hi, I need a table for 4 people tonight around 7 PM", timestamp: "02:15 PM" },
-        { speaker: "RelayAI", text: "I'd be happy to help with your reservation for 4 people tonight. Let me check our availability around 7 PM.", timestamp: "02:15 PM" },
-        { speaker: "Customer", text: "Do you have any outdoor seating available?", timestamp: "02:16 PM" },
-        { speaker: "RelayAI", text: "Yes! I have a lovely patio table for 4 at 7:15 PM. It's covered and heated. Would that work for you?", timestamp: "02:16 PM" },
-        { speaker: "Customer", text: "Perfect! Also, one person has a gluten allergy. Do you have gluten-free options?", timestamp: "02:17 PM" },
-        { speaker: "RelayAI", text: "Absolutely! We have a full gluten-free menu including pasta, pizza, and desserts. I'll make a note about the allergy. Can I get your name and phone number?", timestamp: "02:17 PM" }
+        { speaker: "Customer", text: "Hi, I need a table for 4 people tonight around 7 PM", timestamp: "02:15 PM", voice: "Charlotte" },
+        { speaker: "RelayAI", text: "Good afternoon! I'd be happy to help with your reservation for 4 people tonight. Let me check our availability around 7 PM.", timestamp: "02:15 PM", voice: "Sarah" },
+        { speaker: "Customer", text: "Do you have any outdoor seating available? The weather looks beautiful today.", timestamp: "02:16 PM", voice: "Charlotte" },
+        { speaker: "RelayAI", text: "You're absolutely right about the weather! I have a lovely patio table for 4 at 7:15 PM. It's covered with heaters and string lights - very romantic. Would that work perfectly for you?", timestamp: "02:16 PM", voice: "Sarah" },
+        { speaker: "Customer", text: "That sounds wonderful! Also, one person in our group has a gluten allergy. Do you have gluten-free options?", timestamp: "02:17 PM", voice: "Charlotte" },
+        { speaker: "RelayAI", text: "Absolutely! We have an extensive gluten-free menu including our famous gluten-free pasta, wood-fired pizza, and even desserts. I'll make a special note about the allergy for the kitchen. Can I get your name and phone number for the reservation?", timestamp: "02:17 PM", voice: "Sarah" },
+        { speaker: "Customer", text: "It's Sarah Chen, and my number is 555-0156. Thank you so much for being so accommodating!", timestamp: "02:18 PM", voice: "Charlotte" },
+        { speaker: "RelayAI", text: "My pleasure, Sarah! I've reserved your patio table for 4 at 7:15 PM tonight with a note about the gluten allergy. Our chef will personally ensure everything is safe and delicious. We'll see you tonight!", timestamp: "02:18 PM", voice: "Sarah" }
       ],
       insights: {
         intent: "Restaurant Reservation",
@@ -68,12 +74,14 @@ export function InteractiveDemo({ className }: DemoProps) {
       title: "Customer Support",
       description: "Existing customer calling about service issue",
       conversation: [
-        { speaker: "Customer", text: "Hi, I had an appointment yesterday but my therapist was running late. I'm not happy about it.", timestamp: "10:22 AM" },
-        { speaker: "RelayAI", text: "I sincerely apologize for the delay you experienced. Let me look up your appointment and see how we can make this right.", timestamp: "10:22 AM" },
-        { speaker: "Customer", text: "I waited 25 minutes. That's unacceptable for a premium service.", timestamp: "10:23 AM" },
-        { speaker: "RelayAI", text: "You're absolutely right, and I understand your frustration. I'd like to offer you a complimentary 30-minute add-on to your next massage and a 20% discount. Would that help restore your confidence in our service?", timestamp: "10:23 AM" },
-        { speaker: "Customer", text: "That's actually quite generous. Yes, I'd appreciate that.", timestamp: "10:24 AM" },
-        { speaker: "RelayAI", text: "Wonderful! I've added those credits to your account. Is there anything else I can help you with today?", timestamp: "10:24 AM" }
+        { speaker: "Customer", text: "Hi, I had an appointment yesterday but my therapist was running late. I'm not happy about it.", timestamp: "10:22 AM", voice: "Liam" },
+        { speaker: "RelayAI", text: "I sincerely apologize for the delay you experienced yesterday. I completely understand your frustration, and that's definitely not the standard of service we strive for. Let me look up your appointment and see how we can make this right.", timestamp: "10:22 AM", voice: "Sarah" },
+        { speaker: "Customer", text: "I waited 25 minutes past my appointment time. That's unacceptable for a premium service, especially when I have a busy schedule.", timestamp: "10:23 AM", voice: "Liam" },
+        { speaker: "RelayAI", text: "You're absolutely right, and I want to make this right immediately. I'd like to offer you a complimentary 30-minute add-on to your next massage, plus a 20% discount on that service. Would that help restore your confidence in us?", timestamp: "10:23 AM", voice: "Sarah" },
+        { speaker: "Customer", text: "That's actually quite generous. I appreciate you taking this seriously and not just brushing it off.", timestamp: "10:24 AM", voice: "Liam" },
+        { speaker: "RelayAI", text: "We value you as a client and your time is precious. I've already added those credits to your account, and I'll personally ensure this doesn't happen again. I've also flagged your future appointments for priority scheduling. Is there anything else I can help you with today?", timestamp: "10:24 AM", voice: "Sarah" },
+        { speaker: "Customer", text: "No, that covers it. Thank you for handling this so professionally.", timestamp: "10:25 AM", voice: "Liam" },
+        { speaker: "RelayAI", text: "It's been my pleasure to help resolve this. You'll receive a confirmation email with all the details. Thank you for giving us the opportunity to make it right!", timestamp: "10:25 AM", voice: "Sarah" }
       ],
       insights: {
         intent: "Customer Complaint Resolution",
@@ -88,8 +96,8 @@ export function InteractiveDemo({ className }: DemoProps) {
     }
   ];
 
-  // Function to generate and play TTS for RelayAI messages
-  const playTTS = async (text: string) => {
+  // Function to generate and play TTS for all messages with different voices
+  const playTTS = async (text: string, voiceId: string) => {
     if (!audioEnabled) return;
     
     try {
@@ -99,10 +107,18 @@ export function InteractiveDemo({ className }: DemoProps) {
         currentAudio.currentTime = 0;
       }
 
+      // Map voice names to ElevenLabs voice IDs
+      const voiceMap: { [key: string]: string } = {
+        'Sarah': 'EXAVITQu4vr4xnSDxMaL',    // Professional female voice for AI
+        'George': 'JBFqnCBsd6RMkjVDRZzb',   // Male customer voice
+        'Charlotte': 'XB0fDUnXU5powFXDhCwa', // Female customer voice 
+        'Liam': 'TX3LPaxmHKxFdv7VOQHJ'      // Alternative male customer voice
+      };
+
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { 
           text,
-          voice_id: 'EXAVITQu4vr4xnSDxMaL' // Sarah - professional female voice
+          voice_id: voiceMap[voiceId] || voiceMap['Sarah'] // Default to Sarah if voice not found
         }
       });
 
@@ -135,13 +151,13 @@ export function InteractiveDemo({ className }: DemoProps) {
       const message = currentConvo[currentMessage];
       setTranscript(prev => [...prev, message]);
       
-      // Play TTS for RelayAI messages
-      if (message.speaker === 'RelayAI') {
-        await playTTS(message.text);
+      // Play TTS for all messages with their assigned voices
+      if (message.voice) {
+        await playTTS(message.text, message.voice);
       }
       
       setCurrentMessage(prev => prev + 1);
-    }, 2000);
+    }, 2500); // Slightly longer delay for more natural conversation flow
 
     return () => clearTimeout(timer);
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
