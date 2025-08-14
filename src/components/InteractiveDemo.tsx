@@ -138,9 +138,7 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      // Create and play audio with robust error handling
-      const audio = new Audio();
-      
+      // Create and play audio with robust browser compatibility
       return new Promise((resolve) => {
         let hasResolved = false;
         const safeResolve = () => {
@@ -151,34 +149,59 @@ export function InteractiveDemo({ className }: DemoProps) {
           }
         };
         
-        // Set up all event handlers before setting src
-        audio.onended = safeResolve;
-        audio.onerror = (e) => {
-          console.warn('Audio playback error, continuing demo');
+        try {
+          // Create audio with proper MIME type
+          const audioBlob = new Blob([
+            Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))
+          ], { type: 'audio/mpeg' });
+          
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          
+          // Configure audio for better compatibility
+          audio.crossOrigin = 'anonymous';
+          audio.preload = 'auto';
+          
+          // Set up event handlers
+          audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            safeResolve();
+          };
+          
+          audio.onerror = (e) => {
+            console.warn('Audio playback error, continuing demo');
+            URL.revokeObjectURL(audioUrl);
+            safeResolve();
+          };
+          
+          // Play when ready
+          audio.oncanplay = async () => {
+            try {
+              setCurrentAudio(audio);
+              await audio.play();
+            } catch (playError) {
+              console.warn('Audio play failed, continuing demo:', playError);
+              URL.revokeObjectURL(audioUrl);
+              safeResolve();
+            }
+          };
+          
+          // Load the audio
+          audio.load();
+          
+          // Fallback timeout
+          setTimeout(() => {
+            if (!hasResolved) {
+              console.warn('Audio timeout - continuing demo');
+              URL.revokeObjectURL(audioUrl);
+              safeResolve();
+            }
+          }, 8000);
+          
+        } catch (error) {
+          console.warn('Audio creation failed:', error);
           safeResolve();
-        };
-        
-        // Play immediately when audio can play
-        audio.oncanplay = () => {
-          setCurrentAudio(audio);
-          audio.play().catch((playError) => {
-            console.warn('Audio play failed, continuing demo:', playError);
-            safeResolve();
-          });
-        };
-        
-        // Set the audio source
-        audio.src = `data:audio/mp3;base64,${data.audioContent}`;
-        audio.preload = 'auto';
-        audio.load();
-        
-        // Fallback timeout to ensure demo continues
-        setTimeout(() => {
-          if (!hasResolved) {
-            console.warn('Audio timeout - continuing demo');
-            safeResolve();
-          }
-        }, 10000);
+        }
       });
     } catch (error) {
       console.warn('TTS Error - continuing demo:', error);
@@ -292,7 +315,17 @@ export function InteractiveDemo({ className }: DemoProps) {
     return () => clearTimeout(timer);
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
-  const startDemo = () => {
+  const startDemo = async () => {
+    // Enable audio context on user interaction
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+    } catch (e) {
+      console.warn('Audio context setup failed:', e);
+    }
+    
     setTranscript([]);
     setCurrentMessage(-2);
     setCallPhase('dialing');
