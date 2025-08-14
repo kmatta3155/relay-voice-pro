@@ -107,7 +107,12 @@ export function InteractiveDemo({ className }: DemoProps) {
   ];
 
   const playTTS = async (text: string, voiceId: string): Promise<void> => {
-    if (!audioEnabled) return;
+    if (!audioEnabled) {
+      console.log('Audio disabled, skipping TTS');
+      return;
+    }
+    
+    console.log(`🎵 Playing TTS for: "${text.slice(0, 50)}..." with voice: ${voiceId}`);
     
     try {
       const voiceMap: { [key: string]: string } = {
@@ -121,18 +126,50 @@ export function InteractiveDemo({ className }: DemoProps) {
         body: { text, voice_id: voiceMap[voiceId] || voiceMap['Sarah'] }
       });
 
-      if (error || !data?.audioContent) return;
+      console.log('TTS Response:', { data, error });
 
-      const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
+      if (error) {
+        console.error('TTS Error:', error);
+        return;
+      }
+
+      if (!data?.audioContent) {
+        console.error('No audio content received');
+        return;
+      }
+
+      console.log(`✅ Audio content received: ${data.audioContent.length} characters`);
+
+      const audioDataUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      console.log(`🔊 Creating audio element with data URL: ${audioDataUrl.slice(0, 100)}...`);
+      
+      const audio = new Audio(audioDataUrl);
       audio.volume = 0.8;
       
-      audio.onended = () => setCurrentAudio(null);
-      audio.onerror = () => setCurrentAudio(null);
+      audio.onloadstart = () => console.log('Audio loading started');
+      audio.onloadeddata = () => console.log('Audio data loaded');
+      audio.oncanplay = () => console.log('Audio can play');
+      audio.onplay = () => console.log('Audio play started');
+      audio.onended = () => {
+        console.log('Audio ended');
+        setCurrentAudio(null);
+      };
+      audio.onerror = (e) => {
+        console.error('Audio error:', e);
+        setCurrentAudio(null);
+      };
       
       setCurrentAudio(audio);
-      await audio.play();
+      
+      try {
+        await audio.play();
+        console.log('✅ Audio playing successfully');
+      } catch (playError) {
+        console.error('❌ Audio play failed:', playError);
+        throw playError;
+      }
     } catch (error) {
-      console.error('Audio playback failed:', error);
+      console.error('❌ TTS playback failed:', error);
     }
   };
 
