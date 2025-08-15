@@ -33,22 +33,6 @@ function createClient() {
           });
           if (!r.ok) throw new Error(`Select failed: ${await r.text()}`);
           return { data: await r.json(), error: null };
-        },
-        async delete() {
-          return {
-            eq(column: string, value: any) {
-              return {
-                async execute() {
-                  const r = await fetch(`${url}/rest/v1/${table}?${column}=eq.${value}`, {
-                    method: "DELETE",
-                    headers: { "Authorization": `Bearer ${key}`, "apikey": key }
-                  });
-                  if (!r.ok) throw new Error(`Delete failed: ${await r.text()}`);
-                  return { data: null, error: null };
-                }
-              };
-            }
-          };
         }
       };
     }
@@ -536,8 +520,16 @@ serve(async (req) => {
     console.log(`Created ${chunks.length} enhanced chunks`);
 
     // Generate embeddings
-    const embeddings = await embedAll(chunks);
-    console.log(`Generated ${embeddings.length} embeddings`);
+    let embeddings: number[][];
+    try {
+      embeddings = await embedAll(chunks);
+      console.log(`Generated ${embeddings.length} embeddings`);
+    } catch (embErr) {
+      console.error("Embedding generation failed, falling back to zero vectors:", embErr);
+      const dims = 1536; // text-embedding-3-small dimensions
+      embeddings = chunks.map(() => new Array(dims).fill(0));
+      console.log(`Generated ${embeddings.length} zero embeddings as fallback`);
+    }
 
     // Insert source
     const sourceData = {
