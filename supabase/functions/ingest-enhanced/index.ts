@@ -512,30 +512,50 @@ async function ingestWebsite(tenantId: string, siteUrl: string, title?: string) 
       excludeTags: ["script", "style", "nav", "footer"],
       onlyMainContent: true,
     },
-    // V1 API uses 'includePaths' and 'excludePaths' instead of 'crawlerOptions'
+    // V1 API uses regex-compatible 'includePaths' and 'excludePaths'
+    // Use safe regex patterns (not globs) to avoid Firecrawl regex errors
     includePaths: [
-      "**/services/**",
-      "**/products/**", 
-      "**/offerings/**",
-      "**/solutions/**",
-      "**/menu/**",
-      "**/treatments/**",
-      "**/about/**",
-      "**/pricing/**",
-      "**/contact/**"
+      ".*/services(/.*)?",
+      ".*/products(/.*)?",
+      ".*/offerings(/.*)?",
+      ".*/solutions(/.*)?",
+      ".*/menu(/.*)?",
+      ".*/treatments(/.*)?",
+      ".*/about(/.*)?",
+      ".*/pricing(/.*)?",
+      ".*/contact(/.*)?"
     ],
     excludePaths: [
-      "**/admin/**",
-      "**/login/**",
-      "**/register/**",
-      "**/checkout/**",
-      "**/cart/**",
-      "**/*.pdf",
-      "**/*.jpg",
-      "**/*.png"
+      ".*/(admin|login|register|checkout|cart)(/.*)?",
+      ".*\\.(pdf)$",
+      ".*\\.(jpg|jpeg|png|gif|webp|svg)$"
     ],
     maxDepth: 3
   };
+
+  // Validate include/exclude regex patterns to catch errors early
+  try {
+    const patterns = [
+      ...((payload as any).includePaths || []),
+      ...((payload as any).excludePaths || []),
+    ];
+    for (const pattern of patterns) {
+      if (typeof pattern !== "string") continue;
+      // Throws if invalid
+      new RegExp(pattern);
+    }
+  } catch (e) {
+    console.error("Invalid include/exclude regex pattern:", e);
+    throw new Error(`Invalid include/exclude regex pattern: ${String(e)}`);
+  }
+
+  console.log("Firecrawl payload ready", {
+    url: (payload as any).url,
+    limit: (payload as any).limit,
+    maxDepth: (payload as any).maxDepth,
+    includePaths: (payload as any).includePaths,
+    excludePaths: (payload as any).excludePaths,
+  });
 
   const response = await fetch("https://api.firecrawl.dev/v1/crawl", {
     method: "POST",
