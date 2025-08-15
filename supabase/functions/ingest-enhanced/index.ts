@@ -258,7 +258,20 @@ function chunkTextEnhanced(text: string, businessInfo: any, maxTokens = 500): st
     chunks.push(currentChunk.trim());
   }
 
-  return chunks.filter(chunk => chunk.length > 50); // Filter out very short chunks
+  // Hard cap any oversized chunk to avoid embedding token errors
+  const hardCap = maxChunkLength; // same as above
+  const normalized: string[] = [];
+  for (const c of chunks) {
+    if (c.length <= hardCap) {
+      normalized.push(c);
+    } else {
+      for (let i = 0; i < c.length; i += hardCap) {
+        normalized.push(c.slice(i, i + hardCap));
+      }
+    }
+  }
+
+  return normalized.filter(chunk => chunk.length > 50); // Filter out very short chunks
 }
 
 // Create comprehensive quick answers from business info
