@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ragSearch, ingestWebsite } from "@/lib/rag";
+import { ragSearchEnhanced, ingestWebsite } from "@/lib/rag";
 
 /** Dashboard (tabbed) wired to Supabase via src/lib/data.ts */
 
@@ -437,7 +437,7 @@ function KnowledgeTab() {
     if (!tenantId || !searchQuery) return;
     setLoading(true);
     try {
-      const results = await ragSearch(tenantId, searchQuery, 10);
+      const results = await ragSearchEnhanced(tenantId, searchQuery, 6);
       setSearchResults(results);
     } catch (error) {
       console.error("Search failed:", error);
@@ -492,10 +492,20 @@ function KnowledgeTab() {
               <h4 className="font-medium text-sm">Search Results:</h4>
               {searchResults.map((result, idx) => (
                 <div key={idx} className="p-3 bg-slate-50 rounded-xl text-sm">
-                  <div className="flex justify-between items-start mb-1">
-                    <Badge variant="secondary">Score: {(result.score || 0).toFixed(3)}</Badge>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex gap-2">
+                      <Badge variant={result.source === 'quick_answer' ? 'default' : 'secondary'}>
+                        {result.source === 'quick_answer' ? 'Quick Answer' : result.relevance_type || 'General'}
+                      </Badge>
+                      <Badge variant="outline">
+                        {((result.confidence || result.score || 0) * 100).toFixed(0)}%
+                      </Badge>
+                    </div>
                   </div>
-                  <p className="text-slate-700">{result.content.slice(0, 200)}...</p>
+                  <p className="text-slate-700">{result.content.slice(0, 250)}...</p>
+                  {result.source === 'quick_answer' && (
+                    <p className="text-xs text-blue-600 mt-1">✓ High confidence answer</p>
+                  )}
                 </div>
               ))}
             </div>
