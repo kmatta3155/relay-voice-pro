@@ -374,10 +374,16 @@ serve(async (req) => {
   }
 
   try {
-    const { tenant_id, site_url, title } = await req.json();
+    console.log("=== STARTING INGEST FUNCTION ===");
+    const requestBody = await req.json();
+    console.log("Request body:", requestBody);
+    
+    const { tenant_id, site_url, title } = requestBody;
     console.log(`Enhanced ingesting: ${site_url} for tenant: ${tenant_id}`);
 
+    console.log("Creating Supabase client...");
     const sb = createClient();
+    console.log("Supabase client created successfully");
     
     // Enhanced multi-page web scraping with Firecrawl API
     const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
