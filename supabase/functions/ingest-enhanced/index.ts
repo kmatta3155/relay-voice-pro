@@ -667,7 +667,21 @@ serve(async (req) => {
   }
 
   try {
-    const { tenant_id, site_url, title } = await req.json();
+    console.log("Ingest-enhanced function called, method:", req.method);
+    
+    let body;
+    try {
+      body = await req.json();
+      console.log("Request body parsed:", body);
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { tenant_id, site_url, title } = body;
 
     if (!tenant_id || !site_url) {
       return new Response(
