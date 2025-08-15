@@ -8,6 +8,7 @@ import AnalyticsDashboard from "@/components/demo/AnalyticsDashboard";
 import CompetitiveShowcase from "@/components/demo/CompetitiveShowcase";
 import ROICalculator from "@/components/demo/ROICalculator";
 import IntegrationShowcase from "@/components/demo/IntegrationShowcase";
+import { KnowledgeShowcase } from "@/components/demo/KnowledgeShowcase";
 import { ragSearch } from "@/lib/rag";
 
 // ---------- Hard-mapped ElevenLabs Voice IDs (replace with your real IDs) ----------
@@ -727,10 +728,12 @@ export default function DemoPage() {
 
           <AnalyticsDashboard metrics={analyticsData} />
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            <ROICalculator />
-            <CompetitiveShowcase />
-          </div>
+           <div className="grid lg:grid-cols-2 gap-6">
+             <ROICalculator />
+             <CompetitiveShowcase />
+           </div>
+
+           <KnowledgeShowcase />
 
           {/* Success Story Section */}
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
