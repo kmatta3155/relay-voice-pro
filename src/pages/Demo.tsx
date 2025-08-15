@@ -147,7 +147,17 @@ async function tts(
     
   } catch (error) {
     console.error("TTS: ElevenLabs failed:", error);
-    throw error; // Don't continue, let user know it failed
+    
+    // Fallback: Play a short beep and continue instead of stopping
+    console.log("TTS: Using fallback audio beep");
+    try {
+      await ringOnce(300); // Short beep as fallback
+      console.log("TTS: Fallback beep played, continuing...");
+      onEnded?.();
+    } catch (fallbackError) {
+      console.error("TTS: Even fallback failed:", fallbackError);
+      onEnded?.();
+    }
   }
 }
 
