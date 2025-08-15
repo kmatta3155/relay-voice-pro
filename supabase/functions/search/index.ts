@@ -151,6 +151,8 @@ serve(async (req) => {
     const queryIntent = detectQueryIntent(query);
     console.log(`Query intent: ${queryIntent.intent} (priority: ${queryIntent.priority})`);
     
+    const sb = createClient();
+    
     // First try quick answer for high-priority intents
     if (queryIntent.priority >= 8) {
       try {
@@ -188,8 +190,6 @@ serve(async (req) => {
     const primaryQuery = expandedQueries[0];
     const embedding = await embedQuery(primaryQuery);
     console.log(`Generated embedding with ${embedding.length} dimensions`);
-
-    const sb = createClient();
     
     // Enhanced hybrid search with intent filtering
     let rows;

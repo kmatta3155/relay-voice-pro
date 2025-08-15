@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bot, LayoutDashboard, Users, Calendar, MessageCircle, PhoneCall, BarChart3, Plus, Search, Filter, Download, Trash2, Edit, Save, X, Send, Zap, Check, Brain, BookOpen, Globe, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
+import { Bot, LayoutDashboard, Users, Calendar, MessageCircle, PhoneCall, BarChart3, Plus, Search, Filter, Download, Trash2, Edit, Save, X, Send, Zap, Check, Brain, BookOpen, Globe, RefreshCw, CheckCircle, AlertCircle, Building } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import * as repo from "@/lib/data"; // expects helpers from earlier steps
 import { Button } from "@/components/ui/button";
@@ -389,6 +389,7 @@ function KnowledgeTab() {
   const [sources, setSources] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [businessInfo, setBusinessInfo] = useState<any>({});
   const [unresolvedQuestions, setUnresolvedQuestions] = useState<any[]>([]);
   const [newWebsite, setNewWebsite] = useState("");
   const [loading, setLoading] = useState(false);
@@ -423,7 +424,13 @@ function KnowledgeTab() {
     if (!tenantId || !newWebsite) return;
     setLoading(true);
     try {
-      await ingestWebsite(tenantId, newWebsite);
+      const result = await ingestWebsite(tenantId, newWebsite);
+      
+      // If business info was extracted, show it immediately
+      if (result?.business_info && Object.keys(result.business_info).length > 0) {
+        setBusinessInfo(result.business_info);
+      }
+      
       await loadKnowledgeData(tenantId);
       setNewWebsite("");
     } catch (error) {
@@ -438,7 +445,7 @@ function KnowledgeTab() {
     setLoading(true);
     try {
       const results = await ragSearchEnhanced(tenantId, searchQuery, 6);
-      setSearchResults(results);
+      setSearchResults(results.results || []);
     } catch (error) {
       console.error("Search failed:", error);
     } finally {
@@ -598,6 +605,74 @@ function KnowledgeTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Business Intelligence */}
+      {businessInfo && Object.keys(businessInfo).length > 0 && (
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building className="w-5 h-5" />
+              Business Intelligence
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {businessInfo.business_hours && (
+                <div className="p-3 bg-blue-50 rounded-xl">
+                  <h4 className="font-medium text-sm mb-2 text-blue-900">Business Hours</h4>
+                  <div className="space-y-1">
+                    {Array.isArray(businessInfo.business_hours) ? 
+                      businessInfo.business_hours.map((hours: any, idx: number) => (
+                        <div key={idx} className="text-xs text-blue-800">
+                          <span className="font-medium">{hours.day}:</span> {hours.hours}
+                        </div>
+                      )) :
+                      <div className="text-xs text-blue-800">{businessInfo.business_hours}</div>
+                    }
+                  </div>
+                </div>
+              )}
+              
+              {(businessInfo.phone || businessInfo.email) && (
+                <div className="p-3 bg-green-50 rounded-xl">
+                  <h4 className="font-medium text-sm mb-2 text-green-900">Contact Information</h4>
+                  <div className="space-y-1">
+                    {businessInfo.phone && (
+                      <div className="text-xs text-green-800">
+                        <span className="font-medium">Phone:</span> {businessInfo.phone}
+                      </div>
+                    )}
+                    {businessInfo.email && (
+                      <div className="text-xs text-green-800">
+                        <span className="font-medium">Email:</span> {businessInfo.email}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {businessInfo.services && (
+                <div className="p-3 bg-purple-50 rounded-xl">
+                  <h4 className="font-medium text-sm mb-2 text-purple-900">Services</h4>
+                  <div className="text-xs text-purple-800">
+                    {Array.isArray(businessInfo.services) ? 
+                      businessInfo.services.slice(0, 6).join(", ") : 
+                      businessInfo.services
+                    }
+                  </div>
+                </div>
+              )}
+              
+              {businessInfo.about && (
+                <div className="p-3 bg-orange-50 rounded-xl">
+                  <h4 className="font-medium text-sm mb-2 text-orange-900">About</h4>
+                  <div className="text-xs text-orange-800">{businessInfo.about}</div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Learning Mode */}
       <Card className="rounded-2xl shadow-sm">
