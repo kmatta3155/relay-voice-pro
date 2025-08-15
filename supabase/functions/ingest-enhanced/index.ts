@@ -1,6 +1,5 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import FirecrawlApp from 'npm:@mendable/firecrawl-js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -246,26 +245,38 @@ serve(async (req) => {
 
     const sb = createClient();
     
-    // Initialize Firecrawl
+    // Enhanced web scraping with Firecrawl API or fallback
     const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
     let content = "";
     
     if (firecrawlKey) {
       console.log("Using Firecrawl for enhanced scraping");
       try {
-        const app = new FirecrawlApp({ apiKey: firecrawlKey });
-        const crawlResult = await app.scrapeUrl(site_url, {
-          formats: ['markdown', 'html'],
-          includeTags: ['h1', 'h2', 'h3', 'p', 'div', 'span', 'li'],
-          excludeTags: ['script', 'style', 'nav', 'footer'],
-          waitFor: 2000
+        const firecrawlResponse = await fetch('https://api.firecrawl.dev/v0/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${firecrawlKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: site_url,
+            formats: ['markdown', 'html'],
+            includeTags: ['h1', 'h2', 'h3', 'p', 'div', 'span', 'li'],
+            excludeTags: ['script', 'style', 'nav', 'footer'],
+            waitFor: 2000
+          })
         });
         
-        if (crawlResult.success && crawlResult.data?.markdown) {
-          content = crawlResult.data.markdown;
-          console.log(`Firecrawl extracted ${content.length} characters`);
+        if (firecrawlResponse.ok) {
+          const crawlResult = await firecrawlResponse.json();
+          if (crawlResult.success && crawlResult.data?.markdown) {
+            content = crawlResult.data.markdown;
+            console.log(`Firecrawl extracted ${content.length} characters`);
+          } else {
+            throw new Error("Firecrawl failed to extract content");
+          }
         } else {
-          throw new Error("Firecrawl failed to extract content");
+          throw new Error(`Firecrawl API error: ${firecrawlResponse.status}`);
         }
       } catch (firecrawlError) {
         console.error("Firecrawl failed, falling back to basic fetch:", firecrawlError);

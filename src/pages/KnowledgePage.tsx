@@ -82,7 +82,9 @@ export default function KnowledgePage() {
       setTimeout(() => setExtractionProgress(0), 2000);
     } catch (e) {
       setExtractionProgress(0);
-      alert(String(e));
+      console.error("Ingestion failed:", e);
+      const errorMessage = e instanceof Error ? e.message : "Failed to ingest website";
+      alert(`Ingestion failed: ${errorMessage}`);
     } finally {
       setBusy(false);
     }
