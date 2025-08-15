@@ -16,7 +16,7 @@ function createClient() {
   const url = Deno.env.get("SUPABASE_URL")!;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   return {
-    async from(table: string) {
+    from(table: string) {
       return {
         async insert(data: any) {
           const r = await fetch(`${url}/rest/v1/${table}`, {
