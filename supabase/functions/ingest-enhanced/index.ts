@@ -33,6 +33,22 @@ function createClient() {
           });
           if (!r.ok) throw new Error(`Select failed: ${await r.text()}`);
           return { data: await r.json(), error: null };
+        },
+        delete() {
+          return {
+            eq(column: string, value: any) {
+              return {
+                async execute() {
+                  const r = await fetch(`${url}/rest/v1/${table}?${column}=eq.${encodeURIComponent(String(value))}`, {
+                    method: "DELETE",
+                    headers: { "Authorization": `Bearer ${key}`, "apikey": key, "Prefer": "return=minimal" }
+                  });
+                  if (!r.ok) throw new Error(`Delete failed: ${await r.text()}`);
+                  return { data: null, error: null };
+                }
+              };
+            }
+          };
         }
       };
     }
@@ -378,9 +394,12 @@ serve(async (req) => {
   }
 
   try {
-    console.log("=== STARTING INGEST FUNCTION ===");
-    const requestBody = await req.json();
-    console.log("Request body:", requestBody);
+console.log("=== STARTING INGEST FUNCTION ===");
+const openaiPresent = !!Deno.env.get("OPENAI_API_KEY");
+const firecrawlPresent = !!Deno.env.get("FIRECRAWL_API_KEY");
+console.log("Secrets presence:", { OPENAI_API_KEY: openaiPresent, FIRECRAWL_API_KEY: firecrawlPresent });
+const requestBody = await req.json();
+console.log("Request body:", requestBody);
     
     const { tenant_id, site_url, title } = requestBody;
     console.log(`Enhanced ingesting: ${site_url} for tenant: ${tenant_id}`);
