@@ -137,42 +137,53 @@ function extractStructuredData(content: string): any {
       const pricePairs: { name: string; price: string }[] = [];
       
       for (const line of lines) {
-        if (line.length < 5 || line.length > 150) continue;
+        if (line.length < 5 || line.length > 200) continue;
         if (/https?:\/\//i.test(line) || /\[[^\]]+\]\([^\)]+\)/.test(line)) continue; // skip links
         if (/^(home|about|contact|copyright|terms|privacy|login|register)$/i.test(line.trim())) continue;
         
-        // Universal pattern: "Service/Product Name - $Price" or "Service Name: $Price"
-        const pricePattern = line.match(/^[-*•\s]*([A-Za-z][A-Za-z0-9 &/+'°.,()-]{3,80}?)\s*(?:[:\-–]|)\s*(starting\s+(?:at\s+|from\s+)?\$\d+(?:\.\d{2})?(?:\s*[+–-]\s*\$?\d+(?:\.\d{2})?)?|from\s+\$\d+|\$\d+(?:\.\d{2})?(?:\s*[+–-]\s*\$?\d+(?:\.\d{2})?)?(?:\s*each|\/hr|\/hour|\/day|\/session|\/visit)?)\s*$/i);
+        // Allow curly apostrophes and trailing plus on prices (e.g., $50+)
+        const pricePattern = line.match(/^[-*•\s]*([\p{L}\p{N}][\p{L}\p{N} &\/+'’°.,()-]{3,100}?)\s*(?:[:\-–—]|)\s*((?:starting\s+(?:at\s+|from\s+)?)?(?:[$£€¥]|\b(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\b)?\s?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?(?:\s*(?:-|to|–|—)\s*(?:[$£€¥]|\b(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\b)?\s?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?)?(?:\s*(?:each|\/hr|\/hour|\/day|\/session|\/visit))?)\s*$/iu);
         
         if (pricePattern) {
           const name = pricePattern[1].trim().replace(/\s{2,}/g, ' ');
           const price = pricePattern[2].trim();
-          if (name.length >= 5 && !/^(price|pricing|rates?|cost|fee)$/i.test(name)) {
+          if (name.length >= 3 && !/^(price|pricing|rates?|cost|fee)$/i.test(name)) {
             pricePairs.push({ name, price });
             if (!serviceItems.includes(name)) serviceItems.push(name);
             continue;
           }
         }
         
-        // Universal bullet point or list item pattern
-        const bulletPattern = line.match(/^[-*•]\s*([A-Za-z][A-Za-z0-9 &/+'°.,()-]{3,80}?)$/);
+        // Universal bullet/list item pattern
+        const bulletPattern = line.match(/^[-*•]\s*([\p{L}\p{N}][\p{L}\p{N} &\/+'’°.,()-]{3,100}?)$/u);
         if (bulletPattern) {
           const item = bulletPattern[1].trim().replace(/\s{2,}/g, ' ');
-          if (!/\$|http|www|©|script|function/.test(item) && item.length <= 80) {
+          if (!/\$|http|www|©|script|function/.test(item) && item.length <= 100) {
             if (!serviceItems.includes(item)) serviceItems.push(item);
           }
         }
         
-        // Lines that start with capital letters and look like service/product names
-        if (/^[A-Z][A-Za-z0-9 &/+'°.,()-]{10,80}$/.test(line) && 
+        // Title-like lines that look like service/product names
+        if (/^[A-Z][\p{L}\p{N} &\/+'’°.,()-]{6,100}$/u.test(line) && 
             !/\$|http|www|©|script|function|click|read more|learn more|view all/i.test(line)) {
-          if (!serviceItems.includes(line) && line.length <= 80) serviceItems.push(line);
+          if (!serviceItems.includes(line)) serviceItems.push(line);
         }
       }
-      
+
+      // Merge with universal price-pair extractor (handles inline + tables)
+      const universalPairs = extractUniversalPricePairs(section);
+      for (const p of universalPairs) {
+        if (!pricePairs.some(x => x.name.toLowerCase() === p.name.toLowerCase())) pricePairs.push(p);
+        if (!serviceItems.includes(p.name)) serviceItems.push(p.name);
+      }
+
       if (serviceItems.length > 0) businessInfo.services = serviceItems.slice(0, 25);
-      if (!businessInfo.pricing && pricePairs.length > 0) {
-        businessInfo.pricing = pricePairs.slice(0, 10).map(p => `${p.name}: ${p.price}`).join('; ');
+      if (pricePairs.length > 0) {
+        businessInfo.pricing_pairs = pricePairs.slice(0, 25);
+        if (!businessInfo.pricing) {
+          businessInfo.pricing = pricePairs.slice(0, 10).map(p => `${p.name}: ${p.price}`).join('; ');
+        }
+        console.log('Pricing pairs found:', pricePairs.length);
       }
     }
     
@@ -196,6 +207,57 @@ function extractStructuredData(content: string): any {
   }
   
   return businessInfo;
+}
+
+// Universal price pair extractor — currency-aware and table-friendly
+function extractUniversalPricePairs(content: string): { name: string; price: string }[] {
+  const pairs: { name: string; price: string }[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Currency-aware price token (supports $, £, €, ¥ and common currency codes; ranges; trailing +)
+  const priceToken = /(?:(?:from|starting(?:\s+at)?)\s+)?(?:(?:[$£€¥]|(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\s*)?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?)(?:\s*(?:-|to|–|—)\s*(?:(?:[$£€¥]|(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\s*)?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?))?/i;
+
+  for (const line of lines) {
+    if (!priceToken.test(line)) continue;
+    const m = line.match(priceToken);
+    if (!m) continue;
+    const price = m[0].replace(/\s+/g, ' ').trim();
+
+    // Name: prefer text before price, otherwise remove price and separators
+    let name = line.substring(0, m.index || 0).replace(/^[-*•\s]+/, '').trim();
+    if (!name) name = line.replace(priceToken, '').replace(/[:\-–—|]+/g, ' ').trim();
+    name = name.split('|')[0].trim();
+    name = name.replace(/\b(price|pricing|rates?|cost|fee|from|starting|at)\b.*$/i, '').trim();
+    if (name.length < 3 || name.length > 100) continue;
+    if (/http|www|©|script|function|cookie/i.test(name)) continue;
+
+    const key = name.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      pairs.push({ name, price });
+    }
+  }
+
+  // Markdown table rows with name | price
+  for (const line of lines) {
+    if (!line.includes('|')) continue;
+    if (!priceToken.test(line)) continue;
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    const priceCell = cells.find(c => priceToken.test(c));
+    const nameCell = cells.find(c => !priceToken.test(c) && c.length > 2) || cells[0];
+    if (priceCell && nameCell) {
+      const price = (priceCell.match(priceToken)?.[0] || '').trim();
+      const name = nameCell.replace(/[:\-–—]+/g, ' ').trim();
+      const key = name.toLowerCase();
+      if (name && !seen.has(key)) {
+        seen.add(key);
+        pairs.push({ name, price });
+      }
+    }
+  }
+
+  return pairs;
 }
 
 // Extract business information using AI + structured data
@@ -330,6 +392,12 @@ function chunkTextEnhanced(text: string, businessInfo: any, maxTokens = 500): st
     if (businessInfo.email) businessSummary += `Email: ${businessInfo.email}\n`;
     if (businessInfo.address) businessSummary += `Address: ${businessInfo.address}\n`;
     if (businessInfo.services?.length) businessSummary += `Services: ${businessInfo.services.join(", ")}\n`;
+    if (businessInfo.pricing_pairs?.length) {
+      const p = businessInfo.pricing_pairs.slice(0, 8).map((x: any) => `${x.name} - ${x.price}`).join(", ");
+      businessSummary += `Pricing: ${p}\n`;
+    } else if (businessInfo.pricing) {
+      businessSummary += `Pricing: ${businessInfo.pricing}\n`;
+    }
     if (businessInfo.about) businessSummary += `About: ${businessInfo.about}\n`;
     
     chunks.push(businessSummary);
@@ -482,7 +550,28 @@ async function createQuickAnswers(tenantId: string, businessInfo: any, sb: any) 
   }
 
   // Pricing patterns - Enhanced
-  if (businessInfo.pricing) {
+  if (businessInfo.pricing_pairs?.length) {
+    const summary = businessInfo.pricing_pairs.slice(0, 10).map((p: any) => `${p.name}: ${p.price}`).join('; ');
+    quickAnswers.push({
+      tenant_id: tenantId,
+      question_pattern: "(?i)(price|cost|fee|rate|how much|pricing|expensive|affordable|budget)",
+      question_type: "pricing",
+      answer: `Pricing information: ${summary}`,
+      confidence: 0.9
+    });
+
+    // Per-service pricing answers
+    for (const p of businessInfo.pricing_pairs.slice(0, 12)) {
+      const nameEsc = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      quickAnswers.push({
+        tenant_id: tenantId,
+        question_pattern: `(?i)(how much|price|cost|rate).*(${nameEsc})`,
+        question_type: "pricing",
+        answer: `${p.name}: ${p.price}`,
+        confidence: 0.88
+      });
+    }
+  } else if (businessInfo.pricing) {
     quickAnswers.push({
       tenant_id: tenantId,
       question_pattern: "(?i)(price|cost|fee|rate|how much|pricing|expensive|affordable|budget)",
@@ -491,7 +580,6 @@ async function createQuickAnswers(tenantId: string, businessInfo: any, sb: any) 
       confidence: 0.88
     });
     
-    // Additional pricing patterns
     quickAnswers.push({
       tenant_id: tenantId,
       question_pattern: "(?i)(consultation.*cost|session.*price|treatment.*cost|starting.*price)",
