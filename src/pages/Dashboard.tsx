@@ -607,7 +607,7 @@ function KnowledgeTab() {
       </Card>
 
       {/* Business Intelligence */}
-      {((businessInfo && Object.keys(businessInfo).length > 0) || sources.length > 0) && (
+      {businessInfo && Object.keys(businessInfo).length > 0 && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -616,14 +616,6 @@ function KnowledgeTab() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {(!businessInfo || Object.keys(businessInfo).length === 0) && sources.length > 0 && (
-              <div className="p-4 bg-amber-50 rounded-xl mb-4">
-                <h4 className="font-medium text-sm text-amber-900 mb-2">Business Intelligence Available</h4>
-                <p className="text-xs text-amber-800">
-                  We found {sources.length} knowledge source(s). Try re-ingesting your website to extract business intelligence like hours, contact info, and services.
-                </p>
-              </div>
-            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {businessInfo.business_hours && (
                 <div className="p-3 bg-blue-50 rounded-xl">
