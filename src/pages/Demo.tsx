@@ -122,7 +122,26 @@ async function tts(
   console.log(`TTS: Starting synthesis for voice ${voiceId}, text: "${text.slice(0, 50)}..."`);
 
   try {
-    // Try native Web Speech API as fallback if edge function fails
+    // First try ElevenLabs via Supabase edge function
+    console.log('TTS: Attempting ElevenLabs via edge function...');
+    const { data, error } = await supabase.functions.invoke("voice", {
+      body: { 
+        text, 
+        voiceId,
+        modelId: 'eleven_multilingual_v2'
+      },
+    });
+
+    if (!error && data?.audioBase64) {
+      console.log(`TTS: ElevenLabs success! Audio received, size: ${data.audioBase64.length} chars`);
+      await playAudioSegment(data.audioBase64);
+      onEnded?.();
+      return;
+    } else {
+      console.warn('TTS: ElevenLabs failed, falling back to Web Speech API:', error);
+    }
+
+    // Fallback to Web Speech API
     if ('speechSynthesis' in window) {
       console.log('TTS: Using Web Speech API fallback');
       
