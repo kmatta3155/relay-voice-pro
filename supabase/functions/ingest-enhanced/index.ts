@@ -170,25 +170,38 @@ async function embedAll(chunks: string[]): Promise<number[][]> {
 
   console.log(`Generating embeddings for ${chunks.length} chunks`);
 
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${openaiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: chunks
-    })
-  });
+  // Process chunks in smaller batches to avoid token limits
+  const embeddings: any[] = [];
+  const BATCH_SIZE = 3; // Reduce batch size to avoid token limits
+  
+  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+    const batch = chunks.slice(i, i + BATCH_SIZE);
+    
+    const response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: batch
+      })
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenAI embeddings ${response.status}: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI embeddings ${response.status}: ${errorText}`);
+    }
+
+    const result = await response.json();
+    embeddings.push(...result.data.map((item: any) => item.embedding));
+    
+    console.log(`Generated ${result.data.length} embeddings for batch ${Math.floor(i/BATCH_SIZE) + 1}`);
   }
 
-  const result = await response.json();
-  return result.data.map((item: any) => item.embedding);
+  console.log(`Generated ${embeddings.length} embeddings total`);
+  return embeddings;
 }
 
 // Enhanced content chunking with business context preservation

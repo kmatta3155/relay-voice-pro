@@ -672,7 +672,7 @@ function KnowledgeTab() {
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {businessInfo.business_hours && (
+              {businessInfo?.business_hours && (
                 <div className="p-3 bg-blue-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-blue-900">Business Hours</h4>
                   <div className="space-y-1">
@@ -688,16 +688,16 @@ function KnowledgeTab() {
                 </div>
               )}
               
-              {(businessInfo.phone || businessInfo.email) && (
+              {(businessInfo?.phone || businessInfo?.email) && (
                 <div className="p-3 bg-green-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-green-900">Contact Information</h4>
                   <div className="space-y-1">
-                    {businessInfo.phone && (
+                    {businessInfo?.phone && (
                       <div className="text-xs text-green-800">
                         <span className="font-medium">Phone:</span> {businessInfo.phone}
                       </div>
                     )}
-                    {businessInfo.email && (
+                    {businessInfo?.email && (
                       <div className="text-xs text-green-800">
                         <span className="font-medium">Email:</span> {businessInfo.email}
                       </div>
@@ -706,7 +706,7 @@ function KnowledgeTab() {
                 </div>
               )}
               
-              {businessInfo.services && (
+              {businessInfo?.services && (
                 <div className="p-3 bg-purple-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-purple-900">Services</h4>
                   <div className="text-xs text-purple-800">
@@ -718,7 +718,7 @@ function KnowledgeTab() {
                 </div>
               )}
               
-              {businessInfo.about && (
+              {businessInfo?.about && (
                 <div className="p-3 bg-orange-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-orange-900">About</h4>
                   <div className="text-xs text-orange-800">{businessInfo.about}</div>
