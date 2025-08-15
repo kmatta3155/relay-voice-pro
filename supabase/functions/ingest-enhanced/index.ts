@@ -512,31 +512,29 @@ async function ingestWebsite(tenantId: string, siteUrl: string, title?: string) 
       excludeTags: ["script", "style", "nav", "footer"],
       onlyMainContent: true,
     },
-    crawlerOptions: {
-      includes: [
-        "**/services/**",
-        "**/products/**", 
-        "**/offerings/**",
-        "**/solutions/**",
-        "**/menu/**",
-        "**/treatments/**",
-        "**/about/**",
-        "**/pricing/**",
-        "**/contact/**"
-      ],
-      excludes: [
-        "**/admin/**",
-        "**/login/**",
-        "**/register/**",
-        "**/checkout/**",
-        "**/cart/**",
-        "**/*.pdf",
-        "**/*.jpg",
-        "**/*.png"
-      ],
-      maxDepth: 3,
-      respectRobotsTxt: true
-    }
+    // V1 API uses 'includePaths' and 'excludePaths' instead of 'crawlerOptions'
+    includePaths: [
+      "**/services/**",
+      "**/products/**", 
+      "**/offerings/**",
+      "**/solutions/**",
+      "**/menu/**",
+      "**/treatments/**",
+      "**/about/**",
+      "**/pricing/**",
+      "**/contact/**"
+    ],
+    excludePaths: [
+      "**/admin/**",
+      "**/login/**",
+      "**/register/**",
+      "**/checkout/**",
+      "**/cart/**",
+      "**/*.pdf",
+      "**/*.jpg",
+      "**/*.png"
+    ],
+    maxDepth: 3
   };
 
   const response = await fetch("https://api.firecrawl.dev/v1/crawl", {
