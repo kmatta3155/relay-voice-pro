@@ -115,43 +115,64 @@ function extractStructuredData(content: string): any {
       }
     }
     
-    // Professional service extraction with section-based parsing
+    // Universal service/product extraction with section-based parsing
     if (!businessInfo.services) {
-      // Prefer content near a Services/Menu/Treatments section
-      const sectionMatch = content.match(/(?:^|\n)\s*(services|our services|service menu|treatments|menu|pricing)\b[\s:]*\n([\s\S]{0,1500})/i);
-      const section = sectionMatch ? sectionMatch[2] : content;
-      const lines = section.split('\n').map(l => l.trim()).filter(Boolean);
+      // Find content sections that typically contain services/products/offerings
+      const sectionKeywords = ['services', 'products', 'offerings', 'menu', 'treatments', 'solutions', 'programs', 'packages', 'specialties', 'what we do', 'our work', 'practice areas'];
       
+      let section = "";
+      for (const keyword of sectionKeywords) {
+        const regex = new RegExp(`(?:^|\\n)\\s*(?:our\\s+)?${keyword}\\b[\\s:]*\\n([\\s\\S]{0,2000})`, 'i');
+        const match = content.match(regex);
+        if (match && match[1].length > section.length) {
+          section = match[1];
+        }
+      }
+      
+      // Fallback to analyzing the entire content if no specific section found
+      if (!section || section.length < 100) section = content;
+      
+      const lines = section.split('\n').map(l => l.trim()).filter(Boolean);
       const serviceItems: string[] = [];
       const pricePairs: { name: string; price: string }[] = [];
       
       for (const line of lines) {
-        if (line.length < 3 || line.length > 120) continue;
-        if (/https?:\/\//i.test(line) || /\[[^\]]+\]\([^\)]+\)/.test(line)) continue; // skip links/markdown
+        if (line.length < 5 || line.length > 150) continue;
+        if (/https?:\/\//i.test(line) || /\[[^\]]+\]\([^\)]+\)/.test(line)) continue; // skip links
+        if (/^(home|about|contact|copyright|terms|privacy|login|register)$/i.test(line.trim())) continue;
         
-        // Capture pairs like "Haircut - $45", "Women's Cut $60+", "Facial: $75-$120", "Starting at $45"
-        const pair = line.match(/^[-*•\s]*([A-Za-z][A-Za-z0-9 &/+'°.-]{2,60})\s*(?:[:\-–]|)\s*(starting\s+at\s+\$\d+|from\s+\$\d+|\$\d+(?:\.\d{2})?(?:\s*[+–-]\s*\$?\d+(?:\.\d{2})?)?)(?:\s*.*)?$/i);
-        if (pair) {
-          const name = pair[1].trim().replace(/\s{2,}/g, ' ');
-          const price = pair[2].trim();
-          if (name.length >= 3 && !/^(price|pricing|rates?)$/i.test(name)) {
+        // Universal pattern: "Service/Product Name - $Price" or "Service Name: $Price"
+        const pricePattern = line.match(/^[-*•\s]*([A-Za-z][A-Za-z0-9 &/+'°.,()-]{3,80}?)\s*(?:[:\-–]|)\s*(starting\s+(?:at\s+|from\s+)?\$\d+(?:\.\d{2})?(?:\s*[+–-]\s*\$?\d+(?:\.\d{2})?)?|from\s+\$\d+|\$\d+(?:\.\d{2})?(?:\s*[+–-]\s*\$?\d+(?:\.\d{2})?)?(?:\s*each|\/hr|\/hour|\/day|\/session|\/visit)?)\s*$/i);
+        
+        if (pricePattern) {
+          const name = pricePattern[1].trim().replace(/\s{2,}/g, ' ');
+          const price = pricePattern[2].trim();
+          if (name.length >= 5 && !/^(price|pricing|rates?|cost|fee)$/i.test(name)) {
             pricePairs.push({ name, price });
             if (!serviceItems.includes(name)) serviceItems.push(name);
             continue;
           }
         }
-        // Fallback: bullet list items that look like service names
-        if (/^[-*•]/.test(line) || /(facial|massage|cut|color|treatment|therapy|wax|nail|hair|skin|consultation)/i.test(line)) {
-          const nameOnly = line.replace(/^[-*•]\s*/, '').replace(/\s{2,}/g, ' ');
-          if (!/\$|http|www|\(|\)|\{\}|<|>/.test(nameOnly) && /[A-Za-z]/.test(nameOnly)) {
-            if (!serviceItems.includes(nameOnly) && nameOnly.length <= 80) serviceItems.push(nameOnly);
+        
+        // Universal bullet point or list item pattern
+        const bulletPattern = line.match(/^[-*•]\s*([A-Za-z][A-Za-z0-9 &/+'°.,()-]{3,80}?)$/);
+        if (bulletPattern) {
+          const item = bulletPattern[1].trim().replace(/\s{2,}/g, ' ');
+          if (!/\$|http|www|©|script|function/.test(item) && item.length <= 80) {
+            if (!serviceItems.includes(item)) serviceItems.push(item);
           }
+        }
+        
+        // Lines that start with capital letters and look like service/product names
+        if (/^[A-Z][A-Za-z0-9 &/+'°.,()-]{10,80}$/.test(line) && 
+            !/\$|http|www|©|script|function|click|read more|learn more|view all/i.test(line)) {
+          if (!serviceItems.includes(line) && line.length <= 80) serviceItems.push(line);
         }
       }
       
-      if (serviceItems.length > 0) businessInfo.services = serviceItems.slice(0, 20);
+      if (serviceItems.length > 0) businessInfo.services = serviceItems.slice(0, 25);
       if (!businessInfo.pricing && pricePairs.length > 0) {
-        businessInfo.pricing = pricePairs.slice(0, 8).map(p => `${p.name}: ${p.price}`).join('; ');
+        businessInfo.pricing = pricePairs.slice(0, 10).map(p => `${p.name}: ${p.price}`).join('; ');
       }
     }
     
@@ -189,24 +210,24 @@ async function extractBusinessInfo(content: string): Promise<any> {
   }
 
   try {
-    const prompt = `You are a professional business data analyst. Extract ONLY clean, professional business information.
+    const prompt = `You are a professional business intelligence analyst. Extract clean business information for ANY industry (restaurant, law firm, medical practice, retail, etc.).
 
     CRITICAL REQUIREMENTS:
-    - Services: Extract only clean service names (e.g., "Deep Tissue Massage", "Hair Cut & Style", "Facial Treatment")
-    - NO URLs, fragments, or technical text in services
+    - Services/Products: Extract what this business offers (e.g., "Legal Consultation", "Dinner Menu", "Physical Therapy", "Retail Items")
+    - NO URLs, fragments, or technical text
     - Pricing: Only clear pricing (e.g., "$50", "$75-$120", "Starting at $45")
-    - Focus on customer-facing information only
+    - Be industry-agnostic - work for ANY business type
     
-    Return clean JSON with ONLY the fields you find clearly stated:
+    Return clean JSON with ONLY clearly stated fields:
     {
       "business_hours": [{"day": "Monday", "hours": "9:00 AM - 5:00 PM"}],
       "phone": "XXX-XXX-XXXX",
       "email": "contact@business.com", 
       "address": "Complete address",
-      "services": ["Clean Service Name 1", "Clean Service Name 2"],
+      "services": ["What Business Offers 1", "What Business Offers 2"],
       "pricing": "Clean pricing info only",
       "about": "Professional business description",
-      "specialties": ["Main specialty 1", "Main specialty 2"]
+      "specialties": ["What they specialize in 1", "What they specialize in 2"]
     }
     
     Content: ${content.slice(0, 8000)}`;
@@ -220,10 +241,10 @@ async function extractBusinessInfo(content: string): Promise<any> {
       body: JSON.stringify({
         model: "gpt-5-2025-08-07",
         messages: [
-          { role: "system", content: "You are a professional business intelligence analyst. Extract only clean, customer-facing business information. Never include URLs, code, or technical fragments. Focus on services customers would actually book." },
+          { role: "system", content: "You are a business intelligence analyst. Extract clean, customer-facing information for ANY business type (restaurant, law firm, medical, retail, etc.). Never include URLs, code, or technical fragments. Focus on what customers actually need to know." },
           { role: "user", content: prompt }
         ],
-        max_completion_tokens: 1000,
+        max_completion_tokens: 1200,
       })
     });
 
@@ -548,7 +569,7 @@ console.log("Request body:", requestBody);
               onlyMainContent: true
             },
             crawlerOptions: {
-              includes: ['**/services*', '**/pricing*', '**/menu*', '**/treatments*', '**/packages*', '**/rates*', '**/hours*', '**/contact*', '**/about*'],
+              includes: ['**/services*', '**/products*', '**/pricing*', '**/menu*', '**/offerings*', '**/solutions*', '**/packages*', '**/rates*', '**/hours*', '**/contact*', '**/about*'],
               excludes: ['**/admin*', '**/login*', '**/cart*', '**/checkout*', '**/blog*', '**/news*'],
               maxDepth: 3
             }
