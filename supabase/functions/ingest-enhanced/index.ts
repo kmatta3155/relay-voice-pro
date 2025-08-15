@@ -115,21 +115,39 @@ function extractStructuredData(content: string): any {
       }
     }
     
-    // Extract services if not already found
+    // Professional service extraction - clean patterns only
     if (!businessInfo.services) {
-      const serviceMatches = [...content.matchAll(serviceRegex)];
-      if (serviceMatches.length > 0) {
-        businessInfo.services = serviceMatches.map(match => match[2]?.trim()).filter(s => s && s.length > 5).slice(0, 15);
+      // Look for structured service lists and clean descriptions
+      const serviceLines = content.split('\n').filter(line => {
+        const cleanLine = line.trim().toLowerCase();
+        return cleanLine.length > 10 && cleanLine.length < 100 && 
+               !cleanLine.includes('http') && !cleanLine.includes('www') &&
+               !cleanLine.includes('©') && !cleanLine.includes('script') &&
+               (cleanLine.includes('service') || cleanLine.includes('treatment') || 
+                cleanLine.includes('therapy') || cleanLine.includes('massage') ||
+                cleanLine.includes('facial') || cleanLine.includes('hair') ||
+                cleanLine.includes('nail') || cleanLine.includes('skin') ||
+                cleanLine.includes('consultation') || cleanLine.includes('procedure'));
+      });
+      
+      if (serviceLines.length > 0) {
+        businessInfo.services = serviceLines.slice(0, 10).map(line => line.trim().replace(/[^\w\s-&,.]/g, ''));
       }
     }
     
-    // Extract pricing information
+    // Professional pricing extraction - clean formats only
     if (!businessInfo.pricing) {
-      const priceMatches = content.match(priceRegex);
-      const priceRangeMatches = content.match(priceRangeRegex);
-      if (priceMatches || priceRangeMatches) {
-        const allPrices = [...(priceMatches || []), ...(priceRangeMatches || [])];
-        businessInfo.pricing = allPrices.slice(0, 5).join(', ');
+      const cleanPriceRegex = /(?:\$\d+(?:\.\d{2})?(?:\s*-\s*\$\d+(?:\.\d{2})?)?)|(?:starting\s+at\s+\$\d+)|(?:from\s+\$\d+)/gi;
+      const priceMatches = content.match(cleanPriceRegex);
+      if (priceMatches && priceMatches.length > 0) {
+        // Filter out suspicious prices and keep only realistic service pricing
+        const validPrices = priceMatches.filter(price => {
+          const amount = parseInt(price.replace(/\D/g, ''));
+          return amount >= 10 && amount <= 1000; // Reasonable service price range
+        });
+        if (validPrices.length > 0) {
+          businessInfo.pricing = validPrices.slice(0, 3).join(', ');
+        }
       }
     }
     
@@ -152,19 +170,25 @@ async function extractBusinessInfo(content: string): Promise<any> {
   }
 
   try {
-    const prompt = `Extract detailed business information from this content. Focus on services and pricing along with basic info.
-    Return JSON with ONLY the fields you clearly find:
-    - business_hours: Array like [{day: "Monday", hours: "9:00 AM - 5:00 PM"}] (be precise with formatting)
-    - phone: Primary phone number (format: XXX-XXX-XXXX)
-    - email: Primary business email
-    - address: Complete physical address
-    - services: Array of ALL services/treatments offered (extract comprehensively, max 20)
-    - pricing: Detailed pricing information including ranges, starting prices, package deals
-    - about: 2-3 sentence business description including specialties
-    - specialties: Array of business specialties or focus areas
-    - packages: Any service packages or bundles offered
+    const prompt = `You are a professional business data analyst. Extract ONLY clean, professional business information.
+
+    CRITICAL REQUIREMENTS:
+    - Services: Extract only clean service names (e.g., "Deep Tissue Massage", "Hair Cut & Style", "Facial Treatment")
+    - NO URLs, fragments, or technical text in services
+    - Pricing: Only clear pricing (e.g., "$50", "$75-$120", "Starting at $45")
+    - Focus on customer-facing information only
     
-    PRIORITIZE: Look specifically for service menus, treatment lists, pricing tables, and service descriptions.
+    Return clean JSON with ONLY the fields you find clearly stated:
+    {
+      "business_hours": [{"day": "Monday", "hours": "9:00 AM - 5:00 PM"}],
+      "phone": "XXX-XXX-XXXX",
+      "email": "contact@business.com", 
+      "address": "Complete address",
+      "services": ["Clean Service Name 1", "Clean Service Name 2"],
+      "pricing": "Clean pricing info only",
+      "about": "Professional business description",
+      "specialties": ["Main specialty 1", "Main specialty 2"]
+    }
     
     Content: ${content.slice(0, 8000)}`;
 
@@ -175,13 +199,12 @@ async function extractBusinessInfo(content: string): Promise<any> {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-5-2025-08-07",
         messages: [
-          { role: "system", content: "Extract only clearly stated business information. Return valid JSON. If unsure about hours format, use 24hr format or common business format." },
+          { role: "system", content: "You are a professional business intelligence analyst. Extract only clean, customer-facing business information. Never include URLs, code, or technical fragments. Focus on services customers would actually book." },
           { role: "user", content: prompt }
         ],
-        max_tokens: 800,
-        temperature: 0.1
+        max_completion_tokens: 1000,
       })
     });
 
