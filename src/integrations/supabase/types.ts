@@ -175,6 +175,74 @@ export type Database = {
           },
         ]
       }
+      knowledge_chunks: {
+        Row: {
+          content: string
+          created_at: string
+          embedding: string
+          id: string
+          source_id: string | null
+          tenant_id: string
+          token_count: number
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          embedding: string
+          id?: string
+          source_id?: string | null
+          tenant_id: string
+          token_count?: number
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          embedding?: string
+          id?: string
+          source_id?: string | null
+          tenant_id?: string
+          token_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_chunks_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_sources: {
+        Row: {
+          created_at: string
+          id: string
+          meta: Json
+          source_type: string
+          source_url: string | null
+          tenant_id: string
+          title: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meta?: Json
+          source_type?: string
+          source_url?: string | null
+          tenant_id: string
+          title?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meta?: Json
+          source_type?: string
+          source_url?: string | null
+          tenant_id?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           created_at: string | null
@@ -575,6 +643,39 @@ export type Database = {
           },
         ]
       }
+      unresolved_questions: {
+        Row: {
+          asked_by: string | null
+          call_id: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          question: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          asked_by?: string | null
+          call_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          question: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          asked_by?: string | null
+          call_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          question?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       mv_kpis_7d: {
@@ -591,6 +692,26 @@ export type Database = {
         Args: { tid: string }
         Returns: boolean
       }
+      binary_quantize: {
+        Args: { "": string } | { "": unknown }
+        Returns: unknown
+      }
+      halfvec_avg: {
+        Args: { "": number[] }
+        Returns: unknown
+      }
+      halfvec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      halfvec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      halfvec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
       has_role: {
         Args: {
           min_role: Database["public"]["Enums"]["role"]
@@ -598,6 +719,22 @@ export type Database = {
           u: string
         }
         Returns: boolean
+      }
+      hnsw_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_sparsevec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnswhandler: {
+        Args: { "": unknown }
+        Returns: unknown
       }
       is_member: {
         Args: { t: string; u: string }
@@ -607,6 +744,40 @@ export type Database = {
         Args: { tid: string }
         Returns: boolean
       }
+      ivfflat_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflathandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      l2_norm: {
+        Args: { "": unknown } | { "": unknown }
+        Returns: number
+      }
+      l2_normalize: {
+        Args: { "": string } | { "": unknown } | { "": unknown }
+        Returns: unknown
+      }
+      match_knowledge: {
+        Args: {
+          p_embedding: string
+          p_match_count?: number
+          p_min_cosine_similarity?: number
+          p_tenant: string
+        }
+        Returns: {
+          chunk_id: string
+          content: string
+          score: number
+          source_id: string
+        }[]
+      }
       purge_old: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -614,6 +785,42 @@ export type Database = {
       refresh_kpis: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      sparsevec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      sparsevec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      sparsevec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
+      vector_avg: {
+        Args: { "": number[] }
+        Returns: string
+      }
+      vector_dims: {
+        Args: { "": string } | { "": unknown }
+        Returns: number
+      }
+      vector_norm: {
+        Args: { "": string }
+        Returns: number
+      }
+      vector_out: {
+        Args: { "": string }
+        Returns: unknown
+      }
+      vector_send: {
+        Args: { "": string }
+        Returns: string
+      }
+      vector_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
       }
     }
     Enums: {
