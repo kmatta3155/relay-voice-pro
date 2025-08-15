@@ -141,8 +141,8 @@ function extractStructuredData(content: string): any {
         if (/https?:\/\//i.test(line) || /\[[^\]]+\]\([^\)]+\)/.test(line)) continue; // skip links
         if (/^(home|about|contact|copyright|terms|privacy|login|register)$/i.test(line.trim())) continue;
         
-        // Allow curly apostrophes and trailing plus on prices (e.g., $50+)
-        const pricePattern = line.match(/^[-*•\s]*([\p{L}\p{N}][\p{L}\p{N} &\/+'’°.,()-]{3,100}?)\s*(?:[:\-–—]|)\s*((?:starting\s+(?:at\s+|from\s+)?)?(?:[$£€¥]|\b(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\b)?\s?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?(?:\s*(?:-|to|–|—)\s*(?:[$£€¥]|\b(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\b)?\s?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?)?(?:\s*(?:each|\/hr|\/hour|\/day|\/session|\/visit))?)\s*$/iu);
+        // Fixed regex patterns - removed unicode property escapes
+        const pricePattern = line.match(/^[-*•\s]*([a-zA-Z0-9][a-zA-Z0-9 &\/+''°.,()-]{3,100}?)\s*(?:[:\-–—]|)\s*((?:starting\s+(?:at\s+|from\s+)?)?(?:[$£€¥]|\b(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\b)?\s?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?(?:\s*(?:-|to|–|—)\s*(?:[$£€¥]|\b(?:USD|CAD|AUD|EUR|GBP|INR|JPY|AED|SAR|ZAR)\b)?\s?\d{1,3}(?:[\,\s]\d{3})*(?:\.\d{2})?\+?)?(?:\s*(?:each|\/hr|\/hour|\/day|\/session|\/visit))?)\s*$/i);
         
         if (pricePattern) {
           const name = pricePattern[1].trim().replace(/\s{2,}/g, ' ');
@@ -154,8 +154,8 @@ function extractStructuredData(content: string): any {
           }
         }
         
-        // Universal bullet/list item pattern
-        const bulletPattern = line.match(/^[-*•]\s*([\p{L}\p{N}][\p{L}\p{N} &\/+'’°.,()-]{3,100}?)$/u);
+        // Universal bullet/list item pattern - fixed regex
+        const bulletPattern = line.match(/^[-*•]\s*([a-zA-Z0-9][a-zA-Z0-9 &\/+''°.,()-]{3,100}?)$/);
         if (bulletPattern) {
           const item = bulletPattern[1].trim().replace(/\s{2,}/g, ' ');
           if (!/\$|http|www|©|script|function/.test(item) && item.length <= 100) {
@@ -163,8 +163,8 @@ function extractStructuredData(content: string): any {
           }
         }
         
-        // Title-like lines that look like service/product names
-        if (/^[A-Z][\p{L}\p{N} &\/+'’°.,()-]{6,100}$/u.test(line) && 
+        // Title-like lines that look like service/product names - fixed regex
+        if (/^[A-Z][a-zA-Z0-9 &\/+''°.,()-]{6,100}$/.test(line) && 
             !/\$|http|www|©|script|function|click|read more|learn more|view all/i.test(line)) {
           if (!serviceItems.includes(line)) serviceItems.push(line);
         }
@@ -409,11 +409,11 @@ function chunkTextEnhanced(text: string, businessInfo: any, maxTokens = 500): st
   const maxChunkLength = maxTokens * 4; // Rough token estimate
 
   for (const sentence of sentences) {
-    if (currentChunk.length + sentence.length > maxChunkLength && currentChunk.length > 0) {
+    if ((currentChunk + sentence).length > maxChunkLength && currentChunk) {
       chunks.push(currentChunk.trim());
-      currentChunk = sentence + ". ";
+      currentChunk = sentence;
     } else {
-      currentChunk += sentence + ". ";
+      currentChunk += " " + sentence;
     }
   }
 
@@ -421,407 +421,277 @@ function chunkTextEnhanced(text: string, businessInfo: any, maxTokens = 500): st
     chunks.push(currentChunk.trim());
   }
 
-  // Hard cap any oversized chunk to avoid embedding token errors
-  const hardCap = maxChunkLength; // same as above
-  const normalized: string[] = [];
-  for (const c of chunks) {
-    if (c.length <= hardCap) {
-      normalized.push(c);
-    } else {
-      for (let i = 0; i < c.length; i += hardCap) {
-        normalized.push(c.slice(i, i + hardCap));
+  return chunks.filter(chunk => chunk.length > 50); // Filter out very short chunks
+}
+
+// Enhanced quick answer generation
+async function createQuickAnswers(content: string, businessInfo: any, tenantId: string): Promise<void> {
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!openaiKey) return;
+
+  console.log("Creating quick answers for common business questions");
+
+  try {
+    const questionTypes = [
+      { type: "hours", question: "What are your business hours?" },
+      { type: "pricing", question: "What are your prices?" },
+      { type: "contact", question: "How can I contact you?" },
+      { type: "services", question: "What services do you offer?" },
+      { type: "location", question: "Where are you located?" }
+    ];
+
+    for (const q of questionTypes) {
+      let answer = "";
+      let confidence = 0.7;
+
+      // Generate specific answers based on business info
+      if (q.type === "hours" && businessInfo.business_hours?.length) {
+        answer = businessInfo.business_hours.map((h: any) => `${h.day}: ${h.hours}`).join("\n");
+        confidence = 0.95;
+      } else if (q.type === "pricing" && (businessInfo.pricing_pairs?.length || businessInfo.pricing)) {
+        if (businessInfo.pricing_pairs?.length) {
+          answer = businessInfo.pricing_pairs.slice(0, 8).map((p: any) => `${p.name}: ${p.price}`).join("\n");
+        } else {
+          answer = businessInfo.pricing;
+        }
+        confidence = 0.9;
+      } else if (q.type === "contact") {
+        const contactInfo = [];
+        if (businessInfo.phone) contactInfo.push(`Phone: ${businessInfo.phone}`);
+        if (businessInfo.email) contactInfo.push(`Email: ${businessInfo.email}`);
+        if (businessInfo.address) contactInfo.push(`Address: ${businessInfo.address}`);
+        if (contactInfo.length > 0) {
+          answer = contactInfo.join("\n");
+          confidence = 0.95;
+        }
+      } else if (q.type === "services" && businessInfo.services?.length) {
+        answer = "We offer: " + businessInfo.services.slice(0, 10).join(", ");
+        confidence = 0.9;
+      } else if (q.type === "location" && businessInfo.address) {
+        answer = businessInfo.address;
+        confidence = 0.95;
+      }
+
+      // Store quick answer in database if we have good content
+      if (answer && confidence > 0.8) {
+        const supabase = createClient();
+        try {
+          await supabase.from("knowledge_base").insert({
+            tenant_id: tenantId,
+            question: q.question,
+            answer: answer.trim(),
+            question_type: q.type,
+            confidence: confidence,
+            source_url: "business_info_extraction",
+            is_quick_answer: true,
+            created_at: new Date().toISOString()
+          });
+          console.log(`Created quick answer for: ${q.type}`);
+        } catch (err) {
+          console.error(`Failed to store quick answer ${q.type}:`, err);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Quick answer creation failed:", error);
+  }
+}
+
+// Main ingestion function
+async function ingestWebsite(tenantId: string, siteUrl: string, title?: string) {
+  const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
+  if (!firecrawlKey) throw new Error("Firecrawl API key not found");
+
+  console.log(`Starting enhanced crawl for: ${siteUrl}`);
+
+  const payload = {
+    url: siteUrl,
+    limit: 15,
+    scrapeOptions: {
+      formats: ["markdown", "html"],
+      excludeTags: ["script", "style", "nav", "footer"],
+      onlyMainContent: true,
+    },
+    crawlerOptions: {
+      includes: [
+        "**/services/**",
+        "**/products/**", 
+        "**/offerings/**",
+        "**/solutions/**",
+        "**/menu/**",
+        "**/treatments/**",
+        "**/about/**",
+        "**/pricing/**",
+        "**/contact/**"
+      ],
+      excludes: [
+        "**/admin/**",
+        "**/login/**",
+        "**/register/**",
+        "**/checkout/**",
+        "**/cart/**",
+        "**/*.pdf",
+        "**/*.jpg",
+        "**/*.png"
+      ],
+      maxDepth: 3,
+      respectRobotsTxt: true
+    }
+  };
+
+  const response = await fetch("https://api.firecrawl.dev/v1/crawl", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${firecrawlKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Firecrawl crawl failed: ${response.status} ${errorText}`);
+  }
+
+  const result = await response.json();
+  const jobId = result.id;
+
+  if (!jobId) {
+    throw new Error("No job ID returned from Firecrawl");
+  }
+
+  console.log(`Crawl job started: ${jobId}`);
+
+  // Poll for crawl completion
+  let attempts = 0;
+  const maxAttempts = 30; // 5 minutes with 10-second intervals
+  let crawlData: any = null;
+
+  while (attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+
+    const statusResponse = await fetch(`https://api.firecrawl.dev/v1/crawl/${jobId}`, {
+      headers: { "Authorization": `Bearer ${firecrawlKey}` }
+    });
+
+    if (statusResponse.ok) {
+      const status = await statusResponse.json();
+      console.log(`Crawl status: ${status.status}, completed: ${status.completed}/${status.total}`);
+
+      if (status.status === "completed") {
+        crawlData = status.data;
+        break;
+      } else if (status.status === "failed") {
+        throw new Error(`Crawl failed: ${status.error || "Unknown error"}`);
+      }
+    }
+
+    attempts++;
+  }
+
+  if (!crawlData) {
+    throw new Error("Crawl timed out after 5 minutes");
+  }
+
+  console.log(`Crawl completed successfully. Processing ${crawlData.length} pages...`);
+
+  // Process the crawled data
+  const supabase = createClient();
+
+  // Clear existing knowledge for this tenant
+  await supabase.from("knowledge_base").delete().eq("tenant_id", tenantId).execute();
+
+  let totalChunks = 0;
+  let businessInfoExtracted = null;
+
+  for (const page of crawlData) {
+    if (!page.markdown || !page.metadata?.title) continue;
+
+    const content = page.markdown;
+    const pageTitle = page.metadata.title;
+    const url = page.metadata.sourceURL || siteUrl;
+
+    console.log(`Processing page: ${pageTitle}`);
+
+    // Extract business information from the main page (homepage or first page)
+    if (!businessInfoExtracted && (url === siteUrl || content.length > 2000)) {
+      businessInfoExtracted = await extractBusinessInfo(content);
+      console.log("Business info extracted:", JSON.stringify(businessInfoExtracted, null, 2));
+      
+      // Create quick answers for common questions
+      await createQuickAnswers(content, businessInfoExtracted, tenantId);
+    }
+
+    // Enhanced chunking with business context
+    const chunks = chunkTextEnhanced(content, businessInfoExtracted);
+    console.log(`Created ${chunks.length} chunks for ${pageTitle}`);
+
+    if (chunks.length === 0) continue;
+
+    // Generate embeddings
+    const embeddings = await embedAll(chunks);
+
+    // Store chunks in database
+    for (let i = 0; i < chunks.length; i++) {
+      const chunkContent = chunks[i];
+      const embedding = embeddings[i];
+
+      try {
+        await supabase.from("knowledge_base").insert({
+          tenant_id: tenantId,
+          content: chunkContent,
+          embedding: JSON.stringify(embedding),
+          source_url: url,
+          title: pageTitle,
+          created_at: new Date().toISOString()
+        });
+        totalChunks++;
+      } catch (error) {
+        console.error(`Failed to store chunk ${i}:`, error);
       }
     }
   }
 
-  return normalized.filter(chunk => chunk.length > 50); // Filter out very short chunks
-}
-
-// Create comprehensive quick answers from business info
-async function createQuickAnswers(tenantId: string, businessInfo: any, sb: any) {
-  if (!businessInfo || Object.keys(businessInfo).length === 0) return;
-
-  // Clear existing quick answers for this tenant first
-  try {
-    await sb.from("business_quick_answers").delete().eq("tenant_id", tenantId).execute();
-    console.log("Cleared existing quick answers");
-  } catch (error) {
-    console.log("Could not clear existing quick answers:", error);
-  }
-
-  const quickAnswers = [];
-
-  // Enhanced business hours patterns
-  if (businessInfo.business_hours?.length) {
-    const hoursText = businessInfo.business_hours.map((h: any) => `${h.day}: ${h.hours}`).join(", ");
-    
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(what are|when are|business hours?|opening hours?|hours of operation|what time|when.*open|when.*close)",
-      question_type: "hours",
-      answer: `Our business hours are: ${hoursText}`,
-      confidence: 0.98
-    });
-    
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(open|close|schedule|hours today|hours tomorrow)",
-      question_type: "hours",
-      answer: `We're open: ${hoursText}`,
-      confidence: 0.95
-    });
-  }
-
-  // Phone number patterns
-  if (businessInfo.phone) {
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(phone|call|contact.*number|telephone|reach)",
-      question_type: "contact",
-      answer: `You can reach us at ${businessInfo.phone}`,
-      confidence: 0.95
-    });
-  }
-
-  // Email patterns
-  if (businessInfo.email) {
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(email|contact.*email|send.*message)",
-      question_type: "contact",
-      answer: `You can email us at ${businessInfo.email}`,
-      confidence: 0.92
-    });
-  }
-
-  // Services patterns - Enhanced
-  if (businessInfo.services?.length) {
-    const servicesText = businessInfo.services.slice(0, 12).join(", ");
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(service|treatment|offer|what.*do|menu|procedures|what.*available|therapy|care)",
-      question_type: "services",
-      answer: `We offer these services: ${servicesText}`,
-      confidence: 0.90
-    });
-    
-    // Additional service-specific patterns
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(appointment|book|schedule|available|treatment.*list)",
-      question_type: "services",
-      answer: `Our available services include: ${servicesText}. Please call to schedule an appointment.`,
-      confidence: 0.85
-    });
-  }
-
-  // Specialties patterns
-  if (businessInfo.specialties?.length) {
-    const specialtiesText = businessInfo.specialties.slice(0, 5).join(", ");
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(specialize|specialty|focus|expert|best.*at)",
-      question_type: "specialties",
-      answer: `We specialize in: ${specialtiesText}`,
-      confidence: 0.87
-    });
-  }
-
-  // Packages patterns
-  if (businessInfo.packages) {
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(package|bundle|deal|combo|special.*offer)",
-      question_type: "packages",
-      answer: `We offer these packages: ${businessInfo.packages}`,
-      confidence: 0.86
-    });
-  }
-
-  // Location patterns
-  if (businessInfo.address) {
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(where|location|address|find.*us|directions)",
-      question_type: "location",
-      answer: `We're located at ${businessInfo.address}`,
-      confidence: 0.93
-    });
-  }
-
-  // Pricing patterns - Enhanced
-  if (businessInfo.pricing_pairs?.length) {
-    const summary = businessInfo.pricing_pairs.slice(0, 10).map((p: any) => `${p.name}: ${p.price}`).join('; ');
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(price|cost|fee|rate|how much|pricing|expensive|affordable|budget)",
-      question_type: "pricing",
-      answer: `Pricing information: ${summary}`,
-      confidence: 0.9
-    });
-
-    // Per-service pricing answers
-    for (const p of businessInfo.pricing_pairs.slice(0, 12)) {
-      const nameEsc = p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      quickAnswers.push({
-        tenant_id: tenantId,
-        question_pattern: `(?i)(how much|price|cost|rate).*(${nameEsc})`,
-        question_type: "pricing",
-        answer: `${p.name}: ${p.price}`,
-        confidence: 0.88
-      });
-    }
-  } else if (businessInfo.pricing) {
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(price|cost|fee|rate|how much|pricing|expensive|affordable|budget)",
-      question_type: "pricing",
-      answer: `Pricing information: ${businessInfo.pricing}`,
-      confidence: 0.88
-    });
-    
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(consultation.*cost|session.*price|treatment.*cost|starting.*price)",
-      question_type: "pricing",
-      answer: `Our pricing: ${businessInfo.pricing}. Call for detailed pricing on specific services.`,
-      confidence: 0.82
-    });
-  }
-
-  // About/Description patterns
-  if (businessInfo.about) {
-    quickAnswers.push({
-      tenant_id: tenantId,
-      question_pattern: "(?i)(about|who.*are|what.*business|tell.*me.*about)",
-      question_type: "about",
-      answer: businessInfo.about,
-      confidence: 0.80
-    });
-  }
-
-  // Insert quick answers
-  for (const qa of quickAnswers) {
-    try {
-      await sb.from("business_quick_answers").insert(qa);
-    } catch (error) {
-      console.error("Failed to insert quick answer:", error);
-    }
-  }
-
-  console.log(`Created ${quickAnswers.length} enhanced quick answers`);
+  return {
+    success: true,
+    pages_processed: crawlData.length,
+    chunks_created: totalChunks,
+    business_info: businessInfoExtracted
+  };
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-console.log("=== STARTING INGEST FUNCTION ===");
-const openaiPresent = !!Deno.env.get("OPENAI_API_KEY");
-const firecrawlPresent = !!Deno.env.get("FIRECRAWL_API_KEY");
-console.log("Secrets presence:", { OPENAI_API_KEY: openaiPresent, FIRECRAWL_API_KEY: firecrawlPresent });
-const requestBody = await req.json();
-console.log("Request body:", requestBody);
-    
-    const { tenant_id, site_url, title } = requestBody;
-    console.log(`Enhanced ingesting: ${site_url} for tenant: ${tenant_id}`);
+    const { tenant_id, site_url, title } = await req.json();
 
-    console.log("Creating Supabase client...");
-    const sb = createClient();
-    console.log("Supabase client created successfully");
-    
-    // Enhanced multi-page web scraping with Firecrawl API
-    const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
-    let content = "";
-    let crawlMethod = "basic";
-    
-    if (firecrawlKey) {
-      console.log("Using Firecrawl for multi-page crawling");
-      try {
-        // First try multi-page crawl
-        const crawlResponse = await fetch('https://api.firecrawl.dev/v1/crawl', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${firecrawlKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: site_url,
-            limit: 5, // Crawl up to 5 pages
-            scrapeOptions: {
-              formats: ['markdown'],
-              includeTags: ['h1', 'h2', 'h3', 'h4', 'p', 'div', 'span', 'li', 'table', 'td', 'th'],
-              excludeTags: ['script', 'style', 'nav', 'footer', 'aside', 'comment'],
-              onlyMainContent: true
-            },
-            crawlerOptions: {
-              includes: ['**/services*', '**/products*', '**/pricing*', '**/menu*', '**/offerings*', '**/solutions*', '**/packages*', '**/rates*', '**/hours*', '**/contact*', '**/about*'],
-              excludes: ['**/admin*', '**/login*', '**/cart*', '**/checkout*', '**/blog*', '**/news*'],
-              maxDepth: 3
-            }
-          })
-        });
-
-        if (crawlResponse.ok) {
-          const crawlResult = await crawlResponse.json();
-          
-          if (crawlResult.success) {
-            // Check crawl status if async
-            let finalData = crawlResult;
-            if (crawlResult.id) {
-              // Poll for completion
-              let attempts = 0;
-              while (attempts < 30 && finalData.status !== 'completed') {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                const statusResponse = await fetch(`https://api.firecrawl.dev/v1/crawl/${crawlResult.id}`, {
-                  headers: { 'Authorization': `Bearer ${firecrawlKey}` }
-                });
-                if (statusResponse.ok) {
-                  finalData = await statusResponse.json();
-                  console.log(`Crawl status: ${finalData.status}, pages: ${finalData.completed || 0}`);
-                }
-                attempts++;
-              }
-            }
-
-            if (finalData.data && finalData.data.length > 0) {
-              content = finalData.data.map((page: any) => {
-                const pageContent = page.markdown || page.content || '';
-                return `PAGE: ${page.metadata?.title || page.url}\n${pageContent}\n\n`;
-              }).join('');
-              crawlMethod = "firecrawl-multi";
-              console.log(`Firecrawl crawled ${finalData.data.length} pages, extracted ${content.length} characters`);
-            } else {
-              throw new Error("No pages crawled successfully");
-            }
-          } else {
-            throw new Error(`Firecrawl crawl failed: ${crawlResult.error}`);
-          }
-        } else {
-          throw new Error(`Firecrawl API error: ${crawlResponse.status}`);
-        }
-      } catch (crawlError) {
-        console.error("Multi-page crawl failed, trying single page:", crawlError);
-        
-        // Fallback to single page scrape
-        try {
-          const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${firecrawlKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              url: site_url,
-              formats: ['markdown'],
-              includeTags: ['h1', 'h2', 'h3', 'h4', 'p', 'div', 'span', 'li', 'table'],
-              excludeTags: ['script', 'style', 'nav', 'footer'],
-              onlyMainContent: true,
-              waitFor: 3000
-            })
-          });
-          
-          if (scrapeResponse.ok) {
-            const scrapeResult = await scrapeResponse.json();
-            if (scrapeResult.success && scrapeResult.data?.markdown) {
-              content = scrapeResult.data.markdown;
-              crawlMethod = "firecrawl-single";
-              console.log(`Firecrawl single page extracted ${content.length} characters`);
-            } else {
-              throw new Error("Single page scrape failed");
-            }
-          } else {
-            throw new Error(`Firecrawl scrape error: ${scrapeResponse.status}`);
-          }
-        } catch (scrapeError) {
-          console.error("Firecrawl single page failed, using basic fetch:", scrapeError);
-          const response = await fetch(site_url);
-          const html = await response.text();
-          content = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-          crawlMethod = "basic";
-        }
-      }
-    } else {
-      console.log("No Firecrawl key, using basic fetch");
-      const response = await fetch(site_url);
-      const html = await response.text();
-      content = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-      crawlMethod = "basic";
+    if (!tenant_id || !site_url) {
+      return new Response(
+        JSON.stringify({ error: "Missing tenant_id or site_url" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log(`Extracted ${content.length} characters`);
+    console.log(`Starting ingestion for tenant: ${tenant_id}, URL: ${site_url}`);
 
-    // Extract business information using AI
-    console.log("Extracting business information...");
-    const businessInfo = await extractBusinessInfo(content);
-    console.log("Extracted business info:", businessInfo);
+    const result = await ingestWebsite(tenant_id, site_url, title);
 
-    // Create enhanced chunks with business context
-    const chunks = chunkTextEnhanced(content, businessInfo);
-    console.log(`Created ${chunks.length} enhanced chunks`);
-
-    // Generate embeddings
-    let embeddings: number[][];
-    try {
-      embeddings = await embedAll(chunks);
-      console.log(`Generated ${embeddings.length} embeddings`);
-    } catch (embErr) {
-      console.error("Embedding generation failed, falling back to zero vectors:", embErr);
-      const dims = 1536; // text-embedding-3-small dimensions
-      embeddings = chunks.map(() => new Array(dims).fill(0));
-      console.log(`Generated ${embeddings.length} zero embeddings as fallback`);
-    }
-
-    // Insert source
-    const sourceData = {
-      tenant_id,
-      source_url: site_url,
-      title: title || site_url,
-      source_type: "web",
-      meta: { business_info: businessInfo, crawl_method: crawlMethod }
-    };
-
-    const { data: sourceResult } = await sb.from("knowledge_sources").insert(sourceData);
-    const sourceId = sourceResult[0].id;
-    console.log(`Inserted enhanced source: ${sourceId}`);
-
-    // Insert chunks with embeddings
-    const chunkInserts = chunks.map((chunk, i) => ({
-      tenant_id,
-      source_id: sourceId,
-      content: chunk,
-      token_count: Math.ceil(chunk.length / 4),
-      embedding: embeddings[i],
-      meta: { chunk_index: i, has_business_info: i === 0 && Object.keys(businessInfo).length > 0 }
-    }));
-
-    await sb.from("knowledge_chunks").insert(chunkInserts);
-    console.log(`Inserted ${chunkInserts.length} enhanced chunks`);
-
-    // Create quick answers from business info
-    await createQuickAnswers(tenant_id, businessInfo, sb);
-
-    return new Response(JSON.stringify({ 
-      success: true, 
-      chunks_created: chunks.length,
-      business_info_extracted: Object.keys(businessInfo).length > 0,
-      source_id: sourceId,
-      business_info: businessInfo,
-      crawl_method: crawlMethod
-    }), {
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error("Enhanced ingest error:", error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error.message 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error("Ingest error:", error);
+    return new Response(
+      JSON.stringify({ 
+        error: error.message,
+        success: false 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 });
