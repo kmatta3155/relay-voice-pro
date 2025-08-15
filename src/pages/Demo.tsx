@@ -1,541 +1,474 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Phone, PhoneOff, Mic, MicOff, Calendar, User, Clock, CheckCircle } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
-type CallStatus = 'incoming' | 'active' | 'ended';
-type Message = {
-  id: string;
-  speaker: 'customer' | 'ai';
-  text: string;
-  timestamp: number;
-  confidence?: number;
-  intent?: string;
+// ---------- Hard-mapped ElevenLabs Voice IDs (replace with your real IDs) ----------
+const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive female voice (EN)
+const VOICE_AI_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – expressive female voice (works well in Spanish)
+const VOICE_CALLER_F = "Xb7hH8MSUJpSbSDYk0k2"; // Alice – confident female British
+const VOICE_CALLER_M = "pqHfZKP75CvOlQylNhV4"; // Bill – trustworthy older male
+const VOICE_CALLER_ES = "21m00Tcm4TlvDq8ikWAM"; // Rachel (same as AI_EN for consistency)
+
+// Default delivery settings (subtle, human)
+const DEFAULT_VOICE_SETTINGS = {
+  stability: 0.75,
+  similarity_boost: 0.85,
+  style: 0.25,
+  use_speaker_boost: true,
 };
 
-const DEMO_CONVERSATIONS = [
-  {
-    id: 'call1',
-    customer: 'Sarah Johnson',
-    phone: '+1 (555) 123-4567',
-    scenario: 'Spa Appointment Booking',
-    messages: [
-      { speaker: 'customer', text: "Hi, I'd like to book a massage appointment please.", confidence: 0.95 },
-      { speaker: 'ai', text: "Hello Sarah! I'd be happy to help you book a massage. What type of massage are you interested in today?", intent: 'appointment_booking' },
-      { speaker: 'customer', text: "I think a deep tissue massage would be perfect. I've been really stressed with work lately.", confidence: 0.92 },
-      { speaker: 'ai', text: "A deep tissue massage is excellent for stress relief! We have 60-minute and 90-minute sessions available. Which would you prefer?", intent: 'service_selection' },
-      { speaker: 'customer', text: "90 minutes sounds amazing. What's your availability this week?", confidence: 0.91 },
-      { speaker: 'ai', text: "Perfect choice! For 90-minute deep tissue massages, I have Thursday at 2:00 PM, Friday at 11:00 AM, or Saturday at 4:00 PM available. Which works best for you?", intent: 'availability_check' },
-      { speaker: 'customer', text: "Thursday at 2 PM would be ideal!", confidence: 0.94 },
-      { speaker: 'ai', text: "Wonderful! I've booked your 90-minute deep tissue massage for Thursday at 2:00 PM with our senior therapist Emma. The session is $180. Can I get your email for confirmation?", intent: 'booking_confirmation' },
-      { speaker: 'customer', text: "Yes, it's sarah.johnson@email.com", confidence: 0.96 },
-      { speaker: 'ai', text: "Perfect! I've sent your confirmation to sarah.johnson@email.com. Please arrive 15 minutes early to fill out our wellness form. We're looking forward to seeing you Thursday!", intent: 'booking_complete' }
-    ]
-  },
-  {
-    id: 'call2', 
-    customer: 'Mike Rodriguez',
-    phone: '+1 (555) 987-6543',
-    scenario: 'Restaurant Reservation',
-    messages: [
-      { speaker: 'customer', text: "Hi, I'd like to make a dinner reservation for tonight if possible.", confidence: 0.91 },
-      { speaker: 'ai', text: "Good evening Mike! I'd be delighted to help you with a dinner reservation. How many people will be joining you tonight?", intent: 'reservation_inquiry' },
-      { speaker: 'customer', text: "It's for 4 people, around 7 or 8 PM would be great.", confidence: 0.89 },
-      { speaker: 'ai', text: "Excellent! For a party of 4 tonight, I have 7:15 PM or 8:30 PM available. We also have a lovely window table at 7:45 PM. Which would you prefer?", intent: 'availability_check' },
-      { speaker: 'customer', text: "The window table at 7:45 sounds perfect! Do you accommodate any dietary restrictions?", confidence: 0.93 },
-      { speaker: 'ai', text: "Absolutely! Our chef is excellent with dietary accommodations. We handle vegetarian, vegan, gluten-free, and most allergies. What dietary needs should I note for your party?", intent: 'dietary_inquiry' },
-      { speaker: 'customer', text: "One person is vegetarian, and another has a shellfish allergy.", confidence: 0.95 },
-      { speaker: 'ai', text: "Perfect! I've reserved the window table for 4 at 7:45 PM tonight under Rodriguez, with notes for one vegetarian and one shellfish allergy. Our kitchen will take excellent care of your guests. See you tonight!", intent: 'reservation_confirmed' }
-    ]
-  },
-  {
-    id: 'call3',
-    customer: 'Emily Chen',
-    phone: '+1 (555) 234-5678',
-    scenario: 'Customer Support Issue',
-    messages: [
-      { speaker: 'customer', text: "Hi, I'm having trouble with my account login. I keep getting an error message.", confidence: 0.94 },
-      { speaker: 'ai', text: "Hi Emily! I'm sorry to hear you're having login troubles. I'm here to help resolve this quickly. What error message are you seeing exactly?", intent: 'technical_support' },
-      { speaker: 'customer', text: "It says 'Invalid credentials' even though I'm sure my password is correct. I even tried resetting it twice.", confidence: 0.92 },
-      { speaker: 'ai', text: "That's frustrating! The 'invalid credentials' error after password resets suggests a few possibilities. Let me check your account status. Can you confirm the email address associated with your account?", intent: 'account_verification' },
-      { speaker: 'customer', text: "Yes, it's emily.chen@company.com", confidence: 0.96 },
-      { speaker: 'ai', text: "Thank you! I can see your account, and I found the issue. Your account was temporarily locked due to multiple failed login attempts. I'm unlocking it now. Can you try logging in again?", intent: 'issue_resolution' },
-      { speaker: 'customer', text: "Oh wow, it worked! I'm logged in now. Thank you so much!", confidence: 0.98 },
-      { speaker: 'ai', text: "Excellent! I'm so glad we got that resolved quickly. To prevent this in the future, remember there's a 'Forgot Password' link if you're ever unsure. Is there anything else I can help you with today?", intent: 'support_complete' }
-    ]
-  },
-  {
-    id: 'call4',
-    customer: 'David Thompson',
-    phone: '+1 (555) 345-6789',
-    scenario: 'Sales Inquiry & Lead Qualification',
-    messages: [
-      { speaker: 'customer', text: "Hello, I saw your ad about marketing automation software. Can you tell me more about it?", confidence: 0.90 },
-      { speaker: 'ai', text: "Hi David! Thanks for your interest in our marketing automation platform. I'd love to show you how it can transform your marketing efforts. What type of business are you running?", intent: 'lead_qualification' },
-      { speaker: 'customer', text: "I run a growing e-commerce business. We're doing about $2 million in annual revenue but our email marketing is all manual right now.", confidence: 0.93 },
-      { speaker: 'ai', text: "That's fantastic growth! At $2M annual revenue, automation could save you 15-20 hours per week and increase email revenue by 25-40%. How many customers are in your email database currently?", intent: 'needs_assessment' },
-      { speaker: 'customer', text: "We have about 15,000 customers on our email list, but we're only sending basic newsletters right now.", confidence: 0.91 },
-      { speaker: 'ai', text: "Perfect! With 15,000 customers, you're sitting on a goldmine. Our platform could help you segment those customers, automate abandoned cart emails, and create personalized product recommendations. Would you like to see a custom demo based on your e-commerce store?", intent: 'demo_qualification' },
-      { speaker: 'customer', text: "Yes, that sounds exactly what we need. When can we schedule that?", confidence: 0.95 },
-      { speaker: 'ai', text: "Excellent! I'm marking you as a qualified lead for our e-commerce automation demo. I can schedule you with our senior e-commerce specialist tomorrow at 2 PM or Thursday at 10 AM. Which works better for you?", intent: 'demo_scheduling' }
-    ]
-  }
+type Line = {
+  who: "ring" | "ai" | "caller";
+  text?: string;
+  voiceId?: string;
+  pause?: number; // ms gap after audio
+};
+
+type Scenario = {
+  id: string;
+  name: string;
+  phone: string;
+  lang: "EN" | "ES" | "BI" | "FR" | "PT";
+  desc: string;
+  sub: string;
+  lines: Line[];
+};
+
+// ---------- Scenarios (curated, multilingual, market-ready) ----------
+const SPA_EN: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Thanks for calling Serenity Spa, this is your virtual receptionist. How can I help you today?", voiceId: VOICE_AI_EN, pause: 420 },
+  { who: "caller", text: "Hi! I'd like to book a ninety-minute massage for Friday afternoon, if possible.", voiceId: VOICE_CALLER_F, pause: 320 },
+  { who: "ai", text: "Absolutely—Friday we have two openings, two fifteen or four thirty. Which works better?", voiceId: VOICE_AI_EN, pause: 280 },
+  { who: "caller", text: "Two fifteen, please. And can I request Maya?", voiceId: VOICE_CALLER_F, pause: 260 },
+  { who: "ai", text: "You got it—two fifteen with Maya. What's your full name and mobile number to confirm?", voiceId: VOICE_AI_EN, pause: 260 },
+  { who: "caller", text: "Jamie Patel, and my number is nine one nine, five five five, zero one nine eight.", voiceId: VOICE_CALLER_F, pause: 260 },
+  { who: "ai", text: "Perfect, Jamie. You're all set for Friday at two fifteen with Maya. I'll text a confirmation and reminder.", voiceId: VOICE_AI_EN, pause: 400 },
 ];
 
-export default function Demo() {
-  const [currentCall, setCurrentCall] = useState<typeof DEMO_CONVERSATIONS[0] | null>(null);
-  const [callStatus, setCallStatus] = useState<CallStatus>('ended');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-  const [appointment, setAppointment] = useState<any>(null);
-  const [lead, setLead] = useState<any>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+const RESTAURANT_ES: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Gracias por llamar a Bella Vista. ¿En qué puedo ayudarle?", voiceId: VOICE_AI_ES, pause: 360 },
+  { who: "caller", text: "Buenas tardes. Quisiera una reserva para cuatro personas el sábado a las siete.", voiceId: VOICE_CALLER_ES, pause: 280 },
+  { who: "ai", text: "Con gusto. El sábado a las siete tenemos mesa disponible en la terraza. ¿Le parece bien?", voiceId: VOICE_AI_ES, pause: 260 },
+  { who: "caller", text: "Sí, perfecto. A nombre de Ana Rivera.", voiceId: VOICE_CALLER_ES, pause: 260 },
+  { who: "ai", text: "Reserva confirmada: cuatro personas, sábado a las siete, a nombre de Ana Rivera. Le enviaré un mensaje de confirmación. ¡Gracias!", voiceId: VOICE_AI_ES, pause: 420 },
+];
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+const SUPPORT_BI: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Premier Services, virtual receptionist speaking. How can I help today?", voiceId: VOICE_AI_EN, pause: 360 },
+  { who: "caller", text: "Hi, my water heater stopped working this morning.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "I'm sorry to hear that. I can get a technician out today. May I have your service address?", voiceId: VOICE_AI_EN, pause: 260 },
+  { who: "caller", text: "Sure, 214 Oakwood Drive in Morrisville. También hablo español si es más fácil.", voiceId: VOICE_CALLER_M, pause: 320 },
+  { who: "ai", text: "Claro. ¿A qué hora le viene mejor, entre dos y cuatro de la tarde?", voiceId: VOICE_AI_ES, pause: 260 },
+  { who: "caller", text: "A las tres estaría bien. Gracias.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "Agendado para las tres. Le enviaremos un mensaje con el nombre y la foto del técnico. ¡Hasta pronto!", voiceId: VOICE_AI_ES, pause: 420 },
+];
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+const AUTO_EN: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Thanks for calling Triangle Auto Care. This is your AI receptionist. How can I help?", voiceId: VOICE_AI_EN, pause: 350 },
+  { who: "caller", text: "Hi, my car's brakes are squealing. Can I get a quote and book a checkup?", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "We can do a same-day inspection. There's a forty-nine dollar diagnostic fee applied to any repair. Does two-thirty today work?", voiceId: VOICE_AI_EN, pause: 300 },
+  { who: "caller", text: "Two-thirty is good. It's a 2016 Honda Civic.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "Great—two-thirty today. What's your name and number?", voiceId: VOICE_AI_EN, pause: 260 },
+  { who: "caller", text: "Marcus Lee, nine one nine, five five five, zero one one zero.", voiceId: VOICE_CALLER_M, pause: 260 },
+  { who: "ai", text: "All set, Marcus. I'll text directions. Please arrive five minutes early.", voiceId: VOICE_AI_EN, pause: 380 },
+];
 
-  const startCall = (conversationIndex: number) => {
-    const conversation = DEMO_CONVERSATIONS[conversationIndex];
-    setCurrentCall(conversation);
-    setCallStatus('incoming');
-    setMessages([]);
-    setCurrentMessageIndex(0);
-    setAppointment(null);
-    setLead(null);
-    
-    // Simulate incoming call
-    setTimeout(() => {
-      setCallStatus('active');
-      simulateConversation(conversation);
-    }, 2000);
-  };
+// Catalog (pick a subset to keep UI tidy; you can add more)
+const SCENARIOS: Scenario[] = [
+  { id: "spa", name: "Serenity Spa", phone: "(555) 123-RELAX", lang: "EN", desc: "Appointment Booking", sub: "Massage & confirmation", lines: SPA_EN },
+  { id: "restaurant", name: "Bella Vista", phone: "(555) 456-DINE", lang: "ES", desc: "Reserva (Español)", sub: "Reserva en español", lines: RESTAURANT_ES },
+  { id: "support_bi", name: "Premier Services", phone: "(555) 789-HELP", lang: "BI", desc: "Support (EN↔ES)", sub: "Bilingual service call", lines: SUPPORT_BI },
+  { id: "auto", name: "Triangle Auto Care", phone: "(555) 274-BRAKE", lang: "EN", desc: "Brake Inspection", sub: "Quote + same-day check", lines: AUTO_EN },
+];
 
-  const simulateConversation = async (conversation: typeof DEMO_CONVERSATIONS[0]) => {
-    setIsSimulating(true);
-    
-    for (let i = 0; i < conversation.messages.length; i++) {
-      const msg = conversation.messages[i];
-      const message: Message = {
-        id: `msg_${i}`,
-        speaker: msg.speaker as 'customer' | 'ai',
-        text: msg.text,
-        timestamp: Date.now(),
-        confidence: msg.confidence,
-        intent: msg.intent
-      };
+// ---------- Playback & audio utils (Lovable/Chrome-safe) ----------
+class AudioQueue {
+  private q: (() => Promise<void>)[] = [];
+  private running = false;
+  constructor(private setNow: (s: string) => void) {}
+  async add(task: () => Promise<void>) { this.q.push(task); if (!this.running) this.run(); }
+  private async run() {
+    this.running = true;
+    while (this.q.length) { const fn = this.q.shift()!; await fn(); }
+    this.running = false;
+    this.setNow("Idle");
+  }
+}
 
-      // Add typing delay
-      await new Promise(resolve => setTimeout(resolve, msg.speaker === 'customer' ? 1500 : 2000));
-      
-      setMessages(prev => [...prev, message]);
-      setCurrentMessageIndex(i + 1);
+async function tts(
+  text: string,
+  voiceId: string,
+  format: "mp3" | "ulaw_8000" = "mp3",
+  voiceSettings?: any,
+  onEnded?: () => void,
+  attachToWave?: (el: HTMLAudioElement) => void
+) {
+  if (!text?.trim()) {
+    console.log("TTS: Empty text, skipping");
+    return;
+  }
 
-      // Check for booking/reservation confirmations
-      if ((msg.intent === 'booking_confirmation' && conversation.id === 'call1') || 
-          (msg.intent === 'reservation_confirmed' && conversation.id === 'call2')) {
-        setTimeout(async () => {
-          let appointmentData;
-          if (conversation.id === 'call1') {
-            appointmentData = {
-              id: `apt_${Date.now()}`,
-              customer: conversation.customer,
-              title: '90-min Deep Tissue Massage',
-              start: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-              end: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 90 * 60 * 1000).toISOString(),
-              status: 'confirmed'
-            };
-          } else {
-            appointmentData = {
-              id: `res_${Date.now()}`,
-              customer: conversation.customer,
-              title: 'Dinner Reservation - Table for 4',
-              start: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(), // Tonight
-              end: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(), // 2 hours
-              status: 'confirmed'
-            };
-          }
-          setAppointment(appointmentData);
+  console.log(`TTS: Starting synthesis for voice ${voiceId}, text: "${text.slice(0, 50)}..."`);
 
-          // Save to database
-          try {
-            const { data: user } = await supabase.auth.getUser();
-            if (user.user) {
-              const { data: profile } = await supabase.from("profiles").select("active_tenant_id").eq("id", user.user.id).single();
-              if (profile?.active_tenant_id) {
-                await supabase.from("appointments").insert({
-                  tenant_id: profile.active_tenant_id,
-                  title: appointmentData.title,
-                  customer: appointmentData.customer,
-                  start_at: appointmentData.start,
-                  end_at: appointmentData.end
-                });
-              }
-            }
-          } catch (error) {
-            console.log("Demo mode - appointment not saved:", error);
-          }
-        }, 1000);
-      }
+  try {
+    // 🔄 UPDATED: send output_format and optional voice_settings (server maps "mp3" → mp3_44100_128)
+    const { data, error } = await supabase.functions.invoke("tts-voice", {
+      body: { 
+        text, 
+        voiceId,
+        modelId: "eleven_multilingual_v2",
+        output_format: format,
+        voice_settings: voiceSettings ?? DEFAULT_VOICE_SETTINGS,
+      },
+    });
 
-      // Check for lead qualification (sales demo)
-      if (msg.intent === 'demo_qualification' && conversation.id === 'call4') {
-        setTimeout(async () => {
-          const newLead = {
-            id: `lead_${Date.now()}`,
-            name: conversation.customer,
-            phone: conversation.phone,
-            source: 'Marketing Ad',
-            status: 'qualified',
-            intent: 'E-commerce Marketing Automation',
-            score: 92
-          };
-          setLead(newLead);
+    console.log("Voice function response:", { data, error });
 
-          // Save to database
-          try {
-            const { data: user } = await supabase.auth.getUser();
-            if (user.user) {
-              const { data: profile } = await supabase.from("profiles").select("active_tenant_id").eq("id", user.user.id).single();
-              if (profile?.active_tenant_id) {
-                await supabase.from("leads").insert({
-                  tenant_id: profile.active_tenant_id,
-                  name: newLead.name,
-                  phone: newLead.phone,
-                  source: newLead.source,
-                  status: newLead.status,
-                  intent: newLead.intent,
-                  score: newLead.score
-                });
-              }
-            }
-          } catch (error) {
-            console.log("Demo mode - lead not saved:", error);
-          }
-        }, 1000);
-      }
+    if (error) {
+      console.error("TTS: Supabase function error:", error);
+      throw new Error(`Voice function error: ${error.message || JSON.stringify(error)}`);
     }
-    
-    setIsSimulating(false);
-  };
 
-  const endCall = () => {
-    setCallStatus('ended');
-    setCurrentCall(null);
-    setIsSimulating(false);
-  };
+    if (!data?.audioBase64) {
+      console.error("TTS: No audio received in response:", data);
+      throw new Error("No audio received from voice service");
+    }
+
+    const contentType = data.contentType || (format === "ulaw_8000" ? "audio/basic" : "audio/mpeg");
+    console.log(`TTS: ElevenLabs success! type=${contentType} size=${data.audioBase64.length} chars`);
+
+    await playAudioSegment(data.audioBase64, contentType, attachToWave);
+    onEnded?.();
+    
+  } catch (error) {
+    console.error("TTS: ElevenLabs failed:", error);
+    
+    // Fallback: Play a short beep and continue instead of stopping
+    console.log("TTS: Using fallback audio beep");
+    try {
+      await ringOnce(300); // Short beep as fallback
+      console.log("TTS: Fallback beep played, continuing...");
+      onEnded?.();
+    } catch (fallbackError) {
+      console.error("TTS: Even fallback failed:", fallbackError);
+      onEnded?.();
+    }
+  }
+}
+
+// 🔄 UPDATED: respect returned contentType and wire up waveform analyser
+const playAudioSegment = (audioBase64: string, contentType: string, attachToWave?: (el: HTMLAudioElement) => void): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+
+    const onEnded = () => {
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      resolve();
+    };
+    const onError = () => {
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      reject(new Error("Audio playback failed"));
+    };
+
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+
+    // Attach to waveform visualizer if provided
+    try { attachToWave?.(audio); } catch {}
+
+    audio.src = `data:${contentType};base64,${audioBase64}`;
+    audio.play().catch(reject);
+  });
+};
+
+async function ringOnce(ms = 1100) {
+  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  if (ctx.state === "suspended") { await ctx.resume(); }
+  const g = ctx.createGain(); g.connect(ctx.destination); g.gain.value = 0.06;
+  const o1 = ctx.createOscillator(); o1.frequency.value = 440; o1.connect(g);
+  const o2 = ctx.createOscillator(); o2.frequency.value = 480; o2.connect(g);
+  o1.start(); o2.start(); await new Promise((r)=> setTimeout(r, ms));
+  o1.stop(); o2.stop(); g.disconnect(); ctx.close();
+}
+
+// ---------- Waveform (simple Analyser visual on a Canvas) ----------
+function useWaveform() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const srcRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  async function attach(el: HTMLAudioElement) {
+    let ctx = ctxRef.current;
+    if (!ctx) {
+      ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      ctxRef.current = ctx;
+    }
+    if (ctx.state === "suspended") { await ctx.resume(); }
+
+    // Cleanup previous
+    try { srcRef.current?.disconnect(); } catch {}
+    try { analyserRef.current?.disconnect(); } catch {}
+
+    const source = ctx.createMediaElementSource(el);
+    srcRef.current = source;
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    analyser.connect(ctx.destination);
+    analyserRef.current = analyser;
+
+    draw();
+  }
+
+  function draw() {
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+    if (!canvas || !analyser) return;
+    const c = canvas.getContext("2d")!;
+    const w = canvas.width, h = canvas.height;
+    const data = new Uint8Array(analyser.fftSize);
+    const loop = () => {
+      analyser.getByteTimeDomainData(data);
+      c.clearRect(0,0,w,h);
+      c.beginPath();
+      c.moveTo(0, h/2);
+      for (let i=0;i<w;i++) {
+        const v = data[Math.floor(i / w * data.length)] / 128.0 - 1.0;
+        const y = (h/2) + v * (h/2 - 4);
+        c.lineTo(i, y);
+      }
+      c.strokeStyle = "hsl(var(--foreground))";
+      c.lineWidth = 2;
+      c.stroke();
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(loop);
+  }
+
+  useEffect(()=> () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+  return { canvasRef, attach };
+}
+
+// ---------- Demo Page ----------
+export default function DemoPage() {
+  const [sel, setSel] = useState<Scenario>(SCENARIOS[0]);
+  const [now, setNow] = useState("Idle");
+  const [playing, setPlaying] = useState(false);
+  const [pace, setPace] = useState(1);
+  const [format, setFormat] = useState<"mp3" | "ulaw_8000">("mp3");
+  const [transcript, setTranscript] = useState<{ who: string; text: string }[]>([]);
+  const [kpi, setKpi] = useState({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
+  const [ctaShown, setCtaShown] = useState(false);
+
+  const qRef = useRef<AudioQueue | null>(null);
+  const wave = useWaveform();
+
+  useEffect(()=> { qRef.current = new AudioQueue(setNow); }, []);
+
+  // Ensure Chrome/Lovable allows audio after a click
+  async function unlockAudio() {
+    try {
+      const Ctx = (window.AudioContext || (window as any).webkitAudioContext) as any;
+      const ctx = new Ctx();
+      if (ctx.state === "suspended") await ctx.resume();
+      await ctx.close();
+    } catch {}
+  }
+
+  function reset() {
+    setPlaying(false); setNow("Idle"); setTranscript([]); setCtaShown(false);
+    setKpi({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
+    qRef.current = new AudioQueue(setNow);
+  }
+
+  async function start() {
+    await unlockAudio(); // Important for Lovable/Chrome previews
+    reset();
+    setPlaying(true);
+    const q = qRef.current!;
+    const lines = sel.lines;
+    let booked = false;
+
+    const pushT = (who: string, text: string) => {
+      setTranscript((t) => [...t, { who, text }]);
+      setTimeout(()=> {
+        const el = document.getElementById("demo-transcript");
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 0);
+    };
+
+    for (const line of lines) {
+      if (line.who === "ring") {
+        await q.add(async ()=> { setNow("Dialing…"); await ringOnce(1100 / pace); });
+        continue;
+      }
+      const whoLabel = line.who === "ai" ? "Receptionist" : "Caller";
+      const vId = line.voiceId || VOICE_AI_EN;
+      const text = line.text || "";
+      const delayAfter = Math.max(50, (line.pause ?? 100) / pace); // Reduced delays for natural flow
+
+      await q.add(async ()=> {
+        setNow(`${whoLabel} speaking…`); pushT(whoLabel, text);
+        if (line.who === "ai" && /booked|confirm|reserv|agendad|confirmée|reserva|all set/i.test(text)) {
+          booked = true;
+          setKpi((k)=> ({ ...k, bookings: k.bookings + 1, timeSavedMin: k.timeSavedMin + 6 }));
+        }
+        // 🔄 UPDATED: forward selected output format and pass waveform attach
+        await tts(text, vId, format, undefined, undefined, wave.attach);
+        await new Promise((r)=> setTimeout(r, delayAfter));
+      });
+    }
+
+    await q.add(async ()=> { setNow("Call complete"); if (booked) setCtaShown(true); });
+    setPlaying(false);
+  }
+
+  function exportTxt() {
+    const body = transcript.map(t=> `${t.who}: ${t.text}`).join("\n");
+    const blob = new Blob([body], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `relayai-call-${sel.id}.txt`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function simulateFollowUp() {
+    alert("✅ Follow-up SMS queued: 'Thanks for calling! Here's your confirmation link: https://example.com/book'");
+  }
+
+  const langs = ["ALL","EN","ES","BI"] as const;
+  const [langFilter, setLangFilter] = useState<typeof langs[number]>("ALL");
+  const visibleScenarios = useMemo(
+    ()=> SCENARIOS.filter(s => langFilter==="ALL" ? true : s.lang===langFilter),
+    [langFilter]
+  );
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold">Live AI Contact Center Demo</h1>
-        <p className="text-slate-600">Experience real-time AI-powered call handling, appointment booking, and lead qualification</p>
-      </div>
-
-      {/* Demo Controls */}
+    <div className="max-w-6xl mx-auto p-6 grid lg:grid-cols-2 gap-6">
+      {/* Left: Controls */}
       <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>Demo Scenarios</CardTitle>
+        <CardHeader className="space-y-1">
+          <CardTitle>AI Receptionist — Live Demo</CardTitle>
+          <div className="text-sm text-muted-foreground">
+            Human-paced, multilingual calls with realistic ring tones, live transcript, KPIs, and a PSTN (μ-law) toggle to prove real-world readiness.
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 border rounded-xl">
-              <h3 className="font-semibold">Spa Booking</h3>
-              <p className="text-sm text-slate-600 mb-3">Customer books a massage appointment</p>
-              <Button 
-                onClick={() => startCall(0)} 
-                disabled={callStatus !== 'ended'}
-                className="rounded-2xl w-full"
-                size="sm"
-              >
-                Start Demo
-              </Button>
+          {/* Language filter */}
+          <div className="flex flex-wrap gap-2">
+            {langs.map(l=> (
+              <Button key={l} variant={langFilter===l?"default":"outline"} className="rounded-2xl" onClick={()=> setLangFilter(l)}>{l}</Button>
+            ))}
+          </div>
+
+          {/* Scenario picker */}
+          <div className="grid md:grid-cols-2 gap-3">
+            {visibleScenarios.map((s)=> (
+              <button key={s.id} onClick={()=> setSel(s)} className={`text-left p-4 rounded-xl border transition ${sel.id===s.id? "bg-primary text-primary-foreground border-primary":"bg-card hover:bg-accent"}`}>
+                <div className="text-xs opacity-80">{s.phone} • {s.lang}</div>
+                <div className="font-semibold">{s.name}</div>
+                <div className="text-sm opacity-90">{s.desc}</div>
+                <div className="text-xs opacity-70">{s.sub}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Pace + Format */}
+          <div className="grid md:grid-cols-2 gap-3 items-end">
+            <div>
+              <label className="text-sm font-medium">Playback pace</label>
+              <input type="range" min={0.8} max={1.3} step={0.05} value={pace} onChange={(e)=> setPace(parseFloat(e.target.value))} className="w-full"/>
+              <div className="text-xs text-muted-foreground">{pace.toFixed(2)}× (lower = slower, more human)</div>
             </div>
-            <div className="p-4 border rounded-xl">
-              <h3 className="font-semibold">Restaurant</h3>
-              <p className="text-sm text-slate-600 mb-3">Customer makes dinner reservation</p>
-              <Button 
-                onClick={() => startCall(1)} 
-                disabled={callStatus !== 'ended'}
-                className="rounded-2xl w-full"
-                size="sm"
-              >
-                Start Demo
-              </Button>
+            <div>
+              <label className="text-sm font-medium">Output format</label>
+              <select value={format} onChange={(e)=> setFormat(e.target.value as any)} className="w-full border rounded-lg p-2 bg-background">
+                <option value="mp3">MP3 (High-quality web)</option>
+                <option value="ulaw_8000">μ-law 8000Hz (Telephony)</option>
+              </select>
+              <div className="text-xs text-muted-foreground mt-1">
+                {format==="mp3" ? "Rich, natural audio — perfect for web demos." : "8kHz μ-law — exactly what phone lines deliver."}
+              </div>
             </div>
-            <div className="p-4 border rounded-xl">
-              <h3 className="font-semibold">Support</h3>
-              <p className="text-sm text-slate-600 mb-3">Customer needs technical help</p>
-              <Button 
-                onClick={() => startCall(2)} 
-                disabled={callStatus !== 'ended'}
-                className="rounded-2xl w-full"
-                size="sm"
-              >
-                Start Demo
-              </Button>
-            </div>
-            <div className="p-4 border rounded-xl">
-              <h3 className="font-semibold">Sales</h3>
-              <p className="text-sm text-slate-600 mb-3">Lead qualification & follow-up</p>
-              <Button 
-                onClick={() => startCall(3)} 
-                disabled={callStatus !== 'ended'}
-                className="rounded-2xl w-full"
-                size="sm"
-              >
-                Start Demo
-              </Button>
-            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex gap-2">
+            <Button className="rounded-2xl" onClick={start} disabled={playing}>{playing ? "Dialing…" : "Start Demo Call"}</Button>
+            <Button variant="outline" className="rounded-2xl" onClick={reset} disabled={playing}>Reset</Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Call Interface */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5" />
-                  Live Call Interface
-                </CardTitle>
-                {currentCall && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge variant={callStatus === 'active' ? 'default' : callStatus === 'incoming' ? 'secondary' : 'outline'}>
-                      {callStatus.toUpperCase()}
-                    </Badge>
-                    <span className="text-sm text-slate-600">{currentCall.customer} • {currentCall.phone}</span>
-                  </div>
-                )}
+      {/* Right: Transcript + Waveform + KPIs */}
+      <Card className="rounded-2xl shadow-sm relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-accent/20 to-transparent" />
+        <CardHeader>
+          <CardTitle>Live Call Experience</CardTitle>
+          <div className="text-xs text-muted-foreground">{now}</div>
+        </CardHeader>
+        <CardContent>
+          {/* Waveform */}
+          <div className="mb-3 rounded-xl bg-card/70 p-2 border">
+            <canvas ref={wave.canvasRef} width={800} height={80} style={{ width: "100%", height: 80 }} />
+          </div>
+
+          {/* Transcript */}
+          <div id="demo-transcript" className="h-72 overflow-auto space-y-2 p-1 bg-card/60 rounded-xl">
+            {transcript.length===0 ? (
+              <div className="h-full grid place-items-center text-muted-foreground text-sm">
+                Pick a scenario and press <b>Start Demo Call</b>.
               </div>
-              {callStatus === 'active' && (
-                <Button
-                  onClick={endCall}
-                  variant="destructive"
-                  size="sm"
-                  className="rounded-2xl"
-                >
-                  <PhoneOff className="h-4 w-4 mr-2" />
-                  End Call
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {callStatus === 'ended' ? (
-                <div className="text-center py-12 text-slate-500">
-                  <Phone className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Select a demo scenario above to start</p>
+            ) : transcript.map((t,i)=> (
+              <div key={i} className={`flex ${t.who==="Receptionist" ? "justify-start":"justify-end"}`}>
+                <div className={`px-3 py-2 rounded-xl text-sm shadow ${t.who==="Receptionist"?"bg-secondary text-secondary-foreground":"bg-primary text-primary-foreground"}`}>
+                  <div className="text-[10px] opacity-70 mb-1">{t.who}</div>
+                  <div>{t.text}</div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Call Status */}
-                  {callStatus === 'incoming' && (
-                    <div className="text-center py-8">
-                      <div className="animate-pulse">
-                        <Phone className="h-16 w-16 mx-auto mb-4 text-blue-500" />
-                        <p className="text-lg font-semibold">Incoming Call...</p>
-                        <p className="text-slate-600">{currentCall?.customer}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Live Transcript */}
-                  {callStatus === 'active' && (
-                    <div className="border rounded-xl p-4 h-96 overflow-y-auto bg-slate-50">
-                      <h4 className="font-semibold mb-3 flex items-center gap-2">
-                        <Mic className="h-4 w-4" />
-                        Live Transcript
-                      </h4>
-                      <div className="space-y-3">
-                        {messages.map((message) => (
-                          <div
-                            key={message.id}
-                            className={`flex ${message.speaker === 'ai' ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div
-                              className={`max-w-[80%] p-3 rounded-xl ${
-                                message.speaker === 'ai'
-                                  ? 'bg-blue-500 text-white'
-                                  : 'bg-white border'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs font-semibold opacity-75">
-                                  {message.speaker === 'ai' ? 'AI Assistant' : currentCall?.customer}
-                                </span>
-                                {message.confidence && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {Math.round(message.confidence * 100)}% confidence
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-sm">{message.text}</p>
-                              {message.intent && (
-                                <div className="mt-2">
-                                  <Badge variant="secondary" className="text-xs">
-                                    Intent: {message.intent.replace('_', ' ')}
-                                  </Badge>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                        {isSimulating && (
-                          <div className="flex justify-start">
-                            <div className="bg-white border p-3 rounded-xl">
-                              <div className="flex items-center gap-1">
-                                <div className="flex space-x-1">
-                                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                                </div>
-                                <span className="text-xs text-slate-500 ml-2">typing...</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div ref={messagesEndRef} />
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* AI Insights & Actions */}
-        <div className="space-y-4">
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                AI Insights
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {callStatus === 'active' && currentCall && (
-                <>
-                  <div>
-                    <h4 className="font-semibold text-sm">Customer Profile</h4>
-                    <p className="text-sm text-slate-600">{currentCall.customer}</p>
-                    <p className="text-xs text-slate-500">{currentCall.phone}</p>
-                  </div>
-
-                  {messages.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold text-sm">Detected Intent</h4>
-                      <div className="space-y-1">
-                        {messages
-                          .filter(m => m.intent)
-                          .slice(-1)
-                          .map(m => (
-                            <Badge key={m.id} variant="outline" className="text-xs">
-                              {m.intent?.replace('_', ' ')}
-                            </Badge>
-                          ))
-                        }
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <h4 className="font-semibold text-sm">Conversation Score</h4>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-slate-200 rounded-full h-2">
-                        <div 
-                          className="bg-green-500 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(95, messages.length * 12)}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-semibold">{Math.min(95, messages.length * 12)}%</span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {appointment && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <span className="font-semibold text-green-800">Appointment Booked!</span>
-                  </div>
-                  <div className="text-sm text-green-700">
-                    <p><strong>{appointment.title}</strong></p>
-                    <p className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {new Date(appointment.start).toLocaleDateString()} at {new Date(appointment.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </p>
-                    <p>Customer: {appointment.customer}</p>
-                  </div>
-                </div>
-              )}
-
-              {lead && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="h-4 w-4 text-blue-600" />
-                    <span className="font-semibold text-blue-800">Lead Qualified!</span>
-                  </div>
-                  <div className="text-sm text-blue-700">
-                    <p><strong>{lead.name}</strong></p>
-                    <p>Interest: {lead.intent}</p>
-                    <p>Score: {lead.score}/100</p>
-                    <Badge variant="secondary" className="mt-1">{lead.status}</Badge>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Quick Stats */}
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Session Stats
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span>Call Duration</span>
-                <span className="font-semibold">
-                  {callStatus === 'active' && messages.length > 0 
-                    ? `${Math.floor(messages.length * 1.5)}s` 
-                    : '0s'
-                  }
-                </span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span>Messages Exchanged</span>
-                <span className="font-semibold">{messages.length}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>AI Response Time</span>
-                <span className="font-semibold text-green-600">~1.2s avg</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Transcription Accuracy</span>
-                <span className="font-semibold text-green-600">
-                  {messages.length > 0 
-                    ? `${Math.round(messages.reduce((acc, m) => acc + (m.confidence || 0), 0) / messages.length * 100)}%`
-                    : '0%'
-                  }
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            ))}
+          </div>
+
+          {/* KPI strip */}
+          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+            <div className="p-3 rounded-xl bg-card shadow-sm">
+              <div className="text-xs text-muted-foreground">Bookings captured</div>
+              <div className="text-2xl font-semibold">{kpi.bookings}</div>
+            </div>
+            <div className="p-3 rounded-xl bg-card shadow-sm">
+              <div className="text-xs text-muted-foreground">Time saved (min)</div>
+              <div className="text-2xl font-semibold">{kpi.timeSavedMin}</div>
+            </div>
+            <div className="p-3 rounded-xl bg-card shadow-sm">
+              <div className="text-xs text-muted-foreground">CSAT (demo)</div>
+              <div className="text-2xl font-semibold">{kpi.csat.toFixed(1)}</div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="outline" className="rounded-2xl" onClick={exportTxt} disabled={transcript.length===0}>Export transcript</Button>
+            <Button variant="outline" className="rounded-2xl" onClick={simulateFollowUp} disabled={playing}>Simulate follow-up SMS</Button>
+            {ctaShown && (
+              <a href="#get-started" className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">Start Free Trial</a>
+            )}
+          </div>
+
+          <div className="text-[11px] text-muted-foreground mt-3">
+            Voices by ElevenLabs • Toggle between <b>MP3</b> and <b>μ-law telephony</b> to show real-world readiness.
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -24,18 +24,18 @@ export function InteractiveDemo({ className }: DemoProps) {
       subtitle: "Appointment Booking",
       description: "Customer calling to book a massage appointment",
       phoneNumber: "(555) 123-RELAX",
-      businessGreeting: "Thank you for calling Serenity Spa, where relaxation meets rejuvenation. This is RelayAI, how may I help you today?",
+      businessGreeting: "Thank you for calling Serenity Spa, where relaxation meets rejuvenation. This is your AI assistant, how may I help you today?",
       conversation: [
         { speaker: "Customer", text: "Hi, I'd like to book a deep tissue massage for this Saturday", timestamp: "09:34 AM", voice: "George" },
         { speaker: "RelayAI", text: "I'd be delighted to help you book a deep tissue massage for Saturday. What time would work best for you?", timestamp: "09:34 AM", voice: "Sarah" },
         { speaker: "Customer", text: "Around 2 PM would be perfect. How much does it cost?", timestamp: "09:35 AM", voice: "George" },
-        { speaker: "RelayAI", text: "Perfect! Our 60-minute deep tissue massage is $120. I have an opening at 2:15 PM with Sarah, our senior therapist. She's wonderful and very experienced. Would you like me to book that for you?", timestamp: "09:35 AM", voice: "Sarah" },
+        { speaker: "RelayAI", text: "Perfect! Our 60-minute deep tissue massage is $120. I have an opening at 2:15 PM with Sarah, our senior therapist. She's wonderful and very experienced with stress relief. Would you like me to book that for you?", timestamp: "09:35 AM", voice: "Sarah" },
         { speaker: "Customer", text: "Yes, that sounds great. What's your cancellation policy?", timestamp: "09:36 AM", voice: "George" },
         { speaker: "RelayAI", text: "Excellent choice! We do require 24-hour notice for cancellations to avoid any fees. I'll need your name, phone number, and email to complete the booking. What name should I put this under?", timestamp: "09:36 AM", voice: "Sarah" },
         { speaker: "Customer", text: "It's Michael Thompson. My number is 555-0192 and email is mthompson@email.com", timestamp: "09:37 AM", voice: "George" },
-        { speaker: "RelayAI", text: "Perfect, Michael! I've got you booked for a 60-minute deep tissue massage this Saturday at 2:15 PM with Sarah. You'll receive a confirmation text shortly. Is there anything specific I should let Sarah know about your preferences or any areas you'd like her to focus on?", timestamp: "09:37 AM", voice: "Sarah" },
+        { speaker: "RelayAI", text: "Perfect, Michael! I've got you booked for a 60-minute deep tissue massage this Saturday at 2:15 PM with Sarah. You'll receive a confirmation text shortly. Is there anything specific I should let Sarah know about your preferences?", timestamp: "09:37 AM", voice: "Sarah" },
         { speaker: "Customer", text: "Just that I have some tension in my shoulders from work stress.", timestamp: "09:38 AM", voice: "George" },
-        { speaker: "RelayAI", text: "Absolutely, I've made a note about your shoulder tension. Sarah specializes in that area and will take great care of you. We'll see you Saturday at 2:15 PM, Michael. Thank you for choosing Serenity Spa!", timestamp: "09:38 AM", voice: "Sarah" }
+        { speaker: "RelayAI", text: "Absolutely, I've made a note about your shoulder tension. Sarah specializes in that area and will take excellent care of you. We'll see you Saturday at 2:15 PM, Michael. Thank you for choosing Serenity Spa!", timestamp: "09:38 AM", voice: "Sarah" }
       ],
       insights: {
         intent: "Appointment Booking",
@@ -54,16 +54,16 @@ export function InteractiveDemo({ className }: DemoProps) {
       subtitle: "Dinner Reservation",
       description: "Customer calling for dinner reservation",
       phoneNumber: "(555) 456-DINE",
-      businessGreeting: "Good evening and thank you for calling Bella Vista Restaurant. This is RelayAI, your virtual host. How may I assist you with your dining experience tonight?",
+      businessGreeting: "Good evening and thank you for calling Bella Vista Restaurant. This is your AI host assistant. How may I help you create a wonderful dining experience tonight?",
       conversation: [
         { speaker: "Customer", text: "Hi, I need a table for 4 people tonight around 7 PM", timestamp: "02:15 PM", voice: "Charlotte" },
         { speaker: "RelayAI", text: "I'd be happy to help with your reservation for 4 people tonight. Let me check our availability around 7 PM.", timestamp: "02:15 PM", voice: "Sarah" },
         { speaker: "Customer", text: "Do you have any outdoor seating available? The weather looks beautiful today.", timestamp: "02:16 PM", voice: "Charlotte" },
-        { speaker: "RelayAI", text: "You're absolutely right about the weather! I have a lovely patio table for 4 at 7:15 PM. It's covered with heaters and string lights - very romantic. Would that work perfectly for you?", timestamp: "02:16 PM", voice: "Sarah" },
+        { speaker: "RelayAI", text: "You're absolutely right about the weather! I have a lovely patio table for 4 at 7:15 PM. It's covered with heaters and beautiful string lights - very romantic atmosphere. Would that work perfectly for you?", timestamp: "02:16 PM", voice: "Sarah" },
         { speaker: "Customer", text: "That sounds wonderful! Also, one person in our group has a gluten allergy. Do you have gluten-free options?", timestamp: "02:17 PM", voice: "Charlotte" },
-        { speaker: "RelayAI", text: "Absolutely! We have an extensive gluten-free menu including our famous gluten-free pasta, wood-fired pizza, and even desserts. I'll make a special note about the allergy for the kitchen. Can I get your name and phone number for the reservation?", timestamp: "02:17 PM", voice: "Sarah" },
+        { speaker: "RelayAI", text: "Absolutely! We have an extensive gluten-free menu including our famous gluten-free pasta, wood-fired pizza, and even desserts. I'll make a special note about the allergy for our kitchen staff. Can I get your name and phone number for the reservation?", timestamp: "02:17 PM", voice: "Sarah" },
         { speaker: "Customer", text: "It's Sarah Chen, and my number is 555-0156. Thank you so much for being so accommodating!", timestamp: "02:18 PM", voice: "Charlotte" },
-        { speaker: "RelayAI", text: "My pleasure, Sarah! I've reserved your patio table for 4 at 7:15 PM tonight with a note about the gluten allergy. Our chef will personally ensure everything is safe and delicious. We'll see you tonight!", timestamp: "02:18 PM", voice: "Sarah" }
+        { speaker: "RelayAI", text: "My pleasure, Sarah! I've reserved your patio table for 4 at 7:15 PM tonight with a special note about the gluten allergy. Our chef will personally ensure everything is safe and delicious. We can't wait to see you tonight!", timestamp: "02:18 PM", voice: "Sarah" }
       ],
       insights: {
         intent: "Restaurant Reservation",
@@ -82,16 +82,16 @@ export function InteractiveDemo({ className }: DemoProps) {
       subtitle: "Customer Support",
       description: "Existing customer calling about service issue",
       phoneNumber: "(555) 789-HELP",
-      businessGreeting: "Thank you for calling Premier Services, where your satisfaction is our priority. This is RelayAI, your customer care specialist. How can I make your day better?",
+      businessGreeting: "Thank you for calling Premier Services, where your satisfaction is our absolute priority. This is your AI customer care specialist. How can I make your day better?",
       conversation: [
         { speaker: "Customer", text: "Hi, I had an appointment yesterday but my therapist was running late. I'm not happy about it.", timestamp: "10:22 AM", voice: "Liam" },
-        { speaker: "RelayAI", text: "I sincerely apologize for the delay you experienced yesterday. I completely understand your frustration, and that's definitely not the standard of service we strive for. Let me look up your appointment and see how we can make this right.", timestamp: "10:22 AM", voice: "Sarah" },
+        { speaker: "RelayAI", text: "I sincerely apologize for the delay you experienced yesterday. I completely understand your frustration, and that's definitely not the standard of service we strive for. Let me look up your appointment and see how we can make this right immediately.", timestamp: "10:22 AM", voice: "Sarah" },
         { speaker: "Customer", text: "I waited 25 minutes past my appointment time. That's unacceptable for a premium service, especially when I have a busy schedule.", timestamp: "10:23 AM", voice: "Liam" },
-        { speaker: "RelayAI", text: "You're absolutely right, and I want to make this right immediately. I'd like to offer you a complimentary 30-minute add-on to your next massage, plus a 20% discount on that service. Would that help restore your confidence in us?", timestamp: "10:23 AM", voice: "Sarah" },
+        { speaker: "RelayAI", text: "You're absolutely right, and I want to make this right immediately. I'd like to offer you a complimentary 30-minute add-on to your next massage, plus a 20% discount on that entire service. Would that help restore your confidence in us?", timestamp: "10:23 AM", voice: "Sarah" },
         { speaker: "Customer", text: "That's actually quite generous. I appreciate you taking this seriously and not just brushing it off.", timestamp: "10:24 AM", voice: "Liam" },
-        { speaker: "RelayAI", text: "We value you as a client and your time is precious. I've already added those credits to your account, and I'll personally ensure this doesn't happen again. I've also flagged your future appointments for priority scheduling. Is there anything else I can help you with today?", timestamp: "10:24 AM", voice: "Sarah" },
+        { speaker: "RelayAI", text: "We value you as a client and your time is precious to us. I've already added those credits to your account, and I'll personally ensure this doesn't happen again. I've also flagged your future appointments for priority scheduling. Is there anything else I can help you with today?", timestamp: "10:24 AM", voice: "Sarah" },
         { speaker: "Customer", text: "No, that covers it. Thank you for handling this so professionally.", timestamp: "10:25 AM", voice: "Liam" },
-        { speaker: "RelayAI", text: "It's been my pleasure to help resolve this. You'll receive a confirmation email with all the details. Thank you for giving us the opportunity to make it right!", timestamp: "10:25 AM", voice: "Sarah" }
+        { speaker: "RelayAI", text: "It's been my absolute pleasure to help resolve this. You'll receive a confirmation email with all the details shortly. Thank you for giving us the opportunity to make it right!", timestamp: "10:25 AM", voice: "Sarah" }
       ],
       insights: {
         intent: "Customer Complaint Resolution",
@@ -106,88 +106,121 @@ export function InteractiveDemo({ className }: DemoProps) {
     }
   ];
 
-  // Function to generate and play TTS with proper error handling and waiting
   const playTTS = async (text: string, voiceId: string): Promise<void> => {
-    if (!audioEnabled) return;
+    if (!audioEnabled) {
+      console.log('Audio disabled, skipping TTS');
+      return;
+    }
+    
+    console.log(`🎵 Playing TTS for: "${text.slice(0, 50)}..." with voice: ${voiceId}`);
     
     try {
-      // Map voice names to ElevenLabs voice IDs
       const voiceMap: { [key: string]: string } = {
-        'Sarah': 'EXAVITQu4vr4xnSDxMaL',    // Professional female voice for AI
-        'George': 'JBFqnCBsd6RMkjVDRZzb',   // Male customer voice
-        'Charlotte': 'XB0fDUnXU5powFXDhCwa', // Female customer voice 
-        'Liam': 'TX3LPaxmHKxFdv7VOQHJ'      // Alternative male customer voice
+        'Sarah': 'EXAVITQu4vr4xnSDxMaL',
+        'George': 'JBFqnCBsd6RMkjVDRZzb',
+        'Charlotte': 'XB0fDUnXU5powFXDhCwa',
+        'Liam': 'TX3LPaxmHKxFdv7VOQHJ'
       };
 
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { 
-          text,
-          voice_id: voiceMap[voiceId] || voiceMap['Sarah']
-        }
+        body: { text, voice_id: voiceMap[voiceId] || voiceMap['Sarah'] }
       });
 
+      console.log('TTS Response:', { data, error });
+
       if (error) {
-        console.warn('TTS API Error - continuing demo without audio:', error);
+        console.error('TTS Error:', error);
         return;
       }
 
-      // Create and play audio with promise-based completion
-      const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
+      if (!data?.audioContent) {
+        console.error('No audio content received');
+        return;
+      }
+
+      console.log(`✅ Audio content received: ${data.audioContent.length} characters`);
+
+      const audioDataUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      console.log(`🔊 Creating audio element with data URL: ${audioDataUrl.slice(0, 100)}...`);
       
-      return new Promise((resolve) => {
-        const cleanup = () => {
-          setCurrentAudio(null);
-          resolve();
-        };
-        
-        audio.onended = cleanup;
-        audio.onerror = cleanup;
-        
-        setCurrentAudio(audio);
-        audio.play().catch(() => {
-          console.warn('Audio playback failed - continuing demo');
-          cleanup();
-        });
-      });
+      const audio = new Audio(audioDataUrl);
+      audio.volume = 0.8;
+      
+      audio.onloadstart = () => console.log('Audio loading started');
+      audio.onloadeddata = () => console.log('Audio data loaded');
+      audio.oncanplay = () => console.log('Audio can play');
+      audio.onplay = () => console.log('Audio play started');
+      audio.onended = () => {
+        console.log('Audio ended');
+        setCurrentAudio(null);
+      };
+      audio.onerror = (e) => {
+        console.error('Audio error:', e);
+        setCurrentAudio(null);
+      };
+      
+      setCurrentAudio(audio);
+      
+      try {
+        await audio.play();
+        console.log('✅ Audio playing successfully');
+      } catch (playError) {
+        console.error('❌ Audio play failed:', playError);
+        throw playError;
+      }
     } catch (error) {
-      console.warn('TTS Error - continuing demo:', error);
+      console.error('❌ TTS playback failed:', error);
     }
   };
 
-  // Play phone ringing sound effect
+  // Enhanced American phone ring sound
   const playPhoneRing = (): Promise<void> => {
     if (!audioEnabled) return Promise.resolve();
     
     return new Promise((resolve) => {
       try {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillator1 = audioContext.createOscillator();
-        const oscillator2 = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+        const masterGain = audioContext.createGain();
+        masterGain.connect(audioContext.destination);
+        masterGain.gain.setValueAtTime(0.3, audioContext.currentTime);
         
-        oscillator1.connect(gainNode);
-        oscillator2.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        // Create authentic American phone ring tone
+        const createAmericanRingTone = (startTime: number) => {
+          // Standard North American ring tone: 440Hz + 480Hz sine waves
+          const frequencies = [440, 480];
+          
+          frequencies.forEach((freq, index) => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(masterGain);
+            
+            oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+            oscillator.type = 'sine';
+            
+            // Classic US ring pattern: 2 seconds on, 4 seconds off
+            const envelope = [
+              { time: 0, gain: 0 },
+              { time: 0.1, gain: 0.8 - (index * 0.1) }, // Slight frequency mixing
+              { time: 2.0, gain: 0.8 - (index * 0.1) },
+              { time: 2.1, gain: 0 }
+            ];
+            
+            envelope.forEach(point => {
+              gainNode.gain.setValueAtTime(point.gain, audioContext.currentTime + startTime + point.time);
+            });
+            
+            oscillator.start(audioContext.currentTime + startTime);
+            oscillator.stop(audioContext.currentTime + startTime + 2.2);
+          });
+        };
         
-        // Phone ring frequencies
-        oscillator1.frequency.setValueAtTime(480, audioContext.currentTime);
-        oscillator2.frequency.setValueAtTime(620, audioContext.currentTime);
-        oscillator1.type = 'sine';
-        oscillator2.type = 'sine';
+        // Play American ring pattern - 2 rings
+        createAmericanRingTone(0);
+        createAmericanRingTone(4);
         
-        // Ring pattern: ring for 0.5s, pause 0.5s, ring for 0.5s
-        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.1);
-        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.6);
-        gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 1.1);
-        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 1.6);
-        
-        oscillator1.start(audioContext.currentTime);
-        oscillator2.start(audioContext.currentTime);
-        oscillator1.stop(audioContext.currentTime + 2);
-        oscillator2.stop(audioContext.currentTime + 2);
-        
-        setTimeout(resolve, 2200);
+        setTimeout(resolve, 6000);
       } catch (error) {
         console.warn('Phone ring audio failed:', error);
         resolve();
@@ -204,12 +237,12 @@ export function InteractiveDemo({ className }: DemoProps) {
       if (currentMessage === -2) {
         // Show dialing phase
         setCallPhase('dialing');
-        setTranscript([{ speaker: "System", text: `Dialing ${scenarios[currentScenario].phoneNumber}...`, timestamp: "now", isGreeting: false }]);
+        setTranscript([{ speaker: "System", text: `📞 Dialing ${scenarios[currentScenario].phoneNumber}...`, timestamp: "now", isGreeting: false }]);
         setCurrentMessage(-1);
       } else if (currentMessage === -1) {
         // Play phone ringing and show ringing phase
         setCallPhase('ringing');
-        setTranscript(prev => [...prev, { speaker: "System", text: "📞 Phone ringing...", timestamp: "now", isGreeting: false }]);
+        setTranscript(prev => [...prev, { speaker: "System", text: "🔔 Phone ringing...", timestamp: "now", isGreeting: false }]);
         await playPhoneRing();
         setCurrentMessage(0);
       } else if (currentMessage === 0) {
@@ -242,7 +275,7 @@ export function InteractiveDemo({ className }: DemoProps) {
         setCallPhase('ended');
         setIsPlaying(false);
       }
-    }, currentMessage === -2 ? 500 : currentMessage === -1 ? 1500 : 3000);
+    }, currentMessage === -2 ? 800 : currentMessage === -1 ? 1200 : currentMessage === 0 ? 2000 : 3500);
 
     return () => clearTimeout(timer);
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
@@ -321,7 +354,10 @@ export function InteractiveDemo({ className }: DemoProps) {
               <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Volume2 className="w-4 h-4" />
-                  <span>🎙️ AI voices powered by ElevenLabs</span>
+                  <span>🎙️ Enhanced AI voices powered by ElevenLabs</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Premium voice models for human-like conversation
                 </div>
               </div>
             )}
@@ -472,7 +508,7 @@ export function InteractiveDemo({ className }: DemoProps) {
       <div className="mt-10 text-center">
         <Card className="p-8 bg-primary text-primary-foreground">
           <h3 className="text-2xl font-semibold mb-2">Ready to deploy your AI receptionist?</h3>
-          <p className="mb-6 opacity-90">Set up professional AI phone handling in under 10 minutes</p>
+          <p className="mb-6 opacity-90">Set up professional AI phone handling with natural conversation in under 10 minutes</p>
           <div className="flex flex-wrap justify-center gap-4">
             <Button asChild size="lg" variant="secondary">
               <a href="#app">Start Free Trial</a>
