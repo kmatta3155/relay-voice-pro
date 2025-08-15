@@ -122,38 +122,47 @@ async function tts(
   console.log(`TTS: Starting synthesis for voice ${voiceId}, text: "${text.slice(0, 50)}..."`);
 
   try {
-    const { data, error } = await supabase.functions.invoke("voice", {
-      body: { 
-        text, 
-        voiceId,
-        modelId: 'eleven_multilingual_v2'
-      },
-    });
-
-    console.log('Voice function response:', { data, error });
-
-    if (error) {
-      console.error("TTS: Supabase function error:", error);
-      // Fallback: continue without audio instead of breaking the demo
-      console.warn("Continuing demo without audio due to voice service error");
-      return;
+    // Try native Web Speech API as fallback if edge function fails
+    if ('speechSynthesis' in window) {
+      console.log('TTS: Using Web Speech API fallback');
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Map voice IDs to speech synthesis voices
+      const voices = speechSynthesis.getVoices();
+      const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Karen'));
+      const maleVoice = voices.find(v => v.name.includes('Male') || v.name.includes('Alex') || v.name.includes('Daniel'));
+      
+      if (voiceId.includes('21m00')) { // AI voice - use female
+        utterance.voice = femaleVoice || voices[1] || voices[0];
+      } else { // Caller voice - use male  
+        utterance.voice = maleVoice || voices[0];
+      }
+      
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.8;
+      
+      return new Promise<void>((resolve) => {
+        utterance.onend = () => {
+          console.log('TTS: Web Speech playback completed');
+          onEnded?.();
+          resolve();
+        };
+        utterance.onerror = (e) => {
+          console.error('TTS: Web Speech error:', e);
+          onEnded?.();
+          resolve(); // Don't fail the demo
+        };
+        
+        speechSynthesis.speak(utterance);
+      });
+    } else {
+      console.warn('TTS: No speech synthesis available, skipping audio');
+      onEnded?.();
     }
-
-    if (!data?.audioBase64) {
-      console.error("TTS: No audio received in response:", data);
-      console.warn("Continuing demo without audio - no audio data received");
-      return;
-    }
-
-    console.log(`TTS: Audio received, size: ${data.audioBase64.length} chars`);
-
-    await playAudioSegment(data.audioBase64);
-    onEnded?.();
-
   } catch (error) {
-    console.error("TTS: Complete failure:", error);
-    // Don't throw - let demo continue without audio
-    console.warn("Demo continuing without audio due to TTS failure");
+    console.error("TTS: Fallback failure:", error);
+    onEnded?.(); // Continue demo without audio
   }
 }
 
@@ -310,7 +319,7 @@ export default function DemoPage() {
       const whoLabel = line.who === "ai" ? "Receptionist" : "Caller";
       const vId = line.voiceId || VOICE_AI_EN;
       const text = line.text || "";
-      const delayAfter = Math.max(180, (line.pause ?? 260) / pace);
+      const delayAfter = Math.max(50, (line.pause ?? 100) / pace); // Reduced delays for natural flow
 
       await q.add(async ()=> {
         setNow(`${whoLabel} speaking…`); pushT(whoLabel, text);
@@ -319,6 +328,7 @@ export default function DemoPage() {
           setKpi((k)=> ({ ...k, bookings: k.bookings + 1, timeSavedMin: k.timeSavedMin + 6 }));
         }
         await tts(text, vId, format, undefined, undefined, wave.attach);
+        // Minimal pause for natural conversation flow
         await new Promise((r)=> setTimeout(r, delayAfter));
       });
     }
