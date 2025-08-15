@@ -16,6 +16,12 @@ import {
   Lock,
   ActivitySquare,
   LayoutDashboard,
+  Zap,
+  TrendingUp,
+  Globe,
+  Award,
+  Sparkles,
+  Play,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +32,9 @@ import vagaroLogo from "@/assets/logos/vagaro.svg";
 import acuityLogo from "@/assets/logos/acuity.svg";
 import calendlyLogo from "@/assets/logos/calendly.svg";
 import outlookLogo from "@/assets/logos/outlook.svg";
+import heroImage from "@/assets/hero-ai-receptionist.jpg";
+import dashboardPreview from "@/assets/dashboard-preview.jpg";
+import featuresShowcase from "@/assets/features-showcase.jpg";
 import { getDashboardMetrics } from "@/lib/analytics";
 import { openCheckout } from "@/lib/billing";
 import AnalyticsPage from "@/pages/AnalyticsPage";
@@ -36,6 +45,7 @@ import BillingPage from "@/pages/BillingPage";
 import { useSessionState } from "@/hooks/useSessionState";
 import { supabase } from "@/lib/supabaseClient";
 import DemoPage from "@/pages/Demo";
+import MarketingShowcase from "@/components/MarketingShowcase";
 // SEO head tags (title, description, canonical)
 function SEOHead() {
   React.useEffect(() => {
@@ -126,7 +136,7 @@ function SectionHeader({ kicker, title, subtitle }: { kicker?: string; title: st
 export default function AIReceptionistApp() {
   const [tab] = useHashTab("overview");
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted text-foreground">
+    <div className="min-h-screen bg-[image:var(--gradient-hero)] text-foreground">
       <SEOHead />
       <SEOJsonLD />
       <NavBar />
@@ -135,10 +145,9 @@ export default function AIReceptionistApp() {
           <>
             <Hero />
             <TrustLogos />
-            <MetricsOverview />
+            <MarketingShowcase />
             <Features />
             <Pricing />
-            <UpgradeCTA />
             <Demo />
             <section id="interactive-demo" className="px-4 py-16 md:py-24 bg-muted/30">
               <div className="text-center mb-10">
@@ -211,8 +220,11 @@ function Hero() {
   return (
     <section className="max-w-6xl mx-auto px-4 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
       <div>
-        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-4xl md:text-6xl font-bold tracking-tight">
-          Never miss a call. <span className="text-muted-foreground">Book more appointments.</span>
+        <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1]">
+          Never miss a call.{" "}
+          <span className="bg-[image:var(--gradient-primary)] bg-clip-text text-transparent">
+            Book more appointments.
+          </span>
         </motion.h1>
         <p className="mt-5 text-lg text-muted-foreground">
           RelayAI answers calls, handles FAQs, and books appointments for your business—24/7. Built for salons, auto shops, med spas, home services, and more.
@@ -259,19 +271,42 @@ function ConsentNote() {
 }
 
 function TrustLogos() {
+  const logos = [
+    { name: "Fresha", logo: freshaLogo },
+    { name: "Square", logo: squareLogo },
+    { name: "Vagaro", logo: vagaroLogo },
+    { name: "Acuity", logo: acuityLogo },
+    { name: "Calendly", logo: calendlyLogo },
+    { name: "Outlook", logo: outlookLogo },
+  ];
+
   return (
-    <section className="max-w-6xl mx-auto px-4 pb-8">
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-6 opacity-70">
-        {["Fresha", "Square", "Vagaro", "Acuity", "Calendly", "Outlook"].map(
-          (logo) => (
-            <div
-              key={logo}
-              className="p-4 rounded-2xl bg-white text-center text-sm shadow-sm"
-            >
-              {logo}
-            </div>
-          )
-        )}
+    <section className="max-w-7xl mx-auto px-4 py-16">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="text-center mb-12"
+      >
+        <p className="text-muted-foreground font-medium">Trusted by 10,000+ businesses and integrates with</p>
+      </motion.div>
+      
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-8 items-center">
+        {logos.map((item, index) => (
+          <motion.div
+            key={item.name}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1, duration: 0.5 }}
+            className="flex items-center justify-center p-6 rounded-2xl bg-card/50 backdrop-blur-sm hover:bg-card transition-all duration-300 hover:scale-105 shadow-[var(--shadow-card)]"
+          >
+            <img 
+              src={item.logo} 
+              alt={`${item.name} integration`} 
+              className="h-8 w-auto opacity-70 hover:opacity-100 transition-opacity duration-300"
+            />
+          </motion.div>
+        ))}
       </div>
     </section>
   );
@@ -323,18 +358,90 @@ function UpgradeCTA() {
 
 function Features() {
   return (
-    <section id="features" className="px-4 py-16 md:py-24 bg-card">
-      <SectionHeader kicker="Features" title="Everything a receptionist does—without the overhead" subtitle="Configured in minutes. Tuned for your services, hours, and brand voice." />
-      <div className="max-w-6xl mx-auto mt-10 grid md:grid-cols-3 gap-6">
-        {features.map((f) => (
-          <Card key={f.title} className="rounded-2xl shadow-sm">
-            <CardHeader>
-              <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground grid place-items-center">{f.icon}</div>
-              <CardTitle className="mt-4 text-xl">{f.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-muted-foreground">{f.text}</CardContent>
-          </Card>
-        ))}
+    <section id="features" className="px-4 py-24 bg-muted/30">
+      <div className="max-w-7xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          viewport={{ once: true }}
+          className="text-center mb-16"
+        >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/50 text-accent-foreground text-sm font-medium mb-6">
+            <Award className="w-4 h-4" />
+            Premium Features
+          </div>
+          <h2 className="text-4xl md:text-5xl font-bold mb-6">
+            Everything a receptionist does—
+            <span className="bg-[image:var(--gradient-primary)] bg-clip-text text-transparent">
+              {" "}without the overhead
+            </span>
+          </h2>
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            Configured in minutes. Tuned for your services, hours, and brand voice.
+          </p>
+        </motion.div>
+
+        <div className="grid lg:grid-cols-2 gap-16 items-center mb-16">
+          <motion.div
+            initial={{ opacity: 0, x: -50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+          >
+            <img 
+              src={featuresShowcase} 
+              alt="Features showcase" 
+              className="rounded-3xl shadow-[var(--shadow-premium)] w-full"
+            />
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0, x: 50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="space-y-8"
+          >
+            {features.slice(0, 3).map((feature, index) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.2, duration: 0.6 }}
+                viewport={{ once: true }}
+                className="flex gap-6"
+              >
+                <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-[image:var(--gradient-primary)] text-white grid place-items-center shadow-lg">
+                  {feature.icon}
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                  <p className="text-muted-foreground leading-relaxed">{feature.text}</p>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {features.slice(3).map((feature, index) => (
+            <motion.div
+              key={feature.title}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.2, duration: 0.6 }}
+              viewport={{ once: true }}
+              className="group p-8 rounded-3xl bg-[image:var(--gradient-card)] backdrop-blur-sm border border-border/50 hover:shadow-[var(--shadow-premium)] transition-all duration-300 hover:scale-105"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-[image:var(--gradient-primary)] text-white grid place-items-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                {feature.icon}
+              </div>
+              <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
+              <p className="text-muted-foreground leading-relaxed">{feature.text}</p>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </section>
   );
