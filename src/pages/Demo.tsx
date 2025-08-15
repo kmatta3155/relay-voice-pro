@@ -4,12 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 // ---------- Hard-mapped ElevenLabs Voice IDs (replace with your real IDs) ----------
-// Recommended voice picks by style (examples): 
-//   AI English (neutral/support): "Adam" / "Aria" / "Rachel"
-//   AI Spanish (neutral): "Sofía" / "Camila"
-//   Caller Female (natural): "Bella" / "Ada"
-//   Caller Male (natural): "Antoni" / "Matthew"
-//   Caller Spanish (natural): "Lucía" / "Alejandro"
 const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive female voice (EN)
 const VOICE_AI_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – expressive female voice (works well in Spanish)
 const VOICE_CALLER_F = "Xb7hH8MSUJpSbSDYk0k2"; // Alice – confident female British
@@ -86,10 +80,10 @@ const AUTO_EN: Line[] = [
 
 // Catalog (pick a subset to keep UI tidy; you can add more)
 const SCENARIOS: Scenario[] = [
-  { id: "spa", name: "Serenity Spa", phone: "(555) 123‑RELAX", lang: "EN", desc: "Appointment Booking", sub: "Massage & confirmation", lines: SPA_EN },
-  { id: "restaurant", name: "Bella Vista", phone: "(555) 456‑DINE", lang: "ES", desc: "Reserva (Español)", sub: "Reserva en español", lines: RESTAURANT_ES },
-  { id: "support_bi", name: "Premier Services", phone: "(555) 789‑HELP", lang: "BI", desc: "Support (EN↔ES)", sub: "Bilingual service call", lines: SUPPORT_BI },
-  { id: "auto", name: "Triangle Auto Care", phone: "(555) 274‑BRAKE", lang: "EN", desc: "Brake Inspection", sub: "Quote + same‑day check", lines: AUTO_EN },
+  { id: "spa", name: "Serenity Spa", phone: "(555) 123-RELAX", lang: "EN", desc: "Appointment Booking", sub: "Massage & confirmation", lines: SPA_EN },
+  { id: "restaurant", name: "Bella Vista", phone: "(555) 456-DINE", lang: "ES", desc: "Reserva (Español)", sub: "Reserva en español", lines: RESTAURANT_ES },
+  { id: "support_bi", name: "Premier Services", phone: "(555) 789-HELP", lang: "BI", desc: "Support (EN↔ES)", sub: "Bilingual service call", lines: SUPPORT_BI },
+  { id: "auto", name: "Triangle Auto Care", phone: "(555) 274-BRAKE", lang: "EN", desc: "Brake Inspection", sub: "Quote + same-day check", lines: AUTO_EN },
 ];
 
 // ---------- Playback & audio utils (Lovable/Chrome-safe) ----------
@@ -122,16 +116,18 @@ async function tts(
   console.log(`TTS: Starting synthesis for voice ${voiceId}, text: "${text.slice(0, 50)}..."`);
 
   try {
-    console.log('TTS: Calling ElevenLabs via edge function...');
+    // 🔄 UPDATED: send output_format and optional voice_settings (server maps "mp3" → mp3_44100_128)
     const { data, error } = await supabase.functions.invoke("voice", {
       body: { 
         text, 
         voiceId,
-        modelId: 'eleven_multilingual_v2'
+        modelId: "eleven_multilingual_v2",
+        output_format: format,
+        voice_settings: voiceSettings ?? DEFAULT_VOICE_SETTINGS,
       },
     });
 
-    console.log('Voice function response:', { data, error });
+    console.log("Voice function response:", { data, error });
 
     if (error) {
       console.error("TTS: Supabase function error:", error);
@@ -143,8 +139,10 @@ async function tts(
       throw new Error("No audio received from voice service");
     }
 
-    console.log(`TTS: ElevenLabs success! Audio received, size: ${data.audioBase64.length} chars`);
-    await playAudioSegment(data.audioBase64);
+    const contentType = data.contentType || (format === "ulaw_8000" ? "audio/basic" : "audio/mpeg");
+    console.log(`TTS: ElevenLabs success! type=${contentType} size=${data.audioBase64.length} chars`);
+
+    await playAudioSegment(data.audioBase64, contentType, attachToWave);
     onEnded?.();
     
   } catch (error) {
@@ -153,29 +151,32 @@ async function tts(
   }
 }
 
-const playAudioSegment = (audioData: string): Promise<void> => {
+// 🔄 UPDATED: respect returned contentType and wire up waveform analyser
+const playAudioSegment = (audioBase64: string, contentType: string, attachToWave?: (el: HTMLAudioElement) => void): Promise<void> => {
   return new Promise((resolve, reject) => {
     const audio = new Audio();
-    
+
     const onEnded = () => {
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('error', onError);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
       resolve();
     };
-    
     const onError = () => {
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('error', onError);
-      reject(new Error('Audio playback failed'));
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      reject(new Error("Audio playback failed"));
     };
 
-    audio.addEventListener('ended', onEnded);
-    audio.addEventListener('error', onError);
-    
-    audio.src = `data:audio/mp3;base64,${audioData}`;
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+
+    // Attach to waveform visualizer if provided
+    try { attachToWave?.(audio); } catch {}
+
+    audio.src = `data:${contentType};base64,${audioBase64}`;
     audio.play().catch(reject);
   });
-}
+};
 
 async function ringOnce(ms = 1100) {
   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -196,7 +197,6 @@ function useWaveform() {
   const rafRef = useRef<number | null>(null);
 
   async function attach(el: HTMLAudioElement) {
-    // Create/reuse context
     let ctx = ctxRef.current;
     if (!ctx) {
       ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -205,8 +205,8 @@ function useWaveform() {
     if (ctx.state === "suspended") { await ctx.resume(); }
 
     // Cleanup previous
-    if (srcRef.current) try { srcRef.current.disconnect(); } catch {}
-    if (analyserRef.current) try { analyserRef.current.disconnect(); } catch {}
+    try { srcRef.current?.disconnect(); } catch {}
+    try { analyserRef.current?.disconnect(); } catch {}
 
     const source = ctx.createMediaElementSource(el);
     srcRef.current = source;
@@ -314,8 +314,8 @@ export default function DemoPage() {
           booked = true;
           setKpi((k)=> ({ ...k, bookings: k.bookings + 1, timeSavedMin: k.timeSavedMin + 6 }));
         }
+        // 🔄 UPDATED: forward selected output format and pass waveform attach
         await tts(text, vId, format, undefined, undefined, wave.attach);
-        // Minimal pause for natural conversation flow
         await new Promise((r)=> setTimeout(r, delayAfter));
       });
     }
@@ -333,7 +333,7 @@ export default function DemoPage() {
   }
 
   function simulateFollowUp() {
-    alert("✅ Follow‑up SMS queued: 'Thanks for calling! Here's your confirmation link: https://example.com/book'");
+    alert("✅ Follow-up SMS queued: 'Thanks for calling! Here's your confirmation link: https://example.com/book'");
   }
 
   const langs = ["ALL","EN","ES","BI"] as const;
@@ -350,7 +350,7 @@ export default function DemoPage() {
         <CardHeader className="space-y-1">
           <CardTitle>AI Receptionist — Live Demo</CardTitle>
           <div className="text-sm text-muted-foreground">
-            Human‑paced, multilingual calls with realistic ring tones, live transcript, KPIs, and a PSTN (μ‑law) toggle to prove real‑world readiness.
+            Human-paced, multilingual calls with realistic ring tones, live transcript, KPIs, and a PSTN (μ-law) toggle to prove real-world readiness.
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -383,11 +383,11 @@ export default function DemoPage() {
             <div>
               <label className="text-sm font-medium">Output format</label>
               <select value={format} onChange={(e)=> setFormat(e.target.value as any)} className="w-full border rounded-lg p-2 bg-background">
-                <option value="mp3">MP3 (High‑quality web)</option>
-                <option value="ulaw_8000">μ‑law 8000Hz (Telephony)</option>
+                <option value="mp3">MP3 (High-quality web)</option>
+                <option value="ulaw_8000">μ-law 8000Hz (Telephony)</option>
               </select>
               <div className="text-xs text-muted-foreground mt-1">
-                {format==="mp3" ? "Rich, natural audio — perfect for web demos." : "8kHz μ‑law — exactly what phone lines deliver."}
+                {format==="mp3" ? "Rich, natural audio — perfect for web demos." : "8kHz μ-law — exactly what phone lines deliver."}
               </div>
             </div>
           </div>
@@ -448,14 +448,14 @@ export default function DemoPage() {
           {/* Actions */}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-2xl" onClick={exportTxt} disabled={transcript.length===0}>Export transcript</Button>
-            <Button variant="outline" className="rounded-2xl" onClick={simulateFollowUp} disabled={playing}>Simulate follow‑up SMS</Button>
+            <Button variant="outline" className="rounded-2xl" onClick={simulateFollowUp} disabled={playing}>Simulate follow-up SMS</Button>
             {ctaShown && (
               <a href="#get-started" className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">Start Free Trial</a>
             )}
           </div>
 
           <div className="text-[11px] text-muted-foreground mt-3">
-            Voices by ElevenLabs • Toggle between <b>MP3</b> and <b>μ‑law telephony</b> to show real‑world readiness.
+            Voices by ElevenLabs • Toggle between <b>MP3</b> and <b>μ-law telephony</b> to show real-world readiness.
           </div>
         </CardContent>
       </Card>
