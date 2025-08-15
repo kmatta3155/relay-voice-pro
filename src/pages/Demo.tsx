@@ -122,8 +122,7 @@ async function tts(
   console.log(`TTS: Starting synthesis for voice ${voiceId}, text: "${text.slice(0, 50)}..."`);
 
   try {
-    // First try ElevenLabs via Supabase edge function
-    console.log('TTS: Attempting ElevenLabs via edge function...');
+    console.log('TTS: Calling ElevenLabs via edge function...');
     const { data, error } = await supabase.functions.invoke("voice", {
       body: { 
         text, 
@@ -132,95 +131,25 @@ async function tts(
       },
     });
 
-    if (!error && data?.audioBase64) {
-      console.log(`TTS: ElevenLabs success! Audio received, size: ${data.audioBase64.length} chars`);
-      await playAudioSegment(data.audioBase64);
-      onEnded?.();
-      return;
-    } else {
-      console.warn('TTS: ElevenLabs failed, falling back to Web Speech API:', error);
+    console.log('Voice function response:', { data, error });
+
+    if (error) {
+      console.error("TTS: Supabase function error:", error);
+      throw new Error(`Voice function error: ${error.message || JSON.stringify(error)}`);
     }
 
-    // Fallback to Web Speech API
-    if ('speechSynthesis' in window) {
-      console.log('TTS: Using Web Speech API fallback');
-      
-      // Ensure voices are loaded
-      let voices = speechSynthesis.getVoices();
-      if (voices.length === 0) {
-        console.log('TTS: Waiting for voices to load...');
-        await new Promise<void>((resolve) => {
-          const voicesChanged = () => {
-            voices = speechSynthesis.getVoices();
-            if (voices.length > 0) {
-              speechSynthesis.removeEventListener('voiceschanged', voicesChanged);
-              resolve();
-            }
-          };
-          speechSynthesis.addEventListener('voiceschanged', voicesChanged);
-          // Fallback timeout
-          setTimeout(resolve, 1000);
-        });
-        voices = speechSynthesis.getVoices();
-      }
-      
-      console.log(`TTS: Found ${voices.length} voices:`, voices.map(v => v.name));
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Map voice IDs to speech synthesis voices
-      const femaleVoice = voices.find(v => 
-        v.name.toLowerCase().includes('female') || 
-        v.name.includes('Samantha') || 
-        v.name.includes('Karen') ||
-        v.name.includes('Victoria') ||
-        v.lang.startsWith('en') && v.name.includes('Google')
-      );
-      const maleVoice = voices.find(v => 
-        v.name.toLowerCase().includes('male') || 
-        v.name.includes('Alex') || 
-        v.name.includes('Daniel') ||
-        v.name.includes('Tom') ||
-        v.lang.startsWith('en') && !v.name.includes('female')
-      );
-      
-      if (voiceId.includes('21m00')) { // AI voice - use female
-        utterance.voice = femaleVoice || voices[1] || voices[0];
-        console.log('TTS: Using AI voice:', utterance.voice?.name);
-      } else { // Caller voice - use male  
-        utterance.voice = maleVoice || voices[0];
-        console.log('TTS: Using caller voice:', utterance.voice?.name);
-      }
-      
-      utterance.rate = 1.1;
-      utterance.pitch = 1.0;
-      utterance.volume = 0.9;
-      
-      return new Promise<void>((resolve) => {
-        utterance.onend = () => {
-          console.log('TTS: Web Speech playback completed');
-          onEnded?.();
-          resolve();
-        };
-        utterance.onerror = (e) => {
-          console.error('TTS: Web Speech error:', e);
-          onEnded?.();
-          resolve(); // Don't fail the demo
-        };
-        utterance.onstart = () => {
-          console.log('TTS: Web Speech started speaking');
-        };
-        
-        console.log('TTS: Starting speech synthesis...');
-        speechSynthesis.speak(utterance);
-      });
-    } else {
-      console.warn('TTS: No speech synthesis available, skipping audio');
-      onEnded?.();
+    if (!data?.audioBase64) {
+      console.error("TTS: No audio received in response:", data);
+      throw new Error("No audio received from voice service");
     }
+
+    console.log(`TTS: ElevenLabs success! Audio received, size: ${data.audioBase64.length} chars`);
+    await playAudioSegment(data.audioBase64);
+    onEnded?.();
+    
   } catch (error) {
-    console.error("TTS: Fallback failure:", error);
-    onEnded?.(); // Continue demo without audio
+    console.error("TTS: ElevenLabs failed:", error);
+    throw error; // Don't continue, let user know it failed
   }
 }
 

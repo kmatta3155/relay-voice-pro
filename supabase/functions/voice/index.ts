@@ -76,11 +76,10 @@ serve(async (req) => {
     const elevenFormat =
       fmt === "ulaw_8000" ? "ulaw_8000" : "mp3_44100_128"; // mp3 for browser; u-law for PSTN realism
 
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
     const requestBody = {
       text,
       model_id: modelId,
-      output_format: elevenFormat,
       voice_settings: {
         stability: 0.75,
         similarity_boost: 0.85,
@@ -98,7 +97,6 @@ serve(async (req) => {
       headers: {
         "xi-api-key": XI_KEY,
         "Content-Type": "application/json",
-        Accept: "audio/mpeg",
       },
       body: JSON.stringify(requestBody),
     });
