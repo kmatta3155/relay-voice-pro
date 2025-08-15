@@ -1,5 +1,6 @@
 /*
   ElevenLabs TTS proxy for the Demo page (keeps your key server-side)
+  Updated: Force redeployment to pick up secret changes
 
   Supabase → Project Settings → Functions → Secrets:
     ELEVENLABS_API_KEY = <your_service_account_key>
