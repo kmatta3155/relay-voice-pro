@@ -115,32 +115,51 @@ function extractStructuredData(content: string): any {
       }
     }
     
-    // Professional service extraction - clean patterns only
+    // Professional service extraction with section-based parsing
     if (!businessInfo.services) {
-      // Look for structured service lists and clean descriptions
-      const serviceLines = content.split('\n').filter(line => {
-        const cleanLine = line.trim().toLowerCase();
-        return cleanLine.length > 10 && cleanLine.length < 100 && 
-               !cleanLine.includes('http') && !cleanLine.includes('www') &&
-               !cleanLine.includes('©') && !cleanLine.includes('script') &&
-               (cleanLine.includes('service') || cleanLine.includes('treatment') || 
-                cleanLine.includes('therapy') || cleanLine.includes('massage') ||
-                cleanLine.includes('facial') || cleanLine.includes('hair') ||
-                cleanLine.includes('nail') || cleanLine.includes('skin') ||
-                cleanLine.includes('consultation') || cleanLine.includes('procedure'));
-      });
+      // Prefer content near a Services/Menu/Treatments section
+      const sectionMatch = content.match(/(?:^|\n)\s*(services|our services|service menu|treatments|menu|pricing)\b[\s:]*\n([\s\S]{0,1500})/i);
+      const section = sectionMatch ? sectionMatch[2] : content;
+      const lines = section.split('\n').map(l => l.trim()).filter(Boolean);
       
-      if (serviceLines.length > 0) {
-        businessInfo.services = serviceLines.slice(0, 10).map(line => line.trim().replace(/[^\w\s-&,.]/g, ''));
+      const serviceItems: string[] = [];
+      const pricePairs: { name: string; price: string }[] = [];
+      
+      for (const line of lines) {
+        if (line.length < 3 || line.length > 120) continue;
+        if (/https?:\/\//i.test(line) || /\[[^\]]+\]\([^\)]+\)/.test(line)) continue; // skip links/markdown
+        
+        // Capture pairs like "Haircut - $45", "Women's Cut $60+", "Facial: $75-$120", "Starting at $45"
+        const pair = line.match(/^[-*•\s]*([A-Za-z][A-Za-z0-9 &/+'°.-]{2,60})\s*(?:[:\-–]|)\s*(starting\s+at\s+\$\d+|from\s+\$\d+|\$\d+(?:\.\d{2})?(?:\s*[+–-]\s*\$?\d+(?:\.\d{2})?)?)(?:\s*.*)?$/i);
+        if (pair) {
+          const name = pair[1].trim().replace(/\s{2,}/g, ' ');
+          const price = pair[2].trim();
+          if (name.length >= 3 && !/^(price|pricing|rates?)$/i.test(name)) {
+            pricePairs.push({ name, price });
+            if (!serviceItems.includes(name)) serviceItems.push(name);
+            continue;
+          }
+        }
+        // Fallback: bullet list items that look like service names
+        if (/^[-*•]/.test(line) || /(facial|massage|cut|color|treatment|therapy|wax|nail|hair|skin|consultation)/i.test(line)) {
+          const nameOnly = line.replace(/^[-*•]\s*/, '').replace(/\s{2,}/g, ' ');
+          if (!/\$|http|www|\(|\)|\{\}|<|>/.test(nameOnly) && /[A-Za-z]/.test(nameOnly)) {
+            if (!serviceItems.includes(nameOnly) && nameOnly.length <= 80) serviceItems.push(nameOnly);
+          }
+        }
+      }
+      
+      if (serviceItems.length > 0) businessInfo.services = serviceItems.slice(0, 20);
+      if (!businessInfo.pricing && pricePairs.length > 0) {
+        businessInfo.pricing = pricePairs.slice(0, 8).map(p => `${p.name}: ${p.price}`).join('; ');
       }
     }
     
-    // Professional pricing extraction - clean formats only
+    // Professional pricing extraction - clean formats only (fallback if not set above)
     if (!businessInfo.pricing) {
       const cleanPriceRegex = /(?:\$\d+(?:\.\d{2})?(?:\s*-\s*\$\d+(?:\.\d{2})?)?)|(?:starting\s+at\s+\$\d+)|(?:from\s+\$\d+)/gi;
       const priceMatches = content.match(cleanPriceRegex);
       if (priceMatches && priceMatches.length > 0) {
-        // Filter out suspicious prices and keep only realistic service pricing
         const validPrices = priceMatches.filter(price => {
           const amount = parseInt(price.replace(/\D/g, ''));
           return amount >= 10 && amount <= 1000; // Reasonable service price range
