@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Brain, Globe, Loader2 } from "lucide-react";
 import PostCallIntelligence from "@/components/demo/PostCallIntelligence";
 import AnalyticsDashboard from "@/components/demo/AnalyticsDashboard";
 import CompetitiveShowcase from "@/components/demo/CompetitiveShowcase";
 import ROICalculator from "@/components/demo/ROICalculator";
 import IntegrationShowcase from "@/components/demo/IntegrationShowcase";
+import { ragSearch } from "@/lib/rag";
 
 // ---------- Hard-mapped ElevenLabs Voice IDs (replace with your real IDs) ----------
 const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive female voice (EN)
@@ -38,6 +40,8 @@ type Scenario = {
   desc: string;
   sub: string;
   lines: Line[];
+  aiThinking?: boolean;
+  tags?: string[];
 };
 
 // ---------- Scenarios (curated, multilingual, market-ready) ----------
@@ -83,8 +87,53 @@ const AUTO_EN: Line[] = [
   { who: "ai", text: "All set, Marcus. I'll text directions. Please arrive five minutes early.", voiceId: VOICE_AI_EN, pause: 380 },
 ];
 
-// Catalog (pick a subset to keep UI tidy; you can add more)
+// New Instant Training Scenarios
+const HAIR_SALON_INSTANT: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "Thank you for calling Elite Hair Studio! This is your AI receptionist. How can I help you today?", voiceId: VOICE_AI_EN, pause: 400 },
+  { who: "caller", text: "Hi! I saw online that you do color treatments. What are your prices for highlights?", voiceId: VOICE_CALLER_F, pause: 320 },
+  { who: "ai", text: "Absolutely! Based on our current menu, partial highlights start at $120 and full highlights are $180. We use premium Redken products. Would you like to book with one of our colorists?", voiceId: VOICE_AI_EN, pause: 350 },
+  { who: "caller", text: "That sounds great! What about your hours? I work until 5 PM.", voiceId: VOICE_CALLER_F, pause: 280 },
+  { who: "ai", text: "Perfect timing! We're open Tuesday through Saturday, 9 AM to 8 PM, and Sunday 10 AM to 6 PM. I can get you in this Thursday at 6 PM with Sarah, our senior colorist.", voiceId: VOICE_AI_EN, pause: 320 },
+  { who: "caller", text: "Thursday at 6 works perfectly! I'm Jessica Martinez.", voiceId: VOICE_CALLER_F, pause: 260 },
+  { who: "ai", text: "Excellent Jessica! You're booked for Thursday at 6 PM with Sarah for partial highlights. I'll send a confirmation text with our address and prep instructions.", voiceId: VOICE_AI_EN, pause: 420 },
+];
+
+const CAFE_MULTILINGUAL: Line[] = [
+  { who: "ring" }, { who: "ring" },
+  { who: "ai", text: "¡Hola! Gracias por llamar a Café Luna. ¿En qué puedo ayudarle?", voiceId: VOICE_AI_ES, pause: 360 },
+  { who: "caller", text: "Hola, quisiera saber si tienen espacio para una reunión de trabajo mañana por la tarde.", voiceId: VOICE_CALLER_ES, pause: 300 },
+  { who: "ai", text: "¡Por supuesto! Tenemos mesas privadas perfectas para reuniones. ¿Para cuántas personas sería?", voiceId: VOICE_AI_ES, pause: 280 },
+  { who: "caller", text: "Somos cuatro personas, y necesitaríamos WiFi y tal vez un proyector.", voiceId: VOICE_CALLER_ES, pause: 280 },
+  { who: "ai", text: "Perfecto. Nuestra sala de reuniones tiene WiFi de alta velocidad y proyector incluido. ¿Le parece bien de 2 a 4 de la tarde? El costo es de 25 dólares por hora, mínimo dos horas.", voiceId: VOICE_AI_ES, pause: 380 },
+  { who: "caller", text: "Excelente. Reservo de 2 a 4. Soy María González.", voiceId: VOICE_CALLER_ES, pause: 260 },
+  { who: "ai", text: "¡Perfecto María! Reserva confirmada para mañana de 2 a 4 PM. Le enviaré los detalles de acceso y menú de café. ¡Hasta mañana!", voiceId: VOICE_AI_ES, pause: 420 },
+];
+
+// Catalog with new Instant Training scenarios
 const SCENARIOS: Scenario[] = [
+  { 
+    id: "hair_instant", 
+    name: "Elite Hair Studio", 
+    phone: "(555) 847-HAIR", 
+    lang: "EN", 
+    desc: "Instant Training Demo", 
+    sub: "AI trained from website in real-time", 
+    lines: HAIR_SALON_INSTANT,
+    aiThinking: true,
+    tags: ["Instant Training", "Live Data"]
+  },
+  { 
+    id: "cafe_multilingual", 
+    name: "Café Luna", 
+    phone: "(555) 726-LUNA", 
+    lang: "ES", 
+    desc: "Multilingual + Training", 
+    sub: "Same knowledge, Spanish responses", 
+    lines: CAFE_MULTILINGUAL,
+    aiThinking: true,
+    tags: ["Multilingual", "Smart Learning"]
+  },
   { id: "spa", name: "Serenity Spa", phone: "(555) 123-RELAX", lang: "EN", desc: "Appointment Booking", sub: "Massage & confirmation", lines: SPA_EN },
   { id: "restaurant", name: "Bella Vista", phone: "(555) 456-DINE", lang: "ES", desc: "Reserva (Español)", sub: "Reserva en español", lines: RESTAURANT_ES },
   { id: "support_bi", name: "Premier Services", phone: "(555) 789-HELP", lang: "BI", desc: "Support (EN↔ES)", sub: "Bilingual service call", lines: SUPPORT_BI },
@@ -277,6 +326,7 @@ export default function DemoPage() {
   const [ctaShown, setCtaShown] = useState(false);
   const [showPostCall, setShowPostCall] = useState(false);
   const [callCompleted, setCallCompleted] = useState(false);
+  const [aiThinking, setAiThinking] = useState(false);
 
   const qRef = useRef<AudioQueue | null>(null);
   const wave = useWaveform();
@@ -295,7 +345,7 @@ export default function DemoPage() {
 
   function reset() {
     setPlaying(false); setNow("Idle"); setTranscript([]); setCtaShown(false);
-    setShowPostCall(false); setCallCompleted(false);
+    setShowPostCall(false); setCallCompleted(false); setAiThinking(false);
     setKpi({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
     qRef.current = new AudioQueue(setNow);
   }
@@ -327,6 +377,14 @@ export default function DemoPage() {
       const delayAfter = Math.max(50, (line.pause ?? 100) / pace); // Reduced delays for natural flow
 
       await q.add(async ()=> {
+        // Show AI thinking animation for scenarios with aiThinking enabled
+        if (line.who === "ai" && sel.aiThinking && /book|appointment|help|price|hour/i.test(text)) {
+          setAiThinking(true);
+          setNow("AI retrieving knowledge...");
+          await new Promise(r => setTimeout(r, 800 + Math.random() * 1200)); // Random delay 0.8-2s
+          setAiThinking(false);
+        }
+        
         setNow(`${whoLabel} speaking…`); pushT(whoLabel, text);
         if (line.who === "ai" && /booked|confirm|reserv|agendad|confirmée|reserva|all set/i.test(text)) {
           booked = true;
@@ -432,6 +490,38 @@ export default function DemoPage() {
         businessImpact: {
           appointmentBooked: true,
           followUpScheduled: true,
+          paymentProcessed: false,
+          staffNotified: true
+        }
+      },
+      hair_instant: {
+        customerData: {
+          name: "Jessica Martinez",
+          phone: "(555) 123-4567",
+          service: "Hair Highlights",
+          urgency: "Medium" as const,
+          revenue: 120,
+          conversionProb: 94
+        },
+        businessImpact: {
+          appointmentBooked: true,
+          followUpScheduled: true,
+          paymentProcessed: false,
+          staffNotified: true
+        }
+      },
+      cafe_multilingual: {
+        customerData: {
+          name: "María González",
+          phone: "(555) 234-5678",
+          service: "Meeting Room Rental",
+          urgency: "High" as const,
+          revenue: 50,
+          conversionProb: 96
+        },
+        businessImpact: {
+          appointmentBooked: true,
+          followUpScheduled: true,
           paymentProcessed: true,
           staffNotified: true
         }
@@ -474,9 +564,23 @@ export default function DemoPage() {
             {visibleScenarios.map((s)=> (
               <button key={s.id} onClick={()=> setSel(s)} className={`text-left p-4 rounded-xl border transition ${sel.id===s.id? "bg-primary text-primary-foreground border-primary":"bg-card hover:bg-accent"}`}>
                 <div className="text-xs opacity-80">{s.phone} • {s.lang}</div>
-                <div className="font-semibold">{s.name}</div>
+                <div className="font-semibold flex items-center gap-2">
+                  {s.name}
+                  {s.aiThinking && <Brain className="w-3 h-3 opacity-70" />}
+                </div>
                 <div className="text-sm opacity-90">{s.desc}</div>
                 <div className="text-xs opacity-70">{s.sub}</div>
+                {s.tags && (
+                  <div className="flex gap-1 mt-2">
+                    {s.tags.map((tag, i) => (
+                      <span key={i} className={`text-[10px] px-2 py-1 rounded-full ${sel.id===s.id? "bg-primary-foreground/20":"bg-primary/20"} flex items-center gap-1`}>
+                        {tag === "Instant Training" && <Brain className="w-2 h-2" />}
+                        {tag === "Multilingual" && <Globe className="w-2 h-2" />}
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -512,7 +616,15 @@ export default function DemoPage() {
       <Card className="rounded-2xl shadow-sm relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-accent/20 to-transparent" />
         <CardHeader>
-          <CardTitle>Live Call Experience</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Live Call Experience
+            {aiThinking && (
+              <div className="flex items-center gap-1 text-blue-600">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs">AI retrieving knowledge...</span>
+              </div>
+            )}
+          </CardTitle>
           <div className="text-xs text-muted-foreground">{now}</div>
         </CardHeader>
         <CardContent>
