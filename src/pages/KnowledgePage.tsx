@@ -22,6 +22,7 @@ export default function KnowledgePage() {
   const [businessInfo, setBusinessInfo] = useState<any>({});
   const [quickAnswers, setQuickAnswers] = useState<any[]>([]);
   const [extractionProgress, setExtractionProgress] = useState(0);
+  const [activeTab, setActiveTab] = useState("ingestion");
 
   useEffect(() => {
     (async () => {
@@ -64,13 +65,22 @@ export default function KnowledgePage() {
       clearInterval(progressInterval);
       setExtractionProgress(100);
       
-      // Reload data
+      // If the function returned business info, use it immediately and jump to the Business Intelligence tab
+      if (result?.business_info) {
+        setBusinessInfo(result.business_info);
+        setActiveTab("business-info");
+      }
+      
+      // Reload sources list (and fallback to latest source's business_info if needed)
       const s = await supabase.from("knowledge_sources").select("*").order("created_at", { ascending: false });
       if (!s.error && s.data) {
         setSources(s.data);
-        const latestSource = s.data[0];
-        if (latestSource?.meta && typeof latestSource.meta === 'object' && !Array.isArray(latestSource.meta) && 'business_info' in latestSource.meta) {
-          setBusinessInfo(latestSource.meta.business_info);
+        if (!result?.business_info) {
+          const latestSource = s.data[0];
+          if (latestSource?.meta && typeof latestSource.meta === 'object' && !Array.isArray(latestSource.meta) && 'business_info' in latestSource.meta) {
+            setBusinessInfo(latestSource.meta.business_info);
+            setActiveTab("business-info");
+          }
         }
       }
       
@@ -120,7 +130,7 @@ export default function KnowledgePage() {
         </h1>
       </div>
 
-      <Tabs defaultValue="ingestion" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="ingestion">Website Ingestion</TabsTrigger>
           <TabsTrigger value="business-info">Business Intelligence</TabsTrigger>

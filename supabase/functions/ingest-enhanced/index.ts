@@ -523,7 +523,9 @@ serve(async (req) => {
       success: true, 
       chunks_created: chunks.length,
       business_info_extracted: Object.keys(businessInfo).length > 0,
-      source_id: sourceId
+      source_id: sourceId,
+      business_info: businessInfo,
+      crawl_method: crawlMethod
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
