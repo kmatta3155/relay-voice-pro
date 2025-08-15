@@ -10,10 +10,17 @@
 */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
+// Debug: Log all available environment variables
+console.log("Available env vars:", Object.keys(Deno.env.toObject()));
+console.log("ELEVENLABS_API_KEY exists:", !!Deno.env.get("ELEVENLABS_API_KEY"));
+
 const XI_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 const ENV_MODEL = Deno.env.get("ELEVEN_MODEL_ID");
 const DEFAULT_MODEL = ENV_MODEL || "eleven_multilingual_v2";
 const DEFAULT_VOICE = "EXAVITQu4vr4xnSDxMaL"; // safe default
+
+console.log("XI_KEY status:", XI_KEY ? "present" : "missing");
+console.log("XI_KEY length:", XI_KEY ? XI_KEY.length : 0);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,19 +46,33 @@ serve(async (req) => {
   }
 
   try {
+    console.log("Function called with method:", req.method);
+    
     if (!XI_KEY) {
+      console.error("ELEVENLABS_API_KEY is missing or empty");
+      console.log("All env vars:", JSON.stringify(Object.keys(Deno.env.toObject()), null, 2));
       return new Response(
-        JSON.stringify({ error: "Missing ELEVENLABS_API_KEY secret. Configure it in Supabase Functions secrets." }),
+        JSON.stringify({ 
+          error: "Missing ELEVENLABS_API_KEY secret. Configure it in Supabase Functions secrets.",
+          debug: {
+            hasKey: !!XI_KEY,
+            envVars: Object.keys(Deno.env.toObject())
+          }
+        }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const bodyIn = await req.json();
+    console.log("Request body:", JSON.stringify(bodyIn, null, 2));
+    
     // Accept legacy names from the working version
     const text = bodyIn?.text;
     const voiceId = bodyIn?.voiceId || bodyIn?.voice || DEFAULT_VOICE;
     const modelId = bodyIn?.modelId || bodyIn?.model || DEFAULT_MODEL;
     const clientFmt = (bodyIn?.output_format || bodyIn?.format || "mp3") as string;
+
+    console.log("Parsed params:", { text: text?.substring(0, 50), voiceId, modelId, clientFmt });
 
     if (!text) throw new Error("Missing text");
     if (!voiceId) throw new Error("Missing voiceId/voice");
@@ -73,6 +94,10 @@ serve(async (req) => {
       output_format: elevenFormat, // <-- ensure server returns the format we expect
     };
 
+    console.log("Making request to ElevenLabs:", url);
+    console.log("Request body:", JSON.stringify(requestBody, null, 2));
+    console.log("Using API key ending in:", XI_KEY.slice(-8));
+
     const r = await fetch(url, {
       method: "POST",
       headers: {
@@ -83,23 +108,40 @@ serve(async (req) => {
       body: JSON.stringify(requestBody),
     });
 
+    console.log("ElevenLabs response status:", r.status);
+    console.log("ElevenLabs response headers:", Object.fromEntries(r.headers.entries()));
+
     if (!r.ok) {
       const errorText = await r.text();
+      console.error("ElevenLabs error:", errorText);
       throw new Error(`ElevenLabs ${r.status}: ${errorText}`);
     }
 
     const buf = new Uint8Array(await r.arrayBuffer());
+    console.log("Audio buffer size:", buf.length);
+    
     const response = {
       audioBase64: toBase64(buf),
       contentType: elevenFormat === "ulaw_8000" ? "audio/basic" : "audio/mpeg",
     };
+
+    console.log("Returning audio response, base64 length:", response.audioBase64.length);
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     const errorMessage = String(e?.message ?? e);
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    console.error("Function error:", errorMessage);
+    console.error("Full error:", e);
+    
+    return new Response(JSON.stringify({ 
+      error: errorMessage,
+      debug: {
+        hasApiKey: !!XI_KEY,
+        timestamp: new Date().toISOString()
+      }
+    }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
