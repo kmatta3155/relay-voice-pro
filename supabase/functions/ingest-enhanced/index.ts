@@ -73,6 +73,8 @@ function extractStructuredData(content: string): any {
             if (data.telephone) businessInfo.phone = data.telephone;
             if (data.email) businessInfo.email = data.email;
             if (data.address) businessInfo.address = typeof data.address === 'string' ? data.address : JSON.stringify(data.address);
+            if (data.hasOfferCatalog || data.makesOffer) businessInfo.services = data.hasOfferCatalog || data.makesOffer;
+            if (data.priceRange) businessInfo.pricing = data.priceRange;
           }
         } catch (e) {
           console.log("Failed to parse JSON-LD:", e);
@@ -80,10 +82,18 @@ function extractStructuredData(content: string): any {
       }
     }
     
-    // Extract microdata (basic)
+    // Enhanced extraction patterns
     const phoneRegex = /(?:phone|tel|call).*?(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/gi;
     const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
     const hoursRegex = /(monday|tuesday|wednesday|thursday|friday|saturday|sunday).*?(\d{1,2}:\d{2}\s*(?:am|pm)?.*?\d{1,2}:\d{2}\s*(?:am|pm)?)/gi;
+    
+    // Service extraction patterns
+    const serviceKeywords = ['service', 'treatment', 'procedure', 'therapy', 'care', 'consultation', 'session', 'appointment', 'class', 'program'];
+    const serviceRegex = new RegExp(`(?:our\\s+)?(${serviceKeywords.join('|')})s?[\\s\\w]*(?:include|offer|provide)?[:\\s]*([^\\n\\.]{10,100})`, 'gi');
+    
+    // Pricing extraction patterns  
+    const priceRegex = /(?:\$\d+(?:\.\d{2})?(?:\s*-\s*\$\d+(?:\.\d{2})?)?)|(?:starting\s+(?:at\s+|from\s+)?\$\d+)|(?:price[s]?[:\s]+\$?\d+)/gi;
+    const priceRangeRegex = /(?:pricing|rates?|fees?|costs?)[\s:]*(?:\$?\d+(?:\.\d{2})?(?:\s*-\s*\$?\d+(?:\.\d{2})?)?)|(?:affordable|budget|premium|luxury)\s+(?:pricing|rates)/gi;
     
     if (!businessInfo.phone) {
       const phoneMatch = content.match(phoneRegex);
@@ -102,6 +112,24 @@ function extractStructuredData(content: string): any {
           day: match[1].charAt(0).toUpperCase() + match[1].slice(1),
           hours: match[2].trim()
         }));
+      }
+    }
+    
+    // Extract services if not already found
+    if (!businessInfo.services) {
+      const serviceMatches = [...content.matchAll(serviceRegex)];
+      if (serviceMatches.length > 0) {
+        businessInfo.services = serviceMatches.map(match => match[2]?.trim()).filter(s => s && s.length > 5).slice(0, 15);
+      }
+    }
+    
+    // Extract pricing information
+    if (!businessInfo.pricing) {
+      const priceMatches = content.match(priceRegex);
+      const priceRangeMatches = content.match(priceRangeRegex);
+      if (priceMatches || priceRangeMatches) {
+        const allPrices = [...(priceMatches || []), ...(priceRangeMatches || [])];
+        businessInfo.pricing = allPrices.slice(0, 5).join(', ');
       }
     }
     
@@ -124,17 +152,21 @@ async function extractBusinessInfo(content: string): Promise<any> {
   }
 
   try {
-    const prompt = `Extract business information from this content. Focus on accuracy over completeness.
-    Return JSON with ONLY the fields you find:
+    const prompt = `Extract detailed business information from this content. Focus on services and pricing along with basic info.
+    Return JSON with ONLY the fields you clearly find:
     - business_hours: Array like [{day: "Monday", hours: "9:00 AM - 5:00 PM"}] (be precise with formatting)
     - phone: Primary phone number (format: XXX-XXX-XXXX)
     - email: Primary business email
     - address: Complete physical address
-    - services: Array of main services offered (max 10)
-    - pricing: Brief pricing info if clearly stated
-    - about: 1-2 sentence business description
+    - services: Array of ALL services/treatments offered (extract comprehensively, max 20)
+    - pricing: Detailed pricing information including ranges, starting prices, package deals
+    - about: 2-3 sentence business description including specialties
+    - specialties: Array of business specialties or focus areas
+    - packages: Any service packages or bundles offered
     
-    Content: ${content.slice(0, 6000)}`;
+    PRIORITIZE: Look specifically for service menus, treatment lists, pricing tables, and service descriptions.
+    
+    Content: ${content.slice(0, 8000)}`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -331,15 +363,47 @@ async function createQuickAnswers(tenantId: string, businessInfo: any, sb: any) 
     });
   }
 
-  // Services patterns
+  // Services patterns - Enhanced
   if (businessInfo.services?.length) {
-    const servicesText = businessInfo.services.slice(0, 8).join(", "); // Limit to prevent too long answers
+    const servicesText = businessInfo.services.slice(0, 12).join(", ");
     quickAnswers.push({
       tenant_id: tenantId,
-      question_pattern: "(?i)(service|treatment|offer|what.*do|menu|procedures)",
+      question_pattern: "(?i)(service|treatment|offer|what.*do|menu|procedures|what.*available|therapy|care)",
       question_type: "services",
       answer: `We offer these services: ${servicesText}`,
-      confidence: 0.88
+      confidence: 0.90
+    });
+    
+    // Additional service-specific patterns
+    quickAnswers.push({
+      tenant_id: tenantId,
+      question_pattern: "(?i)(appointment|book|schedule|available|treatment.*list)",
+      question_type: "services",
+      answer: `Our available services include: ${servicesText}. Please call to schedule an appointment.`,
+      confidence: 0.85
+    });
+  }
+
+  // Specialties patterns
+  if (businessInfo.specialties?.length) {
+    const specialtiesText = businessInfo.specialties.slice(0, 5).join(", ");
+    quickAnswers.push({
+      tenant_id: tenantId,
+      question_pattern: "(?i)(specialize|specialty|focus|expert|best.*at)",
+      question_type: "specialties",
+      answer: `We specialize in: ${specialtiesText}`,
+      confidence: 0.87
+    });
+  }
+
+  // Packages patterns
+  if (businessInfo.packages) {
+    quickAnswers.push({
+      tenant_id: tenantId,
+      question_pattern: "(?i)(package|bundle|deal|combo|special.*offer)",
+      question_type: "packages",
+      answer: `We offer these packages: ${businessInfo.packages}`,
+      confidence: 0.86
     });
   }
 
@@ -354,14 +418,23 @@ async function createQuickAnswers(tenantId: string, businessInfo: any, sb: any) 
     });
   }
 
-  // Pricing patterns
+  // Pricing patterns - Enhanced
   if (businessInfo.pricing) {
     quickAnswers.push({
       tenant_id: tenantId,
-      question_pattern: "(?i)(price|cost|fee|rate|how much|pricing)",
+      question_pattern: "(?i)(price|cost|fee|rate|how much|pricing|expensive|affordable|budget)",
       question_type: "pricing",
       answer: `Pricing information: ${businessInfo.pricing}`,
-      confidence: 0.85
+      confidence: 0.88
+    });
+    
+    // Additional pricing patterns
+    quickAnswers.push({
+      tenant_id: tenantId,
+      question_pattern: "(?i)(consultation.*cost|session.*price|treatment.*cost|starting.*price)",
+      question_type: "pricing",
+      answer: `Our pricing: ${businessInfo.pricing}. Call for detailed pricing on specific services.`,
+      confidence: 0.82
     });
   }
 
@@ -433,9 +506,9 @@ console.log("Request body:", requestBody);
               onlyMainContent: true
             },
             crawlerOptions: {
-              includes: ['**/hours*', '**/contact*', '**/about*', '**/services*', '**/pricing*'],
-              excludes: ['**/admin*', '**/login*', '**/cart*', '**/checkout*'],
-              maxDepth: 2
+              includes: ['**/services*', '**/pricing*', '**/menu*', '**/treatments*', '**/packages*', '**/rates*', '**/hours*', '**/contact*', '**/about*'],
+              excludes: ['**/admin*', '**/login*', '**/cart*', '**/checkout*', '**/blog*', '**/news*'],
+              maxDepth: 3
             }
           })
         });
