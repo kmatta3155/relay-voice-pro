@@ -426,23 +426,9 @@ function KnowledgeTab() {
     try {
       const result = await ingestWebsite(tenantId, newWebsite);
       
-      // Always update business info with the latest extraction
+      // If business info was extracted, show it immediately
       if (result?.business_info && Object.keys(result.business_info).length > 0) {
-        // Merge with existing business info if we have multiple sources
-        setBusinessInfo(prev => {
-          if (!prev) return result.business_info;
-          
-          // Merge business hours, services, etc.
-          return {
-            ...prev,
-            ...result.business_info,
-            business_hours: result.business_info.business_hours || prev.business_hours,
-            services: [...(prev.services || []), ...(result.business_info.services || [])].filter((v, i, a) => a.indexOf(v) === i),
-            phone: result.business_info.phone || prev.phone,
-            email: result.business_info.email || prev.email,
-            address: result.business_info.address || prev.address,
-          };
-        });
+        setBusinessInfo(result.business_info);
       }
       
       await loadKnowledgeData(tenantId);
@@ -451,28 +437,6 @@ function KnowledgeTab() {
       console.error("Failed to ingest website:", error);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function clearBusinessIntelligence() {
-    if (!tenantId) return;
-    
-    try {
-      // Clear all knowledge sources and quick answers
-      const { error } = await supabase
-        .from('knowledge_sources')
-        .delete()
-        .eq('tenant_id', tenantId);
-      
-      if (error) throw error;
-      
-      setBusinessInfo(null);
-      setSources([]);
-      setSearchResults([]);
-      setUnresolvedQuestions([]);
-      
-    } catch (error) {
-      console.error('Failed to clear business intelligence:', error);
     }
   }
 
@@ -646,20 +610,9 @@ function KnowledgeTab() {
       {((businessInfo && Object.keys(businessInfo).length > 0) || sources.length > 0) && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Building className="w-5 h-5" />
-                Business Intelligence
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={clearBusinessIntelligence}
-                className="rounded-2xl text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="w-3 h-3 mr-1" />
-                Clear All
-              </Button>
+            <CardTitle className="flex items-center gap-2">
+              <Building className="w-5 h-5" />
+              Business Intelligence
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -672,7 +625,7 @@ function KnowledgeTab() {
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {businessInfo?.business_hours && (
+              {businessInfo.business_hours && (
                 <div className="p-3 bg-blue-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-blue-900">Business Hours</h4>
                   <div className="space-y-1">
@@ -688,16 +641,16 @@ function KnowledgeTab() {
                 </div>
               )}
               
-              {(businessInfo?.phone || businessInfo?.email) && (
+              {(businessInfo.phone || businessInfo.email) && (
                 <div className="p-3 bg-green-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-green-900">Contact Information</h4>
                   <div className="space-y-1">
-                    {businessInfo?.phone && (
+                    {businessInfo.phone && (
                       <div className="text-xs text-green-800">
                         <span className="font-medium">Phone:</span> {businessInfo.phone}
                       </div>
                     )}
-                    {businessInfo?.email && (
+                    {businessInfo.email && (
                       <div className="text-xs text-green-800">
                         <span className="font-medium">Email:</span> {businessInfo.email}
                       </div>
@@ -706,7 +659,7 @@ function KnowledgeTab() {
                 </div>
               )}
               
-              {businessInfo?.services && (
+              {businessInfo.services && (
                 <div className="p-3 bg-purple-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-purple-900">Services</h4>
                   <div className="text-xs text-purple-800">
@@ -718,7 +671,7 @@ function KnowledgeTab() {
                 </div>
               )}
               
-              {businessInfo?.about && (
+              {businessInfo.about && (
                 <div className="p-3 bg-orange-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-orange-900">About</h4>
                   <div className="text-xs text-orange-800">{businessInfo.about}</div>

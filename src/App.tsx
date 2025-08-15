@@ -15,7 +15,6 @@ import SignInScreen from "@/components/SignInScreen";
 import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
 import Demo from "@/pages/Demo";
-import IngestTest from "@/pages/IngestTest";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
@@ -299,13 +298,13 @@ function ResetPasswordScreen(){
 }
 
 export default function RelayAIPlatformApp() {
-  const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'|'auth'|'reset'|'ingest'>(() => {
+  const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'|'auth'|'reset'>(() => {
     if (typeof window === 'undefined') return 'site';
     const raw = location.hash || "";
     // Force auth mode if tokens are in the hash anywhere (double-hash safe)
     if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) return "auth";
     const h = raw.replace('#','');
-    return (['app','signin','admin','auth','reset','ingest'].includes(h) ? (h as any) : 'site');
+    return (['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site');
   });
   useEffect(() => {
     const onHash = () => {
@@ -314,7 +313,7 @@ export default function RelayAIPlatformApp() {
         setMode("auth"); return;
       }
       const h = raw.replace('#','');
-      setMode((['app','signin','admin','auth','reset','ingest'].includes(h) ? (h as any) : 'site'));
+      setMode((['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site'));
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -330,9 +329,7 @@ export default function RelayAIPlatformApp() {
           ? <AuthCallback />
           : mode === 'reset'
             ? <ResetPasswordScreen />
-            : mode === 'ingest'
-              ? <AuthGate><IngestTest /></AuthGate>
-              : <MarketingSite />;
+            : <MarketingSite />;
 
   return (
     <QueryClientProvider client={queryClient}>
