@@ -523,8 +523,17 @@ function KnowledgeTab() {
               disabled={!newWebsite || loading} 
               className="rounded-2xl"
             >
-              {loading ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-              Ingest Website
+              {loading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                  AI Processing...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Analyze & Ingest
+                </>
+              )}
             </Button>
           </div>
           <p className="text-xs text-slate-500">
