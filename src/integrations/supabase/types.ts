@@ -102,6 +102,39 @@ export type Database = {
           },
         ]
       }
+      business_quick_answers: {
+        Row: {
+          answer: string
+          confidence: number | null
+          created_at: string | null
+          id: string
+          question_pattern: string
+          question_type: string
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          answer: string
+          confidence?: number | null
+          created_at?: string | null
+          id?: string
+          question_pattern: string
+          question_type: string
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          answer?: string
+          confidence?: number | null
+          created_at?: string | null
+          id?: string
+          question_pattern?: string
+          question_type?: string
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       calls: {
         Row: {
           at: string | null
@@ -181,6 +214,7 @@ export type Database = {
           created_at: string
           embedding: string
           id: string
+          meta: Json | null
           source_id: string | null
           tenant_id: string
           token_count: number
@@ -190,6 +224,7 @@ export type Database = {
           created_at?: string
           embedding: string
           id?: string
+          meta?: Json | null
           source_id?: string | null
           tenant_id: string
           token_count?: number
@@ -199,6 +234,7 @@ export type Database = {
           created_at?: string
           embedding?: string
           id?: string
+          meta?: Json | null
           source_id?: string | null
           tenant_id?: string
           token_count?: number
@@ -696,6 +732,14 @@ export type Database = {
         Args: { "": string } | { "": unknown }
         Returns: unknown
       }
+      get_quick_answer: {
+        Args: { p_query: string; p_tenant: string }
+        Returns: {
+          answer: string
+          confidence: number
+          question_type: string
+        }[]
+      }
       halfvec_avg: {
         Args: { "": number[] }
         Returns: unknown
@@ -785,6 +829,15 @@ export type Database = {
       refresh_kpis: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      search_knowledge_keywords: {
+        Args: { p_match_count?: number; p_query: string; p_tenant: string }
+        Returns: {
+          chunk_id: string
+          content: string
+          score: number
+          source_id: string
+        }[]
       }
       sparsevec_out: {
         Args: { "": unknown }

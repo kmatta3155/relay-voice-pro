@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ragSearch, ingestWebsite } from "@/lib/rag";
+import { ragSearchEnhanced, ingestWebsite } from "@/lib/rag";
+import { Badge } from "@/components/ui/badge";
 
-type Result = { chunk_id: string; source_id: string; content: string; score: number };
+type Result = { chunk_id: string; source_id: string; content: string; score: number; relevance_type?: string; source?: string };
 
 export default function KnowledgePage() {
   const [tenantId, setTenantId] = useState<string>("");
@@ -13,6 +14,7 @@ export default function KnowledgePage() {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Result[]>([]);
+  const [searchMetadata, setSearchMetadata] = useState<any>(null);
   const [sources, setSources] = useState<any[]>([]);
 
   useEffect(() => {
@@ -46,8 +48,9 @@ export default function KnowledgePage() {
     if (!tenantId || !query) return;
     setBusy(true);
     try {
-      const res = await ragSearch(tenantId, query, 8);
-      setResults(res);
+      const res = await ragSearchEnhanced(tenantId, query, 8);
+      setResults(res.results || []);
+      setSearchMetadata(res);
     } catch (e) {
       alert(String(e));
     } finally {
@@ -74,9 +77,20 @@ export default function KnowledgePage() {
           <div className="pt-4 border-t">
             <label className="text-sm font-medium">Ask your knowledge base</label>
             <div className="flex gap-2">
-              <Input placeholder="e.g., Do you open on Saturdays?" value={query} onChange={(e)=> setQuery(e.target.value)} />
-              <Button onClick={handleSearch} disabled={!query || busy} className="rounded-2xl">Search</Button>
+              <Input placeholder="e.g., What are your business hours?" value={query} onChange={(e)=> setQuery(e.target.value)} />
+              <Button onClick={handleSearch} disabled={!query || busy} className="rounded-2xl">
+                {busy ? "Searching..." : "Search"}
+              </Button>
             </div>
+            {searchMetadata && (
+              <div className="flex gap-2 mt-2">
+                <Badge variant="outline">{searchMetadata.search_type}</Badge>
+                {searchMetadata.query_expanded && <Badge variant="secondary">Query Expanded</Badge>}
+                <span className="text-xs text-muted-foreground">
+                  Found {results.length} results
+                </span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -98,10 +112,26 @@ export default function KnowledgePage() {
         <Card className="rounded-2xl shadow-sm">
           <CardHeader><CardTitle>Top matches</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            {results.length === 0 && <div className="text-sm text-muted-foreground">Run a search to see semantic matches.</div>}
-            {results.map((r)=> (
-              <div key={r.chunk_id} className="p-3 rounded-xl border bg-card">
-                <div className="text-[11px] text-muted-foreground mb-1">score {(r.score || 0).toFixed(3)}</div>
+            {results.length === 0 && <div className="text-sm text-muted-foreground">Run a search to see enhanced semantic matches.</div>}
+            {results.map((r, i)=> (
+              <div key={r.chunk_id || i} className="p-3 rounded-xl border bg-card">
+                <div className="flex justify-between items-start mb-1">
+                  <div className="text-[11px] text-muted-foreground">
+                    score {(r.score || 0).toFixed(3)}
+                  </div>
+                  <div className="flex gap-1">
+                    {r.relevance_type && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0">
+                        {r.relevance_type}
+                      </Badge>
+                    )}
+                    {r.source === 'quick_answer' && (
+                      <Badge variant="default" className="text-[10px] px-1 py-0">
+                        Quick Answer
+                      </Badge>
+                    )}
+                  </div>
+                </div>
                 <div className="text-sm whitespace-pre-wrap">{r.content.slice(0, 700)}{r.content.length>700 ? "…" : ""}</div>
               </div>
             ))}
