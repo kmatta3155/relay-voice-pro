@@ -33,6 +33,22 @@ function createClient() {
           });
           if (!r.ok) throw new Error(`Select failed: ${await r.text()}`);
           return { data: await r.json(), error: null };
+        },
+        async delete() {
+          return {
+            eq(column: string, value: any) {
+              return {
+                async execute() {
+                  const r = await fetch(`${url}/rest/v1/${table}?${column}=eq.${value}`, {
+                    method: "DELETE",
+                    headers: { "Authorization": `Bearer ${key}`, "apikey": key }
+                  });
+                  if (!r.ok) throw new Error(`Delete failed: ${await r.text()}`);
+                  return { data: null, error: null };
+                }
+              };
+            }
+          };
         }
       };
     }
@@ -251,17 +267,8 @@ async function createQuickAnswers(tenantId: string, businessInfo: any, sb: any) 
 
   // Clear existing quick answers for this tenant first
   try {
-    const deleteResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/business_quick_answers?tenant_id=eq.${tenantId}`, {
-      method: "DELETE",
-      headers: { 
-        "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, 
-        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
-        "Content-Type": "application/json"
-      }
-    });
-    if (!deleteResponse.ok) {
-      console.log("Could not clear existing quick answers:", await deleteResponse.text());
-    }
+    await sb.from("business_quick_answers").delete().eq("tenant_id", tenantId).execute();
+    console.log("Cleared existing quick answers");
   } catch (error) {
     console.log("Could not clear existing quick answers:", error);
   }
