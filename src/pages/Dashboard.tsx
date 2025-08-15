@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bot, LayoutDashboard, Users, Calendar, MessageCircle, PhoneCall, BarChart3, Plus, Search, Filter, Download, Trash2, Edit, Save, X, Send, Zap, Check, Brain, BookOpen } from "lucide-react";
+import { Bot, LayoutDashboard, Users, Calendar, MessageCircle, PhoneCall, BarChart3, Plus, Search, Filter, Download, Trash2, Edit, Save, X, Send, Zap, Check, Brain, BookOpen, Globe, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import * as repo from "@/lib/data"; // expects helpers from earlier steps
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import KnowledgePage from "@/pages/KnowledgePage";
-import OnboardingPage from "@/pages/Onboarding";
+import { Badge } from "@/components/ui/badge";
+import { ragSearch, ingestWebsite } from "@/lib/rag";
 
 /** Dashboard (tabbed) wired to Supabase via src/lib/data.ts */
 
@@ -48,8 +48,8 @@ export default function Dashboard() {
       {tab==="messages"    && <MessagesTab threads={threads} setThreads={setThreads} />}
       {tab==="calls"       && <CallsTab calls={calls} />}
       {tab==="analytics"   && <AnalyticsTab leads={leads} calls={calls} />}
-      {tab==="knowledge"   && <KnowledgePage />}
-      {tab==="onboarding"  && <OnboardingPage />}
+      {tab==="knowledge"   && <KnowledgeTab />}
+      {tab==="onboarding"  && <OnboardingTab />}
     </>,
     tab, setTab
   );
@@ -379,6 +379,302 @@ function AnalyticsTab({ leads, calls }: any){
         </ul>
       </CardContent></Card>
       <Card className="rounded-2xl shadow-sm md:col-span-2"><CardHeader><CardTitle>Calls (total)</CardTitle></CardHeader><CardContent className="text-sm text-slate-600">Total calls: <b>{calls.length}</b>. Add charts later (we can wire to a chart lib or embed Supabase SQL).</CardContent></Card>
+    </div>
+  );
+}
+
+/* ---------- Knowledge Management ---------- */
+function KnowledgeTab() {
+  const [tenantId, setTenantId] = useState<string>("");
+  const [sources, setSources] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [unresolvedQuestions, setUnresolvedQuestions] = useState<any[]>([]);
+  const [newWebsite, setNewWebsite] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      const user = (await supabase.auth.getUser()).data.user;
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("active_tenant_id").eq("id", user.id).maybeSingle();
+      if (!data?.active_tenant_id) return;
+      setTenantId(data.active_tenant_id);
+      await loadKnowledgeData(data.active_tenant_id);
+    })();
+  }, []);
+
+  async function loadKnowledgeData(tid: string) {
+    try {
+      const [sourcesRes, questionsRes] = await Promise.all([
+        supabase.from("knowledge_sources").select("*").eq("tenant_id", tid).order("created_at", { ascending: false }),
+        supabase.from("unresolved_questions").select("*").eq("tenant_id", tid).eq("status", "open").order("created_at", { ascending: false })
+      ]);
+      
+      if (sourcesRes.data) setSources(sourcesRes.data);
+      if (questionsRes.data) setUnresolvedQuestions(questionsRes.data);
+    } catch (error) {
+      console.error("Failed to load knowledge data:", error);
+    }
+  }
+
+  async function handleWebsiteIngestion() {
+    if (!tenantId || !newWebsite) return;
+    setLoading(true);
+    try {
+      await ingestWebsite(tenantId, newWebsite);
+      await loadKnowledgeData(tenantId);
+      setNewWebsite("");
+    } catch (error) {
+      console.error("Failed to ingest website:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSearch() {
+    if (!tenantId || !searchQuery) return;
+    setLoading(true);
+    try {
+      const results = await ragSearch(tenantId, searchQuery, 10);
+      setSearchResults(results);
+    } catch (error) {
+      console.error("Search failed:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteSource(sourceId: string) {
+    try {
+      await supabase.from("knowledge_sources").delete().eq("id", sourceId);
+      await loadKnowledgeData(tenantId);
+    } catch (error) {
+      console.error("Failed to delete source:", error);
+    }
+  }
+
+  async function markQuestionResolved(questionId: string) {
+    try {
+      await supabase.from("unresolved_questions").update({ status: "resolved" }).eq("id", questionId);
+      await loadKnowledgeData(tenantId);
+    } catch (error) {
+      console.error("Failed to update question:", error);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Knowledge Search */}
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Search className="w-5 h-5" />
+            Knowledge Search
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input 
+              placeholder="Search your business knowledge..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            />
+            <Button onClick={handleSearch} disabled={!searchQuery || loading} className="rounded-2xl">
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            </Button>
+          </div>
+          
+          {searchResults.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm">Search Results:</h4>
+              {searchResults.map((result, idx) => (
+                <div key={idx} className="p-3 bg-slate-50 rounded-xl text-sm">
+                  <div className="flex justify-between items-start mb-1">
+                    <Badge variant="secondary">Score: {(result.score || 0).toFixed(3)}</Badge>
+                  </div>
+                  <p className="text-slate-700">{result.content.slice(0, 200)}...</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Website Ingestion */}
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="w-5 h-5" />
+            Retrain from Website
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input 
+              placeholder="https://yourbusiness.com" 
+              value={newWebsite}
+              onChange={(e) => setNewWebsite(e.target.value)}
+            />
+            <Button 
+              onClick={handleWebsiteIngestion} 
+              disabled={!newWebsite || loading} 
+              className="rounded-2xl"
+            >
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+              Ingest Website
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">
+            Enter your business website URL to automatically extract and add knowledge to your AI receptionist.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Knowledge Sources */}
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="w-5 h-5" />
+            Knowledge Sources ({sources.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {sources.length === 0 ? (
+            <p className="text-slate-500 text-sm">No knowledge sources yet. Add a website above to get started.</p>
+          ) : (
+            <div className="space-y-3">
+              {sources.map((source) => (
+                <div key={source.id} className="flex items-center justify-between p-3 border rounded-xl">
+                  <div>
+                    <div className="font-medium text-sm">{source.title || source.source_url}</div>
+                    <div className="text-xs text-slate-500">
+                      {source.source_type} • {new Date(source.created_at).toLocaleDateString()}
+                      {source.meta?.bytes && ` • ${Math.round(source.meta.bytes / 1000)}KB`}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setSelectedSource(source)}
+                      className="rounded-2xl"
+                    >
+                      <Edit className="w-3 h-3" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => deleteSource(source.id)}
+                      className="rounded-2xl text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Learning Mode */}
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            Learning Mode - Unresolved Questions ({unresolvedQuestions.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {unresolvedQuestions.length === 0 ? (
+            <p className="text-slate-500 text-sm">No unresolved questions. Your AI is handling all inquiries!</p>
+          ) : (
+            <div className="space-y-3">
+              {unresolvedQuestions.map((question) => (
+                <div key={question.id} className="p-3 border rounded-xl bg-amber-50">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="font-medium text-sm mb-1">"{question.question}"</p>
+                      <p className="text-xs text-slate-500">
+                        Asked {new Date(question.created_at).toLocaleDateString()}
+                        {question.call_id && ` • Call ID: ${question.call_id}`}
+                      </p>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      onClick={() => markQuestionResolved(question.id)}
+                      className="rounded-2xl ml-3"
+                    >
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Resolve
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function OnboardingTab() {
+  return (
+    <div className="space-y-6">
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5" />
+            Getting Started
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <div>
+                <div className="font-medium text-sm">Dashboard Access</div>
+                <div className="text-xs text-slate-500">You're logged in and ready to go!</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl">
+              <Brain className="w-5 h-5 text-blue-600" />
+              <div>
+                <div className="font-medium text-sm">Train Your AI</div>
+                <div className="text-xs text-slate-500">Go to Knowledge tab and add your business website</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl">
+              <PhoneCall className="w-5 h-5 text-purple-600" />
+              <div>
+                <div className="font-medium text-sm">Test Your Receptionist</div>
+                <div className="text-xs text-slate-500">Use the demo page to test AI responses</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle>Next Steps</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-slate-600">
+          <ol className="list-decimal list-inside space-y-2">
+            <li>Add your business website in the Knowledge tab</li>
+            <li>Test the AI responses in the demo</li>
+            <li>Configure your phone number and business hours</li>
+            <li>Set up appointment booking integrations</li>
+            <li>Monitor calls and leads in this dashboard</li>
+          </ol>
+        </CardContent>
+      </Card>
     </div>
   );
 }

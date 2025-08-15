@@ -22,6 +22,9 @@ import {
   Award,
   Sparkles,
   Play,
+  Brain,
+  Users,
+  Settings,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -105,7 +108,7 @@ const features = [
   { icon: <Phone className="w-6 h-6" aria-hidden />, title: "Answer Every Call", text: "Friendly, on-brand voice 24/7—never miss a booking." },
   { icon: <CalendarDays className="w-6 h-6" aria-hidden />, title: "Book Appointments", text: "Real-time scheduling with Google/Outlook or your booking app." },
   { icon: <MessageSquare className="w-6 h-6" aria-hidden />, title: "Smart FAQs", text: "Instant answers about pricing, services, hours, and directions." },
-  { icon: <Shield className="w-6 h-6" aria-hidden />, title: "Call Summaries", text: "Auto notes + SMS/email follow‑ups to reduce no‑shows." },
+  { icon: <Brain className="w-6 h-6" aria-hidden />, title: "Instant Knowledge", text: "Learns your business from your website in minutes, not weeks." },
   { icon: <Clock className="w-6 h-6" aria-hidden />, title: "After-Hours Magic", text: "Capture nights & weekends callers you’d otherwise miss." },
   { icon: <Bot className="w-6 h-6" aria-hidden />, title: "Industry-Tuned", text: "Prebuilt flows for salons, auto shops, med spas, contractors, and more." },
 ];
@@ -119,9 +122,63 @@ const faqs = [
 ];
 
 const tiers = [
-  { name: "Starter", price: "$49", period: "/mo", badge: "Best for solos", points: ["Business‑hours call answering", "Voicemail + transcription", "Basic FAQ responses", "Email/SMS summaries (daily)"], cta: "Start free trial" },
-  { name: "Standard", price: "$149", period: "/mo", badge: "Most popular", points: ["24/7 call coverage", "Live appointment booking", "Calendar/booking integrations", "Automated reminders"], highlighted: true as const, cta: "Start free trial" },
-  { name: "Premium", price: "$349", period: "/mo", badge: "Scale & multilocation", points: ["Unlimited calls/minutes", "Analytics & CRM sync", "Multilingual + custom voice", "White‑label & SLAs"], cta: "Talk to sales" },
+  { 
+    name: "Starter", 
+    price: "$49", 
+    period: "/mo", 
+    badge: "Best for solos", 
+    points: [
+      "Business‑hours call answering", 
+      "Voicemail + transcription", 
+      "Basic FAQ responses", 
+      "Instant AI Training (1/month)",
+      "Email/SMS summaries (daily)"
+    ], 
+    cta: "Start free trial" 
+  },
+  { 
+    name: "Standard", 
+    price: "$149", 
+    period: "/mo", 
+    badge: "Most popular", 
+    points: [
+      "24/7 call coverage", 
+      "Live appointment booking", 
+      "Calendar/booking integrations", 
+      "Instant AI Training (unlimited)",
+      "Automated reminders"
+    ], 
+    highlighted: true as const, 
+    cta: "Start free trial" 
+  },
+  { 
+    name: "Premium", 
+    price: "$349", 
+    period: "/mo", 
+    badge: "Scale & multilocation", 
+    points: [
+      "Unlimited calls/minutes", 
+      "Analytics & CRM sync", 
+      "Instant AI Training (unlimited)",
+      "Multilingual + custom voice", 
+      "White‑label & SLAs"
+    ], 
+    cta: "Talk to sales" 
+  },
+  { 
+    name: "Pro+", 
+    price: "$399", 
+    period: "/mo", 
+    badge: "Enterprise ready", 
+    points: [
+      "Everything in Premium", 
+      "Continuous Learning from every call",
+      "Multilingual receptionist calls", 
+      "Priority onboarding & support",
+      "Advanced analytics & reporting"
+    ], 
+    cta: "Contact sales" 
+  }
 ];
 
 function SectionHeader({ kicker, title, subtitle }: { kicker?: string; title: string; subtitle?: string }) {
@@ -162,6 +219,8 @@ export default function AIReceptionistApp() {
             <FAQ />
             <Security />
             <Legal />
+            <HowItWorks />
+            <MultilingualSection />
           </>
         )}
         {tab === 'analytics' && <AnalyticsPage />}
@@ -229,7 +288,7 @@ function Hero() {
           </span>
         </motion.h1>
         <p className="mt-5 text-lg text-muted-foreground">
-          RelayAI answers calls, handles FAQs, and books appointments for your business—24/7. Built for salons, auto shops, med spas, home services, and more.
+          Your AI receptionist learns your business in minutes — just give us your website, and we handle the rest.
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button asChild size="lg" className="rounded-2xl"><a href="#app" className="inline-flex items-center gap-2">Try it free <ArrowRight className="w-4 h-4" /></a></Button>
@@ -453,7 +512,7 @@ function Pricing() {
   return (
     <section id="pricing" className="px-4 py-16 md:py-24 bg-card">
       <SectionHeader kicker="Pricing" title="Simple plans that scale with you" subtitle="No long contracts. Upgrade or cancel anytime." />
-      <div className="max-w-6xl mx-auto mt-10 grid md:grid-cols-3 gap-6">
+      <div className="max-w-7xl mx-auto mt-10 grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {tiers.map((t) => (
           <Card key={t.name} className={`rounded-2xl shadow-sm ${t.highlighted ? "ring-2 ring-primary" : ""}`}>
             <CardHeader className="space-y-1">
@@ -843,5 +902,165 @@ function SEOJsonLD() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faq) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(local) }} />
     </>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    {
+      icon: <Settings className="w-8 h-8" />,
+      title: "Enter your business name and website",
+      description: "Just provide your business URL and we'll handle the rest automatically."
+    },
+    {
+      icon: <Globe className="w-8 h-8" />,
+      title: "We scan your site and social media",
+      description: "Our AI extracts key details from your website, Google Business profile, and social media for complete business knowledge."
+    },
+    {
+      icon: <Zap className="w-8 h-8" />,
+      title: "Your AI receptionist is instantly ready",
+      description: "Within minutes, your AI is trained and ready to take calls with full knowledge of your business, services, and hours."
+    }
+  ];
+
+  return (
+    <section className="px-4 py-16 md:py-24 bg-muted/30">
+      <div className="max-w-7xl mx-auto">
+        <SectionHeader 
+          kicker="How It Works" 
+          title="From website to working receptionist in minutes" 
+          subtitle="No complex setup, no manual training. Just instant intelligence."
+        />
+        
+        <div className="mt-16 grid md:grid-cols-3 gap-8">
+          {steps.map((step, index) => (
+            <motion.div
+              key={step.title}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.2, duration: 0.6 }}
+              viewport={{ once: true }}
+              className="text-center group"
+            >
+              <div className="relative">
+                <div className="w-20 h-20 mx-auto rounded-2xl bg-[image:var(--gradient-primary)] text-white grid place-items-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                  {step.icon}
+                </div>
+                {index < steps.length - 1 && (
+                  <div className="hidden md:block absolute top-10 left-full w-full h-0.5 bg-gradient-to-r from-primary/50 to-transparent" />
+                )}
+                <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold grid place-items-center">
+                  {index + 1}
+                </div>
+              </div>
+              
+              <h3 className="text-xl font-semibold mb-4">{step.title}</h3>
+              <p className="text-muted-foreground leading-relaxed">{step.description}</p>
+            </motion.div>
+          ))}
+        </div>
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8, duration: 0.6 }}
+          viewport={{ once: true }}
+          className="text-center mt-12"
+        >
+          <Button asChild size="lg" className="rounded-2xl">
+            <a href="#app" className="inline-flex items-center gap-2">
+              Start instant training <ArrowRight className="w-4 h-4" />
+            </a>
+          </Button>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+function MultilingualSection() {
+  const languages = [
+    { name: "English", flag: "🇺🇸", accent: "Professional American" },
+    { name: "Spanish", flag: "🇪🇸", accent: "Native fluency" },
+    { name: "French", flag: "🇫🇷", accent: "Business French" },
+    { name: "Portuguese", flag: "🇧🇷", accent: "Brazilian Portuguese" },
+    { name: "German", flag: "🇩🇪", accent: "Business German" },
+    { name: "Italian", flag: "🇮🇹", accent: "Professional Italian" },
+  ];
+
+  return (
+    <section className="px-4 py-16 md:py-24">
+      <div className="max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/50 text-accent-foreground text-sm font-medium mb-6">
+              <Globe className="w-4 h-4" />
+              Multilingual Support
+            </div>
+            
+            <h2 className="text-4xl md:text-5xl font-bold mb-6">
+              Speak your customers' 
+              <span className="bg-[image:var(--gradient-primary)] bg-clip-text text-transparent">
+                {" "}language
+              </span>
+            </h2>
+            
+            <p className="text-xl text-muted-foreground mb-8">
+              Same knowledge base, multiple languages. Your AI receptionist adapts its language while maintaining complete understanding of your business.
+            </p>
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 grid place-items-center">
+                  <Check className="w-4 h-4" />
+                </div>
+                <span className="font-medium">Continuous learning from every call</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 grid place-items-center">
+                  <Check className="w-4 h-4" />
+                </div>
+                <span className="font-medium">Cultural context and local business practices</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 grid place-items-center">
+                  <Check className="w-4 h-4" />
+                </div>
+                <span className="font-medium">Auto-detects caller language preference</span>
+              </div>
+            </div>
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0, x: 50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="grid grid-cols-2 gap-4"
+          >
+            {languages.map((lang, index) => (
+              <motion.div
+                key={lang.name}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1, duration: 0.5 }}
+                viewport={{ once: true }}
+                className="p-6 rounded-2xl bg-card shadow-sm border hover:shadow-lg transition-all duration-300 hover:scale-105"
+              >
+                <div className="text-3xl mb-3">{lang.flag}</div>
+                <div className="font-semibold mb-1">{lang.name}</div>
+                <div className="text-sm text-muted-foreground">{lang.accent}</div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+    </section>
   );
 }
