@@ -10,8 +10,8 @@
 */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
-const XI_KEY = Deno.env.get("ELEVENLABS_API_KEY")!;
-const DEFAULT_MODEL = Deno.env.get("ELEVEN_MODEL_ID") ?? "eleven_multilingual_v2";
+const XI_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+const DEFAULT_MODEL = "eleven_multilingual_v2";
 
 function toBase64(u8: Uint8Array) {
   let s = "";
@@ -37,7 +37,13 @@ serve(async (req) => {
     
     if (!XI_KEY) {
       console.error("Missing ELEVENLABS_API_KEY secret");
-      throw new Error("Missing ELEVENLABS_API_KEY secret. Please configure it in Supabase Functions secrets.");
+      return new Response(
+        JSON.stringify({ error: "Missing ELEVENLABS_API_KEY secret. Please configure it in Supabase Functions secrets." }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
     }
     
     const bodyIn = await req.json();
