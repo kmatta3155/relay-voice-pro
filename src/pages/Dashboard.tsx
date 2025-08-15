@@ -426,9 +426,23 @@ function KnowledgeTab() {
     try {
       const result = await ingestWebsite(tenantId, newWebsite);
       
-      // If business info was extracted, show it immediately
+      // Always update business info with the latest extraction
       if (result?.business_info && Object.keys(result.business_info).length > 0) {
-        setBusinessInfo(result.business_info);
+        // Merge with existing business info if we have multiple sources
+        setBusinessInfo(prev => {
+          if (!prev) return result.business_info;
+          
+          // Merge business hours, services, etc.
+          return {
+            ...prev,
+            ...result.business_info,
+            business_hours: result.business_info.business_hours || prev.business_hours,
+            services: [...(prev.services || []), ...(result.business_info.services || [])].filter((v, i, a) => a.indexOf(v) === i),
+            phone: result.business_info.phone || prev.phone,
+            email: result.business_info.email || prev.email,
+            address: result.business_info.address || prev.address,
+          };
+        });
       }
       
       await loadKnowledgeData(tenantId);
@@ -437,6 +451,28 @@ function KnowledgeTab() {
       console.error("Failed to ingest website:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function clearBusinessIntelligence() {
+    if (!tenantId) return;
+    
+    try {
+      // Clear all knowledge sources and quick answers
+      const { error } = await supabase
+        .from('knowledge_sources')
+        .delete()
+        .eq('tenant_id', tenantId);
+      
+      if (error) throw error;
+      
+      setBusinessInfo(null);
+      setSources([]);
+      setSearchResults([]);
+      setUnresolvedQuestions([]);
+      
+    } catch (error) {
+      console.error('Failed to clear business intelligence:', error);
     }
   }
 
@@ -610,9 +646,20 @@ function KnowledgeTab() {
       {((businessInfo && Object.keys(businessInfo).length > 0) || sources.length > 0) && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building className="w-5 h-5" />
-              Business Intelligence
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building className="w-5 h-5" />
+                Business Intelligence
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={clearBusinessIntelligence}
+                className="rounded-2xl text-red-600 hover:text-red-700"
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Clear All
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
