@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bot, LayoutDashboard, Users, Calendar, MessageCircle, PhoneCall, BarChart3, Plus, Search, Filter, Download, Trash2, Edit, Save, X, Send, Zap, Check } from "lucide-react";
+import { Bot, LayoutDashboard, Users, Calendar, MessageCircle, PhoneCall, BarChart3, Plus, Search, Filter, Download, Trash2, Edit, Save, X, Send, Zap, Check, Brain, BookOpen } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import * as repo from "@/lib/data"; // expects helpers from earlier steps
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import KnowledgePage from "@/pages/KnowledgePage";
+import OnboardingPage from "@/pages/Onboarding";
 
 /** Dashboard (tabbed) wired to Supabase via src/lib/data.ts */
 
 export default function Dashboard() {
-  const [tab, setTab] = useState<"overview"|"leads"|"appointments"|"messages"|"calls"|"analytics">("overview");
+  const [tab, setTab] = useState<"overview"|"leads"|"appointments"|"messages"|"calls"|"analytics"|"knowledge"|"onboarding">("overview");
   const [tenantId, setTenantId] = useState<string|null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -46,6 +48,8 @@ export default function Dashboard() {
       {tab==="messages"    && <MessagesTab threads={threads} setThreads={setThreads} />}
       {tab==="calls"       && <CallsTab calls={calls} />}
       {tab==="analytics"   && <AnalyticsTab leads={leads} calls={calls} />}
+      {tab==="knowledge"   && <KnowledgePage />}
+      {tab==="onboarding"  && <OnboardingPage />}
     </>,
     tab, setTab
   );
@@ -89,6 +93,8 @@ function Sidebar({ tab, setTab }: { tab: string; setTab: (t:any)=>void }) {
     { id: 'messages', label: 'Messages', icon: <MessageCircle className="w-4 h-4"/> },
     { id: 'calls', label: 'Calls', icon: <PhoneCall className="w-4 h-4"/> },
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4"/> },
+    { id: 'knowledge', label: 'Knowledge', icon: <Brain className="w-4 h-4"/> },
+    { id: 'onboarding', label: 'Onboarding', icon: <BookOpen className="w-4 h-4"/> },
   ];
   return (
     <Card className="rounded-2xl shadow-sm sticky top-20">

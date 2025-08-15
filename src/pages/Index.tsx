@@ -40,6 +40,7 @@ import { openCheckout } from "@/lib/billing";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import MessagesPage from "@/pages/MessagesPage";
 import KnowledgePage from "@/pages/KnowledgePage";
+import OnboardingPage from "@/pages/Onboarding";
 import SettingsPage from "@/pages/SettingsPage";
 import BillingPage from "@/pages/BillingPage";
 import { useSessionState } from "@/hooks/useSessionState";
@@ -78,7 +79,7 @@ function SEOHead() {
 
 function useHashTab(defaultTab: string) {
   const allowed = React.useMemo(
-    () => new Set(["overview", "analytics", "messages", "knowledge", "settings", "billing"]),
+    () => new Set(["overview", "analytics", "messages", "knowledge", "settings", "billing", "onboarding"]),
     []
   );
   const getTabFromHash = () => {
@@ -166,6 +167,7 @@ export default function AIReceptionistApp() {
         {tab === 'analytics' && <AnalyticsPage />}
         {tab === 'messages' && <MessagesPage />}
         {tab === 'knowledge' && <KnowledgePage />}
+        {tab === 'onboarding' && <OnboardingPage />}
         {tab === 'settings' && <SettingsPage />}
         {tab === 'billing' && <BillingPage />}
       </main>
