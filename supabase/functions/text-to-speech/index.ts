@@ -14,12 +14,8 @@ serve(async (req) => {
   try {
     const { text, voice_id } = await req.json();
 
-    if (!text || typeof text !== 'string') {
-      throw new Error('Valid text is required');
-    }
-
-    if (text.length > 5000) {
-      throw new Error('Text too long (max 5000 characters)');
+    if (!text) {
+      throw new Error('Text is required');
     }
 
     const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
@@ -27,12 +23,10 @@ serve(async (req) => {
       throw new Error('ElevenLabs API key not configured');
     }
 
-    // Use professional, human-like voices with better settings
+    // Use a professional, friendly voice for the AI receptionist
     const voiceId = voice_id || 'EXAVITQu4vr4xnSDxMaL'; // Sarah - professional female voice
 
-    console.log(`Generating TTS for: "${text.substring(0, 50)}..." with voice: ${voiceId}`);
-
-    // Generate speech using ElevenLabs API with enhanced settings
+    // Generate speech using ElevenLabs API
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -42,35 +36,27 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         text: text,
-        model_id: 'eleven_multilingual_v2', // Best quality model
+        model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.4,        // More natural variation
-          similarity_boost: 0.8, // Higher similarity to original voice
-          style: 0.2,           // Slight style enhancement
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.0,
           use_speaker_boost: true
         }
       }),
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.error('ElevenLabs API error:', response.status, errorText);
-      throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
+      const error = await response.text();
+      console.error('ElevenLabs API error:', error);
+      throw new Error(`ElevenLabs API error: ${response.status}`);
     }
 
-    // Convert audio to base64 with better error handling
+    // Convert audio to base64
     const arrayBuffer = await response.arrayBuffer();
-    
-    if (arrayBuffer.byteLength === 0) {
-      throw new Error('Empty audio response from ElevenLabs');
-    }
-
-    console.log(`Generated audio: ${arrayBuffer.byteLength} bytes`);
-
-    // Convert to base64 properly - don't chunk the conversion as it corrupts the data
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const binaryString = Array.from(uint8Array, byte => String.fromCharCode(byte)).join('');
-    const base64Audio = btoa(binaryString);
+    const base64Audio = btoa(
+      String.fromCharCode(...new Uint8Array(arrayBuffer))
+    );
 
     return new Response(
       JSON.stringify({ 
@@ -82,7 +68,7 @@ serve(async (req) => {
       },
     );
   } catch (error) {
-    console.error('TTS Error:', error.message);
+    console.error('TTS Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       {
