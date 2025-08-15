@@ -125,22 +125,57 @@ async function tts(
     // Try native Web Speech API as fallback if edge function fails
     if ('speechSynthesis' in window) {
       console.log('TTS: Using Web Speech API fallback');
+      
+      // Ensure voices are loaded
+      let voices = speechSynthesis.getVoices();
+      if (voices.length === 0) {
+        console.log('TTS: Waiting for voices to load...');
+        await new Promise<void>((resolve) => {
+          const voicesChanged = () => {
+            voices = speechSynthesis.getVoices();
+            if (voices.length > 0) {
+              speechSynthesis.removeEventListener('voiceschanged', voicesChanged);
+              resolve();
+            }
+          };
+          speechSynthesis.addEventListener('voiceschanged', voicesChanged);
+          // Fallback timeout
+          setTimeout(resolve, 1000);
+        });
+        voices = speechSynthesis.getVoices();
+      }
+      
+      console.log(`TTS: Found ${voices.length} voices:`, voices.map(v => v.name));
+      
       const utterance = new SpeechSynthesisUtterance(text);
       
       // Map voice IDs to speech synthesis voices
-      const voices = speechSynthesis.getVoices();
-      const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Karen'));
-      const maleVoice = voices.find(v => v.name.includes('Male') || v.name.includes('Alex') || v.name.includes('Daniel'));
+      const femaleVoice = voices.find(v => 
+        v.name.toLowerCase().includes('female') || 
+        v.name.includes('Samantha') || 
+        v.name.includes('Karen') ||
+        v.name.includes('Victoria') ||
+        v.lang.startsWith('en') && v.name.includes('Google')
+      );
+      const maleVoice = voices.find(v => 
+        v.name.toLowerCase().includes('male') || 
+        v.name.includes('Alex') || 
+        v.name.includes('Daniel') ||
+        v.name.includes('Tom') ||
+        v.lang.startsWith('en') && !v.name.includes('female')
+      );
       
       if (voiceId.includes('21m00')) { // AI voice - use female
         utterance.voice = femaleVoice || voices[1] || voices[0];
+        console.log('TTS: Using AI voice:', utterance.voice?.name);
       } else { // Caller voice - use male  
         utterance.voice = maleVoice || voices[0];
+        console.log('TTS: Using caller voice:', utterance.voice?.name);
       }
       
-      utterance.rate = 1.0;
+      utterance.rate = 1.1;
       utterance.pitch = 1.0;
-      utterance.volume = 0.8;
+      utterance.volume = 0.9;
       
       return new Promise<void>((resolve) => {
         utterance.onend = () => {
@@ -153,7 +188,11 @@ async function tts(
           onEnded?.();
           resolve(); // Don't fail the demo
         };
+        utterance.onstart = () => {
+          console.log('TTS: Web Speech started speaking');
+        };
         
+        console.log('TTS: Starting speech synthesis...');
         speechSynthesis.speak(utterance);
       });
     } else {
