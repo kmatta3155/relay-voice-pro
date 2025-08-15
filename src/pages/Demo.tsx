@@ -123,7 +123,11 @@ async function tts(
 
   try {
     const { data, error } = await supabase.functions.invoke("voice", {
-      body: { text, voiceId, output_format: format, voice_settings: voiceSettings || DEFAULT_VOICE_SETTINGS },
+      body: { 
+        text, 
+        voiceId,
+        model: 'eleven_multilingual_v2'
+      },
     });
 
     if (error) {
@@ -138,57 +142,37 @@ async function tts(
 
     console.log(`TTS: Audio received, size: ${data.audioBase64.length} chars`);
 
-    const audio = new Audio();
-    audio.src = `data:${data.contentType || "audio/mpeg"};base64,${data.audioBase64}`;
-    audio.volume = 0.8;
-    
-    // Add timeout protection
-    const AUDIO_TIMEOUT = 30000; // 30 seconds max
-    let timeoutId: NodeJS.Timeout;
-    
-    const playPromise = new Promise<void>((resolve, reject) => {
-      timeoutId = setTimeout(() => {
-        console.error("TTS: Audio playback timeout");
-        reject(new Error("Audio playback timeout"));
-      }, AUDIO_TIMEOUT);
-
-      audio.onended = () => {
-        console.log("TTS: Audio playback ended successfully");
-        clearTimeout(timeoutId);
-        onEnded?.();
-        resolve();
-      };
-
-      audio.onerror = (e) => {
-        console.error("TTS: Audio playback error:", e);
-        clearTimeout(timeoutId);
-        reject(new Error("Audio playback failed"));
-      };
-
-      audio.oncanplaythrough = () => {
-        console.log("TTS: Audio can play through");
-      };
-    });
-
-    attachToWave?.(audio);
-    
-    try {
-      console.log("TTS: Starting audio playback");
-      await audio.play();
-      console.log("TTS: Audio.play() resolved");
-    } catch (playError) {
-      console.error("TTS: Audio.play() failed:", playError);
-      clearTimeout(timeoutId);
-      throw new Error(`Audio play failed: ${playError}`);
-    }
-
-    await playPromise;
-    console.log("TTS: Synthesis and playback completed successfully");
+    await playAudioSegment(data.audioBase64);
+    onEnded?.();
 
   } catch (error) {
     console.error("TTS: Complete failure:", error);
     throw error;
   }
+}
+
+const playAudioSegment = (audioData: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    
+    const onEnded = () => {
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+      resolve();
+    };
+    
+    const onError = () => {
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+      reject(new Error('Audio playback failed'));
+    };
+
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
+    
+    audio.src = `data:audio/mp3;base64,${audioData}`;
+    audio.play().catch(reject);
+  });
 }
 
 async function ringOnce(ms = 1100) {
