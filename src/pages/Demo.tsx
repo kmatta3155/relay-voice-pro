@@ -117,7 +117,7 @@ async function tts(
 
   try {
     // 🔄 UPDATED: send output_format and optional voice_settings (server maps "mp3" → mp3_44100_128)
-    const { data, error } = await supabase.functions.invoke("voice", {
+    const { data, error } = await supabase.functions.invoke("tts-voice", {
       body: { 
         text, 
         voiceId,
