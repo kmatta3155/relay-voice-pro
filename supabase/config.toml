@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.billing]
 verify_jwt = false
+
+[functions.voice]
+verify_jwt = false

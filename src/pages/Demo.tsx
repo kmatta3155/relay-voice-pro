@@ -126,18 +126,23 @@ async function tts(
       body: { 
         text, 
         voiceId,
-        model: 'eleven_multilingual_v2'
+        modelId: 'eleven_multilingual_v2'
       },
     });
 
+    console.log('Voice function response:', { data, error });
+
     if (error) {
       console.error("TTS: Supabase function error:", error);
-      throw new Error(`Voice function error: ${error.message || error}`);
+      // Fallback: continue without audio instead of breaking the demo
+      console.warn("Continuing demo without audio due to voice service error");
+      return;
     }
 
     if (!data?.audioBase64) {
       console.error("TTS: No audio received in response:", data);
-      throw new Error("No audio received from voice service");
+      console.warn("Continuing demo without audio - no audio data received");
+      return;
     }
 
     console.log(`TTS: Audio received, size: ${data.audioBase64.length} chars`);
@@ -147,7 +152,8 @@ async function tts(
 
   } catch (error) {
     console.error("TTS: Complete failure:", error);
-    throw error;
+    // Don't throw - let demo continue without audio
+    console.warn("Demo continuing without audio due to TTS failure");
   }
 }
 
