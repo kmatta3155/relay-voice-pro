@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import PostCallIntelligence from "@/components/demo/PostCallIntelligence";
+import AnalyticsDashboard from "@/components/demo/AnalyticsDashboard";
+import CompetitiveShowcase from "@/components/demo/CompetitiveShowcase";
+import ROICalculator from "@/components/demo/ROICalculator";
+import IntegrationShowcase from "@/components/demo/IntegrationShowcase";
 
 // ---------- Hard-mapped ElevenLabs Voice IDs (replace with your real IDs) ----------
 const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive female voice (EN)
@@ -270,6 +275,8 @@ export default function DemoPage() {
   const [transcript, setTranscript] = useState<{ who: string; text: string }[]>([]);
   const [kpi, setKpi] = useState({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
   const [ctaShown, setCtaShown] = useState(false);
+  const [showPostCall, setShowPostCall] = useState(false);
+  const [callCompleted, setCallCompleted] = useState(false);
 
   const qRef = useRef<AudioQueue | null>(null);
   const wave = useWaveform();
@@ -288,6 +295,7 @@ export default function DemoPage() {
 
   function reset() {
     setPlaying(false); setNow("Idle"); setTranscript([]); setCtaShown(false);
+    setShowPostCall(false); setCallCompleted(false);
     setKpi({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
     qRef.current = new AudioQueue(setNow);
   }
@@ -330,7 +338,15 @@ export default function DemoPage() {
       });
     }
 
-    await q.add(async ()=> { setNow("Call complete"); if (booked) setCtaShown(true); });
+    await q.add(async ()=> { 
+      setNow("Call complete"); 
+      setCallCompleted(true);
+      if (booked) {
+        setCtaShown(true);
+        // Simulate post-call processing
+        setTimeout(() => setShowPostCall(true), 1000);
+      }
+    });
     setPlaying(false);
   }
 
@@ -353,8 +369,90 @@ export default function DemoPage() {
     [langFilter]
   );
 
+  // Enhanced demo data for showcasing
+  const getPostCallData = () => {
+    const baseData = {
+      spa: {
+        customerData: {
+          name: "Jamie Patel",
+          phone: "(919) 555-0198",
+          service: "90-min Massage",
+          urgency: "Medium" as const,
+          revenue: 149,
+          conversionProb: 92
+        },
+        businessImpact: {
+          appointmentBooked: true,
+          followUpScheduled: true,
+          paymentProcessed: true,
+          staffNotified: true
+        }
+      },
+      restaurant: {
+        customerData: {
+          name: "Ana Rivera",
+          phone: "(555) 123-4567",
+          service: "Table for 4",
+          urgency: "High" as const,
+          revenue: 280,
+          conversionProb: 88
+        },
+        businessImpact: {
+          appointmentBooked: true,
+          followUpScheduled: true,
+          paymentProcessed: false,
+          staffNotified: true
+        }
+      },
+      support_bi: {
+        customerData: {
+          name: "Customer",
+          phone: "(214) 555-0123",
+          service: "Water Heater Repair",
+          urgency: "High" as const,
+          revenue: 320,
+          conversionProb: 95
+        },
+        businessImpact: {
+          appointmentBooked: true,
+          followUpScheduled: true,
+          paymentProcessed: false,
+          staffNotified: true
+        }
+      },
+      auto: {
+        customerData: {
+          name: "Marcus Lee",
+          phone: "(919) 555-0110",
+          service: "Brake Inspection",
+          urgency: "Medium" as const,
+          revenue: 189,
+          conversionProb: 85
+        },
+        businessImpact: {
+          appointmentBooked: true,
+          followUpScheduled: true,
+          paymentProcessed: true,
+          staffNotified: true
+        }
+      }
+    };
+    return baseData[sel.id as keyof typeof baseData] || baseData.spa;
+  };
+
+  const analyticsData = {
+    callsHandled: 1247,
+    conversionRate: 87,
+    revenueGenerated: 142650,
+    timeSaved: 320,
+    customerSatisfaction: 4.8,
+    missedCallsRecovered: 89
+  };
+
   return (
-    <div className="max-w-6xl mx-auto p-6 grid lg:grid-cols-2 gap-6">
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      {/* Main Demo Section */}
+      <div className="grid lg:grid-cols-2 gap-6">
       {/* Left: Controls */}
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="space-y-1">
@@ -469,6 +567,81 @@ export default function DemoPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
+
+      {/* Enhanced Post-Call Analytics Section */}
+      {showPostCall && (
+        <div className="space-y-6 animate-in slide-in-from-bottom duration-500">
+          <div className="text-center py-6 border-t border-dashed">
+            <h2 className="text-2xl font-bold mb-2">Post-Call Intelligence & Business Impact</h2>
+            <p className="text-muted-foreground">See how your AI receptionist drives real business results</p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            <PostCallIntelligence 
+              scenario={sel.name}
+              customerData={getPostCallData().customerData}
+              businessImpact={getPostCallData().businessImpact}
+            />
+            <IntegrationShowcase />
+          </div>
+
+          <AnalyticsDashboard metrics={analyticsData} />
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            <ROICalculator />
+            <CompetitiveShowcase />
+          </div>
+
+          {/* Success Story Section */}
+          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+            <CardContent className="p-8 text-center">
+              <h3 className="text-2xl font-bold text-blue-900 mb-4">
+                Transform Your Business Like 2,500+ Companies
+              </h3>
+              <div className="grid md:grid-cols-3 gap-6 mb-6">
+                <div>
+                  <div className="text-3xl font-bold text-blue-700">94%</div>
+                  <div className="text-blue-600">Fewer Missed Calls</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-blue-700">$47K</div>
+                  <div className="text-blue-600">Avg. Annual Revenue Increase</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-blue-700">24h</div>
+                  <div className="text-blue-600">Setup Time</div>
+                </div>
+              </div>
+              <div className="flex gap-4 justify-center">
+                <Button size="lg" className="bg-blue-600 hover:bg-blue-700">
+                  Start Your Free Trial
+                </Button>
+                <Button size="lg" variant="outline" className="border-blue-300 text-blue-700">
+                  Schedule Expert Demo
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Call-to-Action for completed calls without booking */}
+      {callCompleted && !ctaShown && (
+        <Card className="bg-gradient-to-r from-orange-50 to-red-50 border-orange-200">
+          <CardContent className="p-6 text-center">
+            <h3 className="text-xl font-bold text-orange-900 mb-2">
+              Even Non-Bookings Create Value
+            </h3>
+            <p className="text-orange-700 mb-4">
+              This call still generated lead intelligence, customer insights, and brand touchpoints that traditional systems miss.
+            </p>
+            <Button className="bg-orange-600 hover:bg-orange-700">
+              See How We Capture Every Opportunity
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
