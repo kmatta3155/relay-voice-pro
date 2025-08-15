@@ -15,13 +15,21 @@ const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive femal
 const VOICE_AI_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – expressive female voice (works well in Spanish)
 const VOICE_CALLER_F = "Xb7hH8MSUJpSbSDYk0k2"; // Alice – confident female British
 const VOICE_CALLER_M = "pqHfZKP75CvOlQylNhV4"; // Bill – trustworthy older male
-const VOICE_CALLER_ES = "21m00Tcm4TlvDq8ikWAM"; // Rachel (same as AI_EN for consistency)
+const VOICE_CALLER_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – Spanish-optimized voice for callers
 
 // Default delivery settings (subtle, human)
 const DEFAULT_VOICE_SETTINGS = {
   stability: 0.75,
   similarity_boost: 0.85,
   style: 0.25,
+  use_speaker_boost: true,
+};
+
+// Spanish-optimized voice settings
+const SPANISH_VOICE_SETTINGS = {
+  stability: 0.80,
+  similarity_boost: 0.90,
+  style: 0.30,
   use_speaker_boost: true,
 };
 
@@ -378,9 +386,23 @@ export default function DemoPage() {
 
       await q.add(async ()=> {
         // Show AI thinking animation for scenarios with aiThinking enabled
-        if (line.who === "ai" && sel.aiThinking && /book|appointment|help|price|hour/i.test(text)) {
+        const isAiThinkingMoment = line.who === "ai" && sel.aiThinking && 
+          /book|appointment|help|price|hour|reunión|reserva|precio|hora|disponible|espacio|appointment|menu|cost/i.test(text);
+        
+        if (isAiThinkingMoment) {
           setAiThinking(true);
           setNow("AI retrieving knowledge...");
+          
+          // Actually perform knowledge search
+          try {
+            const searchQuery = text.match(/(?:price|cost|menu|hora|precio|disponible|espacio|appointment)/i)?.[0] || "business info";
+            console.log("AI Thinking: Searching knowledge base for:", searchQuery);
+            const results = await ragSearch("demo-tenant", searchQuery, 3);
+            console.log("Knowledge retrieved:", results.length, "items");
+          } catch (error) {
+            console.warn("Knowledge search failed:", error);
+          }
+          
           await new Promise(r => setTimeout(r, 800 + Math.random() * 1200)); // Random delay 0.8-2s
           setAiThinking(false);
         }
@@ -390,8 +412,13 @@ export default function DemoPage() {
           booked = true;
           setKpi((k)=> ({ ...k, bookings: k.bookings + 1, timeSavedMin: k.timeSavedMin + 6 }));
         }
-        // 🔄 UPDATED: forward selected output format and pass waveform attach
-        await tts(text, vId, format, undefined, undefined, wave.attach);
+        
+        // Use Spanish-optimized settings for Spanish voices
+        const voiceSettings = (vId === VOICE_AI_ES || vId === VOICE_CALLER_ES) 
+          ? SPANISH_VOICE_SETTINGS 
+          : DEFAULT_VOICE_SETTINGS;
+        
+        await tts(text, vId, format, voiceSettings, undefined, wave.attach);
         await new Promise((r)=> setTimeout(r, delayAfter));
       });
     }
