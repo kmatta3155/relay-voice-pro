@@ -353,11 +353,36 @@ export default function DemoPage() {
   // optional real write to Supabase (falls back to simulation)
   async function recordBookingOrLead() {
     try {
+      // Get the current user's active tenant or demo tenant
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        // No user logged in, skip database write for demo
+        return false;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('active_tenant_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile?.active_tenant_id) {
+        // No active tenant, skip database write for demo
+        return false;
+      }
+
       const startAt = new Date(Date.now() + 3 * 24 * 3600 * 1000);
       const endAt = new Date(startAt.getTime() + 60 * 60 * 1000);
       const { error } = await supabase
         .from("appointments")
-        .insert([{ title: "Massage – Maya", customer: "Jamie Patel", start_at: startAt.toISOString(), end_at: endAt.toISOString(), staff: "Maya" }]);
+        .insert([{ 
+          title: "Massage – Maya", 
+          customer: "Jamie Patel", 
+          start_at: startAt.toISOString(), 
+          end_at: endAt.toISOString(), 
+          staff: "Maya",
+          tenant_id: profile.active_tenant_id
+        }]);
       if (error) throw error;
       return true;
     } catch {
