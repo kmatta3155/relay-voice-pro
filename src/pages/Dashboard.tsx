@@ -1,4 +1,4 @@
-import React, { use Effect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Bot,
   LayoutDashboard,
@@ -605,7 +605,7 @@ function ApptModal({ appt, onClose, onSave }: any) {
 /* ---------- Messages ---------- */
 function MessagesTab({ threads, setThreads }: { threads: any[]; setThreads: (x: any) => void }) {
   const [sel, setSel] = useState(threads[0]?.id || null);
-  const th = threads.find((t: any) => t.id === sel) or threads[0];
+  const th = threads.find((t: any) => t.id === sel) || threads[0];
   const [text, setText] = useState("");
 
   useEffect(() => { if (threads.length && !sel) setSel(threads[0].id); }, [threads]);
@@ -613,7 +613,7 @@ function MessagesTab({ threads, setThreads }: { threads: any[]; setThreads: (x: 
   async function send() {
     if (!text.trim() || !th) return;
     const newMsg = { from: "agent", at: new Date().toISOString(), text };
-    setThreads((cur: any[]) => cur.map((t) => (t.id === th.id ? { ...t, thread: [...(t.thread or []), newMsg] } : t)));
+    setThreads((cur: any[]) => cur.map((t) => (t.id === th.id ? { ...t, thread: [...(t.thread || []), newMsg] } : t)));
     setText("");
     try { await repo.sendMessage(th, newMsg.text); const updated = await repo.listThreads(); setThreads(updated); } catch (e) { console.error(e); }
   }
@@ -623,10 +623,10 @@ function MessagesTab({ threads, setThreads }: { threads: any[]; setThreads: (x: 
       <Card className="rounded-2xl shadow-sm md:col-span-1">
         <CardHeader><CardTitle>Conversations</CardTitle></CardHeader>
         <CardContent className="p-0">
-          {(threads or []).map((t: any) => (
+          {(threads || []).map((t: any) => (
             <button key={t.id} onClick={() => setSel(t.id)} className={`w-full text-left px-4 py-3 border-t hover:bg-slate-50 ${t.id === th?.id ? "bg-slate-100" : ""}`}> 
               <div className="text-sm font-medium">{t.with}</div>
-              <div className="text-xs text-slate-500 truncate">{(t.thread or [])[((t.thread or []).length - 1) as any]?.text}</div>
+              <div className="text-xs text-slate-500 truncate">{(t.thread || [])[((t.thread || []).length - 1) as any]?.text}</div>
             </button>
           ))}
         </CardContent>
@@ -635,7 +635,7 @@ function MessagesTab({ threads, setThreads }: { threads: any[]; setThreads: (x: 
         <CardHeader><CardTitle>Chat with {th?.with || "—"}</CardTitle></CardHeader>
         <CardContent>
           <div className="h-64 overflow-auto space-y-2">
-            {(th?.thread or []).map((m: any, i: number) => (
+            {(th?.thread || []).map((m: any, i: number) => (
               <div key={i} className={`flex ${m.from === "agent" ? "justify-end" : "justify-start"}`}>
                 <div className={`px-3 py-2 rounded-xl text-sm ${m.from === "agent" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>{m.text}</div>
               </div>
@@ -685,7 +685,7 @@ function AnalyticsTab({ leads, calls }: any) {
     return Math.round((qualified / Math.max(leads.length, 1)) * 100);
   }, [leads]);
   const bySource = useMemo(() => {
-    const map: Record<string, number> = {}; for (const l of leads) { const s = String(l.source or "Unknown"); map[s] = (map[s] or 0) + 1; }
+    const map: Record<string, number> = {}; for (const l of leads) { const s = String(l.source || "Unknown"); map[s] = (map[s] || 0) + 1; }
     return Object.entries(map).map(([k, v]) => ({ k, v }));
   }, [leads]);
   const callsTrend = useMemo(() => buildTrend(calls, []), [calls]);
@@ -759,7 +759,7 @@ function KnowledgeTab() {
   }
 
   async function handleWebsiteIngestion() {
-    if (!tenantId or !newWebsite) return; setLoading(true);
+    if (!tenantId || !newWebsite) return; setLoading(true);
     try {
       const result = await ingestWebsite(tenantId, newWebsite);
       if (result?.business_info && Object.keys(result.business_info).length > 0) setBusinessInfo(result.business_info);
@@ -769,8 +769,8 @@ function KnowledgeTab() {
   }
 
   async function handleSearch() {
-    if (!tenantId or !searchQuery) return; setLoading(true);
-    try { const results = await ragSearchEnhanced(tenantId, searchQuery, 6); setSearchResults(results.results or []); }
+    if (!tenantId || !searchQuery) return; setLoading(true);
+    try { const results = await ragSearchEnhanced(tenantId, searchQuery, 6); setSearchResults(results.results || []); }
     catch (error) { console.error("Search failed:", error); }
     finally { setLoading(false); }
   }
@@ -785,21 +785,21 @@ function KnowledgeTab() {
         <CardHeader><CardTitle className="flex items-center gap-2"><Search className="w-5 h-5" />Knowledge Search</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">
-            <Input placeholder="Search your business knowledge..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" and handleSearch()} />
-            <Button onClick={handleSearch} disabled={!searchQuery or loading} className="rounded-2xl">{loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}</Button>
+            <Input placeholder="Search your business knowledge..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSearch()} />
+            <Button onClick={handleSearch} disabled={!searchQuery || loading} className="rounded-2xl">{loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}</Button>
           </div>
-          {searchResults.length > 0 and (
+          {searchResults.length > 0 && (
             <div className="space-y-2">
               <h4 className="font-medium text-sm">Search Results:</h4>
               {searchResults.map((result, idx) => (
                 <div key={idx} className="p-3 bg-slate-50 rounded-xl text-sm">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2">
-                      <Badge variant={result.source === "quick_answer" ? "default" : "secondary"}>{result.source === "quick_answer" ? "Quick Answer" : result.relevance_type or "General"}</Badge>
-                      <Badge variant="outline">{((result.confidence or result.score or 0) * 100).toFixed(0)}%</Badge>
+                      <Badge variant={result.source === "quick_answer" ? "default" : "secondary"}>{result.source === "quick_answer" ? "Quick Answer" : result.relevance_type || "General"}</Badge>
+                      <Badge variant="outline">{((result.confidence || result.score || 0) * 100).toFixed(0)}%</Badge>
                     </div>
                   </div>
-                  <p className="text-slate-700">{(result.content or "").slice(0, 250)}...</p>
+                  <p className="text-slate-700">{(result.content || "").slice(0, 250)}...</p>
                 </div>
               ))}
             </div>
@@ -813,7 +813,7 @@ function KnowledgeTab() {
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Input placeholder="https://yourbusiness.com" value={newWebsite} onChange={(e) => setNewWebsite(e.target.value)} />
-            <Button onClick={handleWebsiteIngestion} disabled={!newWebsite or loading} className="rounded-2xl">{loading ? (<><RefreshCw className="w-4 h-4 animate-spin mr-2" />AI Processing...</>) : (<><Plus className="w-4 h-4 mr-2" />Analyze & Ingest</>)}</Button>
+            <Button onClick={handleWebsiteIngestion} disabled={!newWebsite || loading} className="rounded-2xl">{loading ? (<><RefreshCw className="w-4 h-4 animate-spin mr-2" />AI Processing...</>) : (<><Plus className="w-4 h-4 mr-2" />Analyze & Ingest</>)}</Button>
           </div>
           <p className="text-xs text-slate-500">Enter your business website URL to automatically extract and add knowledge.</p>
         </CardContent>
@@ -830,8 +830,8 @@ function KnowledgeTab() {
               {sources.map((source) => (
                 <div key={source.id} className="flex items-center justify-between p-3 border rounded-xl">
                   <div>
-                    <div className="font-medium text-sm">{source.title or source.source_url}</div>
-                    <div className="text-xs text-slate-500">{source.source_type} • {new Date(source.created_at).toLocaleDateString()} {source.meta?.bytes and ` • ${Math.round(source.meta.bytes / 1000)}KB`}</div>
+                    <div className="font-medium text-sm">{source.title || source.source_url}</div>
+                    <div className="text-xs text-slate-500">{source.source_type} • {new Date(source.created_at).toLocaleDateString()} {source.meta?.bytes && ` • ${Math.round(source.meta.bytes / 1000)}KB`}</div>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => setSelectedSource(source)} className="rounded-2xl"><Edit className="w-3 h-3" /></Button>
@@ -845,12 +845,12 @@ function KnowledgeTab() {
       </Card>
 
       {/* Business Intelligence */}
-      {businessInfo and Object.keys(businessInfo).length > 0 and (
+      {businessInfo && Object.keys(businessInfo).length > 0 && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader><CardTitle className="flex items-center gap-2"><Building className="w-5 h-5" />Business Intelligence</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {businessInfo.business_hours and (
+              {businessInfo.business_hours && (
                 <div className="p-3 bg-blue-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-blue-900">Business Hours</h4>
                   <div className="space-y-1">
@@ -858,22 +858,22 @@ function KnowledgeTab() {
                   </div>
                 </div>
               )}
-              {(businessInfo.phone or businessInfo.email) and (
+              {(businessInfo.phone || businessInfo.email) && (
                 <div className="p-3 bg-green-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-green-900">Contact Information</h4>
                   <div className="space-y-1">
-                    {businessInfo.phone and (<div className="text-xs text-green-800"><span className="font-medium">Phone:</span> {businessInfo.phone}</div>)}
-                    {businessInfo.email and (<div className="text-xs text-green-800"><span className="font-medium">Email:</span> {businessInfo.email}</div>)}
+                    {businessInfo.phone && (<div className="text-xs text-green-800"><span className="font-medium">Phone:</span> {businessInfo.phone}</div>)}
+                    {businessInfo.email && (<div className="text-xs text-green-800"><span className="font-medium">Email:</span> {businessInfo.email}</div>)}
                   </div>
                 </div>
               )}
-              {businessInfo.services and (
+              {businessInfo.services && (
                 <div className="p-3 bg-purple-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-purple-900">Services</h4>
                   <div className="text-xs text-purple-800">{Array.isArray(businessInfo.services) ? businessInfo.services.slice(0, 6).join(", ") : businessInfo.services}</div>
                 </div>
               )}
-              {businessInfo.about and (
+              {businessInfo.about && (
                 <div className="p-3 bg-orange-50 rounded-xl">
                   <h4 className="font-medium text-sm mb-2 text-orange-900">About</h4>
                   <div className="text-xs text-orange-800">{businessInfo.about}</div>
@@ -897,7 +897,7 @@ function KnowledgeTab() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <p className="font-medium text-sm mb-1">"{question.question}"</p>
-                      <p className="text-xs text-slate-500">Asked {new Date(question.created_at).toLocaleDateString()} {question.call_id and ` • Call ID: ${question.call_id}`}</p>
+                      <p className="text-xs text-slate-500">Asked {new Date(question.created_at).toLocaleDateString()} {question.call_id && ` • Call ID: ${question.call_id}`}</p>
                     </div>
                     <Button size="sm" onClick={() => markQuestionResolved(question.id)} className="rounded-2xl ml-3"><CheckCircle className="w-3 h-3 mr-1" />Resolve</Button>
                   </div>
@@ -1048,10 +1048,10 @@ function addLeadComputed(ld: any) { const sc = scoreLead(ld); return { ...ld, sc
 function exportJSON(filename: string, data: any) { const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
 function formatDT(s: string) { try { const d = new Date(s); return d.toLocaleString(); } catch { return String(s); } }
 function formatSecs(s: number) { const m = Math.floor(s / 60); const sec = s % 60; return `${m}m ${String(sec).padStart(2, "0")}s`; }
-function formatDuration(secs: number) { if (!secs and secs !== 0) return "—"; const m = Math.floor(secs / 60), s = secs % 60; return `${m}m ${s}s`; }
+function formatDuration(secs: number) { if (!secs && secs !== 0) return "—"; const m = Math.floor(secs / 60), s = secs % 60; return `${m}m ${s}s`; }
 function toLocal(s: string) { const d = new Date(s); const pad = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function fromLocal(s: string) { return new Date(s).toISOString(); }
-async function postWebhookSafe(body: any) { try { const { data } = await (supabase as any).from("config").select("webhook_url, webhook_secret").limit(1).single(); const conf: any = data or {}; const url = conf?.webhook_url; if (!url) return; const headers: Record<string, string> = { "Content-Type": "application/json" }; if (conf?.webhook_secret) { const encoder = new TextEncoder(); // @ts-ignore
+async function postWebhookSafe(body: any) { try { const { data } = await (supabase as any).from("config").select("webhook_url, webhook_secret").limit(1).single(); const conf: any = data || {}; const url = conf?.webhook_url; if (!url) return; const headers: Record<string, string> = { "Content-Type": "application/json" }; if (conf?.webhook_secret) { const encoder = new TextEncoder(); // @ts-ignore
   const key = await crypto.subtle.importKey("raw", encoder.encode(conf.webhook_secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]); // @ts-ignore
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(JSON.stringify(body))); const hex = [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join(""); headers["X-RelayAI-Signature"] = hex; }
   await fetch(url, { method: "POST", headers, body: JSON.stringify(body) }); } catch (e) { /* ignore */ } }
@@ -1111,25 +1111,25 @@ function buildTrend(calls: any[], appts: any[]) {
     return { key, label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) };
   });
   const map: Record<string, any> = {}; days.forEach((d) => (map[d.key] = { day: d.label, bookings: 0, calls: 0, revenue: 0 }));
-  for (const c of calls) { const k = new Date(c.at or Date.now()).toISOString().slice(0, 10); if (map[k]) map[k].calls += 1; }
-  for (const a of appts) { const k = new Date(a.start_at or Date.now()).toISOString().slice(0, 10); if (map[k]) { map[k].bookings += 1; map[k].revenue += a.price or 200; } }
+  for (const c of calls) { const k = new Date(c.at || Date.now()).toISOString().slice(0, 10); if (map[k]) map[k].calls += 1; }
+  for (const a of appts) { const k = new Date(a.start_at || Date.now()).toISOString().slice(0, 10); if (map[k]) { map[k].bookings += 1; map[k].revenue += a.price || 200; } }
   return days.map((d) => map[d.key]);
 }
 function buildOutcomes(calls: any[]) {
   const labels = ["Booked", "Answered", "Missed→Recovered", "Voicemail", "FAQ Resolved"]; const counts: Record<string, number> = {};
   for (const l of labels) counts[l] = 0;
   for (const c of calls) {
-    const o = String(c.outcome or "").toLowerCase();
-    if (o.includes("book")) counts["Booked"] += 1; else if (o.includes("missed") and o.includes("sms")) counts["Missed→Recovered"] += 1; else if (o.includes("voicemail")) counts["Voicemail"] += 1; else if (o.includes("faq")) counts["FAQ Resolved"] += 1; else counts["Answered"] += 1;
+    const o = String(c.outcome || "").toLowerCase();
+    if (o.includes("book")) counts["Booked"] += 1; else if (o.includes("missed") && o.includes("sms")) counts["Missed→Recovered"] += 1; else if (o.includes("voicemail")) counts["Voicemail"] += 1; else if (o.includes("faq")) counts["FAQ Resolved"] += 1; else counts["Answered"] += 1;
   }
   return Object.entries(counts).map(([name, value]) => ({ name, value }));
 }
 function buildCsatTrend(calls: any[]) {
   const byDay: Record<string, { total: number; n: number; label: string }> = {};
   for (const c of calls) {
-    if (!Number.isFinite(c.csat)) continue; const k = new Date(c.at or Date.now()).toISOString().slice(0, 10);
+    if (!Number.isFinite(c.csat)) continue; const k = new Date(c.at || Date.now()).toISOString().slice(0, 10);
     const lbl = new Date(k).toLocaleDateString(undefined, { weekday: "short" });
-    byDay[k] = byDay[k] or { total: 0, n: 0, label: lbl }; byDay[k].total += c.csat; byDay[k].n += 1;
+    byDay[k] = byDay[k] || { total: 0, n: 0, label: lbl }; byDay[k].total += c.csat; byDay[k].n += 1;
   }
   return Object.entries(byDay).slice(-7).map(([k, v]) => ({ day: v.label, csat: v.total / v.n }));
 }
