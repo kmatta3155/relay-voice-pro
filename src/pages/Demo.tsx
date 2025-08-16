@@ -407,11 +407,29 @@ export default function DemoPage() {
 
   async function recordBookingOrLead() {
     try {
+      const session = await supabase.auth.getSession();
+      if (!session?.data?.session) return false;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('active_tenant_id')
+        .eq('id', session.data.session.user.id)
+        .single();
+      
+      if (!profile?.active_tenant_id) return false;
+      
       const startAt = new Date(Date.now() + 3 * 24 * 3600 * 1000);
       const endAt = new Date(startAt.getTime() + 60 * 60 * 1000);
       const { error } = await supabase
         .from("appointments")
-        .insert([{ title: "Massage – Maya", customer: "Jamie Patel", start_at: startAt.toISOString(), end_at: endAt.toISOString(), staff: "Maya" }]);
+        .insert([{ 
+          title: "Massage – Maya", 
+          customer: "Jamie Patel", 
+          start_at: startAt.toISOString(), 
+          end_at: endAt.toISOString(), 
+          staff: "Maya",
+          tenant_id: profile.active_tenant_id
+        }]);
       if (error) throw error;
       return true;
     } catch {
