@@ -226,7 +226,7 @@ function Overview({ appts, leads, calls }: any) {
 
     const withCsat = calls.filter((c: any) => Number.isFinite(c.csat));
     const csatAvg =
-      withCsat.length > 0 ? (withCsat.reduce((s: number, c: any) => s + (c.csat || 0), 0) / withCsat.length).toFixed(1) : "—";
+      withCsat.length > 0 ? (withCsat.reduce((s: number, c: any) => s + (c.csat || 0), 0) / withCsat.length) : null;
     return { avgHandle, csatAvg };
   }, [calls]);
 
@@ -273,7 +273,7 @@ function Overview({ appts, leads, calls }: any) {
               <KPI label="Bookings this week" value={bookingsThisWeek} />
               <KPI label="Missed calls recovered" value={missedRecoveredPct} />
               <KPI label="Avg. handle time" value={formatSecs(avgHandle)} />
-              <KPI label="CSAT" value={typeof csatAvg === "string" ? csatAvg : csatAvg.toFixed?.(1)} sub="out of 5" />
+              <KPI label="CSAT" value={csatAvg !== null ? csatAvg.toFixed(1) : "—"} sub="out of 5" />
             </div>
 
             {/* Benefit cards */}
