@@ -2,12 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Design system — HSL only.  */
+/* Tokens used directly by the dashboard (e.g., bg-[image:var(--gradient-hero)]) */
 
 @layer base {
   :root {
+    /* Base palette */
     --background: 220 25% 97%;
     --foreground: 220 14% 11%;
 
@@ -38,35 +38,50 @@ All colors MUST be HSL.
     --ring: 262 100% 62%;
 
     --radius: 0.75rem;
-    
-    /* Premium gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
-    --gradient-hero: linear-gradient(135deg, hsl(262 100% 97%) 0%, hsl(220 25% 97%) 50%, hsl(262 50% 95%) 100%);
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100% / 0.8), hsl(220 25% 98% / 0.9));
-    
-    /* Premium shadows */
-    --shadow-premium: 0 20px 25px -5px hsl(262 100% 62% / 0.1), 0 10px 10px -5px hsl(262 100% 62% / 0.04);
-    --shadow-card: 0 4px 6px -1px hsl(220 14% 11% / 0.1), 0 2px 4px -1px hsl(220 14% 11% / 0.06);
-    --shadow-glow: 0 0 40px hsl(262 100% 62% / 0.3);
 
+    /* ===== Premium gradients (used by the new UI) ===== */
+    /* Pill / active sidebar button */
+    --gradient-primary:
+      linear-gradient(
+        135deg,
+        hsl(var(--primary)) 0%,
+        hsl(var(--primary-glow)) 45%,
+        hsl(288 88% 67%) 100%
+      );
+
+    /* Page background (soft hero like the marketing mock) */
+    --gradient-hero:
+      radial-gradient(900px 420px at 12% -10%, hsl(262 84% 67% / 0.35), transparent 60%),
+      linear-gradient(180deg, hsl(262 100% 97%) 0%, hsl(230 44% 97%) 40%, hsl(262 55% 96%) 100%);
+
+    /* Subtle glassy card fill for KPIs */
+    --gradient-card:
+      linear-gradient(145deg, hsl(0 0% 100% / 0.85), hsl(230 40% 98% / 0.92));
+
+    /* Shadows tuned for the brand */
+    --shadow-premium:
+      0 20px 25px -5px hsl(262 100% 62% / 0.10),
+      0 10px 10px -5px hsl(262 100% 62% / 0.06);
+
+    --shadow-card:
+      0 6px 20px hsl(262 60% 40% / 0.08),
+      0 1px 2px hsl(220 14% 11% / 0.06);
+
+    --shadow-glow: 0 0 40px hsl(262 100% 62% / 0.28);
+
+    /* Sidebar (light) */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
+    /* Dark base */
     --background: 220 15% 9%;
     --foreground: 220 25% 95%;
 
@@ -95,16 +110,34 @@ All colors MUST be HSL.
     --border: 220 15% 20%;
     --input: 220 15% 20%;
     --ring: 262 100% 70%;
-    
-    /* Dark mode gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
-    --gradient-hero: linear-gradient(135deg, hsl(220 15% 9%) 0%, hsl(262 25% 15%) 50%, hsl(220 15% 12%) 100%);
-    --gradient-card: linear-gradient(145deg, hsl(220 15% 15% / 0.8), hsl(220 15% 12% / 0.9));
-    
-    /* Dark mode shadows */
-    --shadow-premium: 0 20px 25px -5px hsl(262 100% 70% / 0.2), 0 10px 10px -5px hsl(262 100% 70% / 0.1);
-    --shadow-card: 0 4px 6px -1px hsl(0 0% 0% / 0.3), 0 2px 4px -1px hsl(0 0% 0% / 0.2);
-    --shadow-glow: 0 0 40px hsl(262 100% 70% / 0.4);
+
+    /* Dark gradients/shadows to match the light theme feel */
+    --gradient-primary:
+      linear-gradient(
+        135deg,
+        hsl(var(--primary)) 0%,
+        hsl(var(--primary-glow)) 60%,
+        hsl(288 88% 67%) 100%
+      );
+
+    --gradient-hero:
+      radial-gradient(900px 420px at 12% -10%, hsl(262 84% 67% / 0.30), transparent 60%),
+      linear-gradient(180deg, hsl(220 15% 9%) 0%, hsl(262 25% 15%) 50%, hsl(220 15% 12%) 100%);
+
+    --gradient-card:
+      linear-gradient(145deg, hsl(220 15% 16% / 0.85), hsl(220 15% 12% / 0.92));
+
+    --shadow-premium:
+      0 24px 32px -10px hsl(262 100% 70% / 0.22),
+      0 10px 10px -5px hsl(262 100% 70% / 0.12);
+
+    --shadow-card:
+      0 8px 22px hsl(262 60% 40% / 0.18),
+      0 1px 2px hsl(0 0% 0% / 0.35);
+
+    --shadow-glow: 0 0 48px hsl(262 100% 70% / 0.35);
+
+    /* Sidebar (dark) */
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -123,5 +156,15 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    /* Subtle ambient glow behind content */
+    background-image: var(--gradient-hero);
+    background-attachment: fixed;
   }
+}
+
+/* Optional helpers (used by the marketing look) */
+@layer components {
+  .shadow-premium { box-shadow: var(--shadow-premium); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
 }
