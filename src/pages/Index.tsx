@@ -35,6 +35,7 @@ import vagaroLogo from "@/assets/logos/vagaro.svg";
 import acuityLogo from "@/assets/logos/acuity.svg";
 import calendlyLogo from "@/assets/logos/calendly.svg";
 import outlookLogo from "@/assets/logos/outlook.svg";
+import dashboardPreview from "@/assets/dashboard-preview.jpg"; // ← showcase image (replace with your real screenshot/GIF)
 import MarketingShowcase from "@/components/MarketingShowcase";
 import DemoPage from "@/pages/Demo";
 import { CONFIG } from "@/lib/webhooks";
@@ -48,7 +49,7 @@ function SEOHead() {
   React.useEffect(() => {
     const title = "RelayAI — The AI Receptionist That Trains From Your Website";
     const description =
-      "Never miss a call again. RelayAI answers, books, and handles FAQs 24/7 — auto-trained from your website in minutes. See the onboarding → training → live call demo.";
+      "Never miss a call again. RelayAI answers, books, and handles FAQs 24/7 — auto-trained from your website in minutes. See the onboarding → training → live call → dashboard demo.";
     document.title = title;
 
     const ensureMeta = (name: string, content: string) => {
@@ -209,6 +210,7 @@ function NavBar() {
           <a href="#features" className="hover:opacity-80">Features</a>
           <a href="#pricing" className="hover:opacity-80">Pricing</a>
           <a href="#interactive-demo" className="hover:opacity-80">Live Demo</a>
+          <a href="#dashboard" className="hover:opacity-80">Dashboard</a>
           <a href="#faq" className="hover:opacity-80">FAQ</a>
           <a href="#security" className="hover:opacity-80 inline-flex items-center gap-1"><Lock className="w-4 h-4" /> Security</a>
         </nav>
@@ -392,6 +394,120 @@ function HowItWorks() {
 }
 
 /* =========================
+   Interactive Demo (your end-to-end flow)
+   ========================= */
+function InteractiveDemo() {
+  return (
+    <section id="interactive-demo" className="px-4 py-16 md:py-24 bg-muted/30">
+      <div className="text-center mb-10">
+        <p className="uppercase tracking-widest text-sm text-muted-foreground mb-2">Interactive Demo</p>
+        <h2 className="text-3xl md:text-4xl font-semibold leading-tight">See RelayAI learn & book — live</h2>
+        <p className="mt-3 text-muted-foreground">
+          Experience onboarding → instant training → call routing → live call → analytics.
+        </p>
+      </div>
+      <DemoPage />
+    </section>
+  );
+}
+
+/* =========================
+   NEW: Customer Dashboard Showcase
+   ========================= */
+function DashboardShowcase() {
+  const highlights = [
+    { icon: <TrendingUp className="w-5 h-5" />, title: "Revenue impact", text: "Track bookings captured, conversion rate, and saved staff time." },
+    { icon: <LayoutDashboard className="w-5 h-5" />, title: "Simple at a glance", text: "One place for calls, messages, appointments, and tasks." },
+    { icon: <MessageSquare className="w-5 h-5" />, title: "Post-call summaries", text: "Every call summarized with next steps and outcomes." },
+    { icon: <Users className="w-5 h-5" />, title: "Lead capture", text: "Auto-create leads, tag hot opportunities, and follow up in clicks." },
+    { icon: <CalendarDays className="w-5 h-5" />, title: "Calendar sync", text: "Works with Google/Outlook, Acuity, Fresha, Vagaro, Square, etc." },
+    { icon: <Zap className="w-5 h-5" />, title: "Automation-ready", text: "Confirmations, reminders, and CRM sync without extra tools." },
+  ];
+
+  const kpis = [
+    { k: "Bookings this week", v: "48" },
+    { k: "Missed calls recovered", v: "89%" },
+    { k: "Avg. handle time", v: "1m 42s" },
+    { k: "CSAT", v: "4.8/5" },
+  ];
+
+  return (
+    <section id="dashboard" className="px-4 py-16 md:py-24">
+      <SectionHeader
+        kicker="Customer dashboard"
+        title="Clarity after every call"
+        subtitle="See impact instantly — appointments booked, time saved, top questions, and revenue trends."
+      />
+
+      <div className="max-w-7xl mx-auto mt-12 grid lg:grid-cols-2 gap-12 items-center">
+        {/* Visual */}
+        <motion.div
+          initial={{ opacity: 0, x: -28 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true }}
+          className="relative"
+        >
+          <img
+            src={dashboardPreview}
+            alt="RelayAI dashboard preview"
+            className="rounded-3xl shadow-[var(--shadow-premium)] ring-1 ring-border w-full"
+          />
+          <div className="hidden md:block absolute -bottom-6 -right-6">
+            <div className="p-4 rounded-2xl bg-primary text-primary-foreground shadow-lg">
+              <div className="text-xs opacity-90">Automation</div>
+              <div className="text-sm font-semibold">Reminders enabled</div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Copy + KPI + bullets */}
+        <motion.div
+          initial={{ opacity: 0, x: 28 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+          viewport={{ once: true }}
+        >
+          {/* KPI row */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {kpis.map((s) => (
+              <div key={s.k} className="p-4 rounded-xl bg-card shadow-sm border">
+                <div className="text-xs text-muted-foreground">{s.k}</div>
+                <div className="text-xl font-semibold">{s.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Highlights */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            {highlights.map((h) => (
+              <div key={h.title} className="p-4 rounded-xl bg-[image:var(--gradient-card)] border border-border/50">
+                <div className="flex items-center gap-2 mb-1 text-primary">{h.icon}<span className="font-medium">{h.title}</span></div>
+                <div className="text-sm text-muted-foreground">{h.text}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Value CTA */}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button asChild className="rounded-2xl">
+              <a href="#app" className="inline-flex items-center gap-2">Open my dashboard <ArrowRight className="w-4 h-4" /></a>
+            </Button>
+            <Button asChild variant="outline" className="rounded-2xl">
+              <a href="#interactive-demo">Replay the demo</a>
+            </Button>
+          </div>
+
+          <p className="mt-3 text-xs text-muted-foreground">
+            Pro tip: Tag common questions to auto-answer faster; set reminders to follow up with high-intent leads.
+          </p>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+/* =========================
    Features Grid (benefit-first)
    ========================= */
 function Features() {
@@ -462,24 +578,6 @@ function Testimonials() {
           </motion.blockquote>
         ))}
       </div>
-    </section>
-  );
-}
-
-/* =========================
-   Interactive Demo (your end-to-end flow)
-   ========================= */
-function InteractiveDemo() {
-  return (
-    <section id="interactive-demo" className="px-4 py-16 md:py-24 bg-muted/30">
-      <div className="text-center mb-10">
-        <p className="uppercase tracking-widest text-sm text-muted-foreground mb-2">Interactive Demo</p>
-        <h2 className="text-3xl md:text-4xl font-semibold leading-tight">See RelayAI learn & book — live</h2>
-        <p className="mt-3 text-muted-foreground">
-          Experience onboarding → instant training → call routing → live call → analytics.
-        </p>
-      </div>
-      <DemoPage />
     </section>
   );
 }
@@ -602,7 +700,7 @@ function Footer() {
           <a href="#faq" className="underline">FAQ</a>
           <a href="#pricing" className="underline">Pricing</a>
           <a href="#interactive-demo" className="underline">Demo</a>
-          {session && <a href="#admin" className="underline">Admin</a>}
+          <a href="#dashboard" className="underline">Dashboard</a>
         </div>
       </div>
     </footer>
@@ -729,6 +827,7 @@ export default function AIReceptionistApp() {
             <MarketingShowcase />
             <HowItWorks />
             <InteractiveDemo />
+            <DashboardShowcase />
             <Features />
             <Testimonials />
             <Pricing />
