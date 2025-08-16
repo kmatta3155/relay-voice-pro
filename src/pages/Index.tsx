@@ -28,6 +28,150 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { CONFIG } from "@/lib/webhooks";
+
+/* =========================
+   Chat Bubble Component
+   ========================= */
+function ChatBubble({ user, name, text }: { user?: boolean; name: string; text: string }) {
+  return (
+    <div className={`flex gap-3 ${user ? 'justify-end' : ''}`}>
+      {!user && <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <Bot className="w-4 h-4" />
+      </div>}
+      <div className={`max-w-[80%] ${user ? 'text-right' : ''}`}>
+        <div className="text-xs text-muted-foreground mb-1">{name}</div>
+        <div className={`p-3 rounded-2xl text-sm ${user ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted'}`}>
+          {text}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================
+   Trust Logos Component
+   ========================= */
+function TrustLogos() {
+  const logos = [
+    { src: freshaLogo, alt: "Fresha", name: "Fresha" },
+    { src: squareLogo, alt: "Square", name: "Square" },
+    { src: vagaroLogo, alt: "Vagaro", name: "Vagaro" },
+    { src: acuityLogo, alt: "Acuity", name: "Acuity" },
+    { src: calendlyLogo, alt: "Calendly", name: "Calendly" },
+    { src: outlookLogo, alt: "Outlook", name: "Outlook" },
+  ];
+
+  return (
+    <section className="max-w-6xl mx-auto px-4 py-12">
+      <div className="text-center mb-8">
+        <p className="text-sm text-muted-foreground uppercase tracking-wider">Integrates with your existing tools</p>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-8 opacity-60">
+        {logos.map((logo) => (
+          <img key={logo.name} src={logo.src} alt={logo.alt} className="h-8 w-auto grayscale hover:grayscale-0 transition-all" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* =========================
+   Features Component
+   ========================= */
+function Features() {
+  return (
+    <section id="features" className="max-w-6xl mx-auto px-4 py-16 md:py-24">
+      <div className="text-center mb-16">
+        <h2 className="text-3xl md:text-4xl font-semibold mb-4">Everything you need to never miss a call</h2>
+        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+          From instant training to multilingual support, our AI receptionist adapts to your business needs.
+        </p>
+      </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {features.map((feature, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            viewport={{ once: true }}
+            className="group"
+          >
+            <Card className="h-full hover:shadow-lg transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 rounded-2xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                    {feature.icon}
+                  </div>
+                  <h3 className="font-semibold">{feature.title}</h3>
+                </div>
+                <p className="text-muted-foreground">{feature.text}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* =========================
+   Pricing Component
+   ========================= */
+function Pricing() {
+  return (
+    <section id="pricing" className="max-w-6xl mx-auto px-4 py-16 md:py-24">
+      <div className="text-center mb-16">
+        <h2 className="text-3xl md:text-4xl font-semibold mb-4">Simple, transparent pricing</h2>
+        <p className="text-lg text-muted-foreground">Start free, upgrade when you're ready. No hidden fees.</p>
+      </div>
+      <div className="grid md:grid-cols-3 gap-8">
+        {tiers.map((tier, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            viewport={{ once: true }}
+          >
+            <Card className={`h-full ${tier.highlighted ? 'ring-2 ring-primary shadow-xl scale-105' : ''}`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>{tier.name}</CardTitle>
+                  {tier.badge && (
+                    <div className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                      {tier.badge}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold">{tier.price}</span>
+                  <span className="text-muted-foreground">{tier.period}</span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3 mb-6">
+                  {tier.points.map((point, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                      <span className="text-sm">{point}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Button 
+                  className="w-full rounded-2xl" 
+                  variant={tier.highlighted ? "default" : "outline"}
+                >
+                  {tier.cta}
+                </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
 import freshaLogo from "@/assets/logos/fresha.svg";
 import squareLogo from "@/assets/logos/square.svg";
 import vagaroLogo from "@/assets/logos/vagaro.svg";
