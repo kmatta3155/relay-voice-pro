@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ragSearchEnhanced, ingestWebsite } from "@/lib/rag";
+import { followUpLead } from "@/lib/leads";
 import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
@@ -184,7 +185,7 @@ export default function Dashboard() {
       {tab === "overview" && (
         <Overview appts={appts} leads={leads} calls={calls} demoMode={demoMode} />
       )}
-      {tab === "leads" && <LeadsTab leads={leads} setLeads={setLeads} />}
+      {tab === "leads" && <LeadsTab leads={leads} setLeads={setLeads} setThreads={setThreads} />}
       {tab === "appointments" && <ApptsTab appts={appts} setAppts={setAppts} />}
       {tab === "messages" && <MessagesTab threads={threads} setThreads={setThreads} />} 
       {tab === "calls" && <CallsTab calls={calls} />} 
@@ -420,7 +421,7 @@ function KPI({ label, value, sub }: { label: string; value: string | number; sub
 }
 
 /* ---------- Leads ---------- */
-function LeadsTab({ leads, setLeads }: { leads: any[]; setLeads: (x: any) => void }) {
+function LeadsTab({ leads, setLeads, setThreads }: { leads: any[]; setLeads: (x: any) => void; setThreads: (x: any) => void }) {
   const [q, setQ] = useState("");
   const [modal, setModal] = useState<null | any>(null);
   const filtered = leads.filter((l) => (l.name + l.phone + l.email + (l.source || "") + (l.status || "")).toLowerCase().includes(q.toLowerCase()));
@@ -486,7 +487,7 @@ function LeadsTab({ leads, setLeads }: { leads: any[]; setLeads: (x: any) => voi
                   <td className="p-3 capitalize">{(l.intent ?? scoreLead(l).intent) || "—"}</td>
                   <td className="p-3 text-right">
                     <Button variant="outline" className="rounded-2xl mr-2" onClick={() => setModal(l)}><Edit className="w-4 h-4" /></Button>
-                    <Button variant="outline" className="rounded-2xl mr-2" onClick={() => nudgeLead(l)}><Zap className="w-4 h-4 mr-1" /> Nudge</Button>
+                    <Button variant="outline" className="rounded-2xl mr-2" onClick={() => followUpLead(l, setThreads)}><Zap className="w-4 h-4 mr-1" /> Nudge</Button>
                     <Button variant="outline" className="rounded-2xl" onClick={() => remove(l.id)}><Trash2 className="w-4 h-4" /></Button>
                   </td>
                 </tr>
