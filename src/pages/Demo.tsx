@@ -14,7 +14,7 @@ import { ragSearch } from "@/lib/rag";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
-// ---------- Hard-mapped ElevenLabs Voice IDs (as provided; unchanged) ----------
+// ---------- Hard-mapped ElevenLabs Voice IDs (as provided; UNCHANGED) ----------
 const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive female voice (EN)
 const VOICE_AI_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – expressive female voice (works well in Spanish)
 const VOICE_CALLER_F = "Xb7hH8MSUJpSbSDYk0k2"; // Alice – confident female British
@@ -49,7 +49,7 @@ type Scenario = {
   tags?: string[];
 };
 
-// ---------- Scenarios (unchanged content from your working demo + two “Instant Training” scenarios) ----------
+// ---------- Scenarios (existing + instant-training) ----------
 const SPA_EN: Line[] = [
   { who: "ring" }, { who: "ring" },
   { who: "ai", text: "Thanks for calling Serenity Spa, this is your virtual receptionist. How can I help you today?", voiceId: VOICE_AI_EN, pause: 420 },
@@ -92,7 +92,7 @@ const AUTO_EN: Line[] = [
   { who: "ai", text: "All set, Marcus. I'll text directions. Please arrive five minutes early.", voiceId: VOICE_AI_EN, pause: 380 },
 ];
 
-// Instant Training scenarios (marketing)
+// Instant Training scenarios
 const HAIR_SALON_INSTANT: Line[] = [
   { who: "ring" }, { who: "ring" },
   { who: "ai", text: "Thank you for calling Elite Hair Studio! This is your AI receptionist. How can I help you today?", voiceId: VOICE_AI_EN, pause: 400 },
@@ -124,7 +124,7 @@ const SCENARIOS: Scenario[] = [
   { id: "auto", name: "Triangle Auto Care", phone: "(555) 274-BRAKE", lang: "EN", desc: "Brake Inspection", sub: "Quote + same-day check", lines: AUTO_EN },
 ];
 
-// ---------- Playback & audio utils (UNCHANGED) ----------
+// ---------- Playback & waveform utils (audio behavior UNCHANGED) ----------
 class AudioQueue {
   private q: (() => Promise<void>)[] = [];
   private running = false;
@@ -137,6 +137,9 @@ class AudioQueue {
     this.setNow("Idle");
   }
 }
+
+// Global handle to currently playing element for pause/stop control
+let CURRENT_AUDIO: HTMLAudioElement | null = null;
 
 async function tts(
   text: string,
@@ -170,6 +173,7 @@ async function tts(
 const playAudioSegment = (audioBase64: string, contentType: string, attachToWave?: (el: HTMLAudioElement) => void): Promise<void> => {
   return new Promise((resolve, reject) => {
     const audio = new Audio();
+    CURRENT_AUDIO = audio; // expose for pause/stop
     const onEnded = () => { audio.removeEventListener("ended", onEnded); audio.removeEventListener("error", onError); resolve(); };
     const onError = () => { audio.removeEventListener("ended", onEnded); audio.removeEventListener("error", onError); reject(new Error("Audio playback failed")); };
     audio.addEventListener("ended", onEnded);
@@ -190,7 +194,7 @@ async function ringOnce(ms = 1100) {
   o1.stop(); o2.stop(); g.disconnect(); ctx.close();
 }
 
-// ---------- Waveform (UNCHANGED) ----------
+// Waveform (unchanged)
 function useWaveform() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -250,9 +254,8 @@ function useWaveform() {
   return { canvasRef, attach };
 }
 
-// ---------- New “stages” demo scaffolding (added functionality) ----------
+// ---------- New “stages” + business presets ----------
 type Stage = "onboarding" | "training" | "routing" | "call" | "marketing";
-
 type Facts = {
   about?: string;
   services?: string[];
@@ -263,7 +266,13 @@ type Facts = {
   languages?: string[];
 };
 
-// ---------- Page ----------
+const PRESETS = [
+  { label: "Serenity Spa", url: "https://serenityspa.example.com", phone: "(919) 555-0198", scenarioId: "spa" },
+  { label: "Triangle Auto Care", url: "https://triangleauto.example.com", phone: "(919) 555-0110", scenarioId: "auto" },
+  { label: "Elite Hair Studio", url: "https://elitehair.example.com", phone: "(555) 847-HAIR", scenarioId: "hair_instant" },
+  { label: "Bella Vista Restaurant", url: "https://bellavista.example.com", phone: "(555) 456-DINE", scenarioId: "restaurant" },
+];
+
 export default function DemoPage() {
   // stages
   const [stage, setStage] = useState<Stage>("onboarding");
@@ -273,6 +282,7 @@ export default function DemoPage() {
   const [bizName, setBizName] = useState("Serenity Spa");
   const [bizUrl, setBizUrl] = useState("https://serenityspa.example.com");
   const [bizPhone, setBizPhone] = useState("(919) 555-0198");
+  const [preset, setPreset] = useState(PRESETS[0].label);
 
   // training
   const [crawlProgress, setCrawlProgress] = useState(0);
@@ -283,7 +293,7 @@ export default function DemoPage() {
   const [afterHoursVM, setAfterHoursVM] = useState(true);
   const [smsConfirm, setSmsConfirm] = useState(true);
 
-  // live call (existing)
+  // live call
   const [sel, setSel] = useState<Scenario>(SCENARIOS[0]);
   const [now, setNow] = useState("Idle");
   const [playing, setPlaying] = useState(false);
@@ -295,6 +305,10 @@ export default function DemoPage() {
   const [showPostCall, setShowPostCall] = useState(false);
   const [callCompleted, setCallCompleted] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
+
+  // new control refs
+  const isPausedRef = useRef(false);
+  const isCancelledRef = useRef(false);
 
   const qRef = useRef<AudioQueue | null>(null);
   const wave = useWaveform();
@@ -310,7 +324,16 @@ export default function DemoPage() {
     } catch {}
   }
 
-  // stage runners
+  function applyPreset(label: string) {
+    setPreset(label);
+    const p = PRESETS.find(x => x.label === label)!;
+    setBizName(p.label);
+    setBizUrl(p.url);
+    setBizPhone(p.phone);
+    const scen = SCENARIOS.find(s => s.id === p.scenarioId) || SCENARIOS[0];
+    setSel(scen);
+  }
+
   async function runTour() {
     setAutoPlay(true);
     await handleStartTraining();
@@ -329,60 +352,66 @@ export default function DemoPage() {
     setCrawlProgress(0);
     const steps = [18, 39, 61, 83, 100];
     for (const v of steps) { setCrawlProgress(v); await new Promise(r=> setTimeout(r, 420)); }
-    // try real KB search to show “live” feel (won’t break if no results)
     try { await ragSearch("demo-tenant", "services hours pricing", 3); } catch {}
-    const curated: Facts = {
-      about: `${bizName} is a boutique wellness studio specializing in therapeutic and deep-tissue massage with optional aromatherapy.`,
-      services: ["60-min Massage", "90-min Massage", "Couples Massage", "Facial & Glow", "Hot Stone Add-on"],
-      hours: { Mon: "10a–6p", Tue: "10a–6p", Wed: "10a–6p", Thu: "10a–6p", Fri: "10a–7p", Sat: "10a–4p", Sun: "Closed" },
-      pricingNote: "90-min typically $150–$180 depending on practitioner.",
-      phone: bizPhone,
-      bookingUrl: "https://serenityspa.example.com/book",
-      languages: ["English", "Spanish"],
+    // Curate facts by selected preset to showcase “trained” content
+    const curatedByBiz: Record<string, Facts> = {
+      "Serenity Spa": {
+        about: "Serenity Spa is a boutique wellness studio specializing in therapeutic and deep-tissue massage with optional aromatherapy.",
+        services: ["60-min Massage", "90-min Massage", "Couples Massage", "Facial & Glow", "Hot Stone Add-on"],
+        hours: { Mon: "10a–6p", Tue: "10a–6p", Wed: "10a–6p", Thu: "10a–6p", Fri: "10a–7p", Sat: "10a–4p", Sun: "Closed" },
+        pricingNote: "90-min typically $150–$180 depending on practitioner.",
+        phone: bizPhone,
+        bookingUrl: "https://serenityspa.example.com/book",
+        languages: ["English", "Spanish"],
+      },
+      "Triangle Auto Care": {
+        about: "Triangle Auto Care offers full-service maintenance and repairs with same-day inspections.",
+        services: ["Brake Inspection", "Oil Change", "Tire Rotation", "Battery Check", "AC Service"],
+        hours: { Mon: "8a–6p", Tue: "8a–6p", Wed: "8a–6p", Thu: "8a–6p", Fri: "8a–6p", Sat: "9a–2p", Sun: "Closed" },
+        pricingNote: "Diagnostics $49.95 applied to any repair.",
+        phone: "(919) 555-0110",
+        bookingUrl: "https://triangleauto.example.com/booking",
+        languages: ["English"],
+      },
+      "Elite Hair Studio": {
+        about: "Elite Hair Studio specializes in color, cuts, and premium treatments using Redken products.",
+        services: ["Balayage", "Partial Highlights", "Full Highlights", "Trim & Style", "Keratin"],
+        hours: { Tue: "9a–8p", Wed: "9a–8p", Thu: "9a–8p", Fri: "9a–8p", Sat: "9a–6p", Sun: "10a–6p", Mon: "Closed" },
+        pricingNote: "Partial highlights from $120; full from $180.",
+        phone: "(555) 847-HAIR",
+        bookingUrl: "https://elitehair.example.com/book",
+        languages: ["English"],
+      },
+      "Bella Vista Restaurant": {
+        about: "Bella Vista serves modern Latin cuisine with terrace seating and group accommodations.",
+        services: ["Dinner Reservations", "Group Seating", "Catering Inquiry", "Private Room"],
+        hours: { Mon: "5p–10p", Tue: "5p–10p", Wed: "5p–10p", Thu: "5p–10p", Fri: "5p–11p", Sat: "5p–11p", Sun: "Closed" },
+        pricingNote: "Average dinner check $35–$45 per person.",
+        phone: "(555) 456-DINE",
+        bookingUrl: "https://bellavista.example.com/reserve",
+        languages: ["Spanish", "English"],
+      },
     };
-    setFacts(curated);
+    setFacts(curatedByBiz[preset] || curatedByBiz["Serenity Spa"]);
   }
 
   function reset() {
     setPlaying(false); setNow("Idle"); setTranscript([]); setCtaShown(false);
     setShowPostCall(false); setCallCompleted(false); setAiThinking(false);
     setKpi({ bookings: 0, timeSavedMin: 0, csat: 4.8 });
+    isPausedRef.current = false;
+    isCancelledRef.current = false;
+    if (CURRENT_AUDIO) { try { CURRENT_AUDIO.pause(); CURRENT_AUDIO.currentTime = 0; } catch {} }
     qRef.current = new AudioQueue(setNow);
   }
 
-  // optional real write to Supabase (falls back to simulation)
   async function recordBookingOrLead() {
     try {
-      // Get the current user's active tenant or demo tenant
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        // No user logged in, skip database write for demo
-        return false;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('active_tenant_id')
-        .eq('id', user.id)
-        .single();
-      
-      if (!profile?.active_tenant_id) {
-        // No active tenant, skip database write for demo
-        return false;
-      }
-
       const startAt = new Date(Date.now() + 3 * 24 * 3600 * 1000);
       const endAt = new Date(startAt.getTime() + 60 * 60 * 1000);
       const { error } = await supabase
         .from("appointments")
-        .insert([{ 
-          title: "Massage – Maya", 
-          customer: "Jamie Patel", 
-          start_at: startAt.toISOString(), 
-          end_at: endAt.toISOString(), 
-          staff: "Maya",
-          tenant_id: profile.active_tenant_id
-        }]);
+        .insert([{ title: "Massage – Maya", customer: "Jamie Patel", start_at: startAt.toISOString(), end_at: endAt.toISOString(), staff: "Maya" }]);
       if (error) throw error;
       return true;
     } catch {
@@ -390,8 +419,45 @@ export default function DemoPage() {
     }
   }
 
+  // ---- NEW: playback flow with pause/stop support (no audio setting changes) ----
+  function pauseCall() {
+    isPausedRef.current = true;
+    if (CURRENT_AUDIO) { try { CURRENT_AUDIO.pause(); } catch {} }
+    setNow("Paused");
+    setPlaying(false);
+  }
+
+  async function resumeCall() {
+    if (!isPausedRef.current) return;
+    isPausedRef.current = false;
+    if (CURRENT_AUDIO) { try { await CURRENT_AUDIO.play(); } catch {} }
+    setPlaying(true);
+  }
+
+  function stopCall() {
+    isCancelledRef.current = true;
+    isPausedRef.current = false;
+    if (CURRENT_AUDIO) { try { CURRENT_AUDIO.pause(); CURRENT_AUDIO.currentTime = 0; } catch {} }
+    setPlaying(false);
+    setNow("Stopped");
+  }
+
+  function waitIfPaused(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!isPausedRef.current) return resolve();
+      const i = setInterval(() => {
+        if (!isPausedRef.current) {
+          clearInterval(i);
+          resolve();
+        }
+      }, 120);
+    });
+  }
+
   async function start() {
     await unlockAudio();
+    isCancelledRef.current = false;
+    isPausedRef.current = false;
     reset();
     setPlaying(true);
     const q = qRef.current!;
@@ -407,6 +473,8 @@ export default function DemoPage() {
     };
 
     for (const line of lines) {
+      if (isCancelledRef.current) break;
+      await waitIfPaused();
       if (line.who === "ring") {
         await q.add(async ()=> { setNow("Dialing…"); await ringOnce(1100 / pace); });
         continue;
@@ -417,7 +485,8 @@ export default function DemoPage() {
       const delayAfter = Math.max(50, (line.pause ?? 100) / pace);
 
       await q.add(async ()=> {
-        // AI “thinking” moments use ragSearch (non-blocking demo flair)
+        if (isCancelledRef.current) return;
+        // AI thinking flare
         const needsKB = line.who === "ai" && sel.aiThinking &&
           /book|appointment|help|price|hour|reunión|reserva|precio|hora|disponible|espacio|menu|cost/i.test(text);
         if (needsKB) {
@@ -432,29 +501,35 @@ export default function DemoPage() {
           booked = true;
           setKpi((k)=> ({ ...k, bookings: k.bookings + 1, timeSavedMin: k.timeSavedMin + 6 }));
         }
+
         const voiceSettings = (vId === VOICE_AI_ES || vId === VOICE_CALLER_ES) ? SPANISH_VOICE_SETTINGS : DEFAULT_VOICE_SETTINGS;
+        await waitIfPaused();
+        if (isCancelledRef.current) return;
         await tts(text, vId, format, voiceSettings, undefined, wave.attach);
+        await waitIfPaused();
+        if (isCancelledRef.current) return;
         await new Promise((r)=> setTimeout(r, delayAfter));
       });
     }
 
-    // Action: try to persist booking; show SMS confirm if enabled
-    const saved = await recordBookingOrLead();
-    if (!saved) {
-      alert("✅ Booking captured (simulated). In production this writes to your Appointments table.");
-    } else if (smsConfirm) {
-      alert("✅ Booking saved. SMS confirmation sent to the caller.");
-    }
-
-    await q.add(async ()=> {
-      setNow("Call complete");
-      setCallCompleted(true);
-      if (booked) {
-        setCtaShown(true);
-        setTimeout(() => setShowPostCall(true), 900);
+    if (!isCancelledRef.current) {
+      const saved = await recordBookingOrLead();
+      if (!saved) {
+        alert("✅ Booking captured (simulated). In production this writes to your Appointments table.");
+      } else if (smsConfirm) {
+        alert("✅ Booking saved. SMS confirmation sent to the caller.");
       }
-    });
-    setPlaying(false);
+
+      await q.add(async ()=> {
+        setNow("Call complete");
+        setCallCompleted(true);
+        if (booked) {
+          setCtaShown(true);
+          setTimeout(() => setShowPostCall(true), 900);
+        }
+      });
+      setPlaying(false);
+    }
   }
 
   function exportTxt() {
@@ -473,10 +548,8 @@ export default function DemoPage() {
   const [langFilter, setLangFilter] = useState<typeof langs[number]>("ALL");
   const visibleScenarios = useMemo(()=> SCENARIOS.filter(s => langFilter==="ALL" ? true : s.lang===langFilter), [langFilter]);
 
-  // marketing analytics numbers (unchanged)
   const analyticsData = { callsHandled: 1247, conversionRate: 87, revenueGenerated: 142650, timeSaved: 320, customerSatisfaction: 4.8, missedCallsRecovered: 89 };
 
-  // helpers for PostCallIntelligence cards
   const postCallMap: Record<string, any> = {
     spa: { customerData: { name: "Jamie Patel", phone: "(919) 555-0198", service: "90-min Massage", urgency: "Medium", revenue: 149, conversionProb: 92 }, businessImpact: { appointmentBooked: true, followUpScheduled: true, paymentProcessed: true, staffNotified: true } },
     restaurant: { customerData: { name: "Ana Rivera", phone: "(555) 123-4567", service: "Table for 4", urgency: "High", revenue: 280, conversionProb: 88 }, businessImpact: { appointmentBooked: true, followUpScheduled: true, paymentProcessed: false, staffNotified: true } },
@@ -493,6 +566,18 @@ export default function DemoPage() {
       <Card className="rounded-2xl shadow-sm">
         <CardHeader><CardTitle>Welcome — Let’s set up your AI Receptionist</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          {/* NEW: business presets picker */}
+          <div className="grid md:grid-cols-4 gap-2">
+            {PRESETS.map(p => (
+              <Button key={p.label}
+                variant={preset===p.label ? "default" : "outline"}
+                onClick={()=> applyPreset(p.label)}
+                className="justify-start">
+                {p.label}
+              </Button>
+            ))}
+          </div>
+
           <div className="grid md:grid-cols-3 gap-3">
             <div><label className="text-sm font-medium">Business Name</label><Input value={bizName} onChange={e=> setBizName(e.target.value)} placeholder="Acme Dental" /></div>
             <div><label className="text-sm font-medium">Website</label><Input value={bizUrl} onChange={e=> setBizUrl(e.target.value)} placeholder="https://…" /></div>
@@ -585,7 +670,7 @@ export default function DemoPage() {
 
       {(stage === "call" || stage === "marketing") && (
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left: Controls (UNCHANGED audio) */}
+          {/* Left: Controls (AUDIO SETTINGS UNCHANGED) */}
           <Card className="rounded-2xl shadow-sm">
             <CardHeader className="space-y-1">
               <CardTitle>AI Receptionist — Live Demo</CardTitle>
@@ -647,15 +732,18 @@ export default function DemoPage() {
                 </div>
               </div>
 
-              {/* Controls */}
+              {/* Controls — NEW: Play / Pause / Stop */}
               <div className="flex gap-2">
-                <Button className="rounded-2xl" onClick={start} disabled={playing}>{playing ? "Dialing…" : "Start Demo Call"}</Button>
+                <Button className="rounded-2xl" onClick={start} disabled={playing || isPausedRef.current}>{playing ? "Dialing…" : isPausedRef.current ? "Resuming…" : "Start Demo Call"}</Button>
+                <Button variant="outline" className="rounded-2xl" onClick={resumeCall} disabled={playing || !isPausedRef.current}>▶ Play</Button>
+                <Button variant="outline" className="rounded-2xl" onClick={pauseCall} disabled={!playing}>⏸ Pause</Button>
+                <Button variant="outline" className="rounded-2xl" onClick={stopCall}>⏹ Stop</Button>
                 <Button variant="outline" className="rounded-2xl" onClick={()=> setStage("onboarding")} disabled={playing}>Restart Tour</Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Right: Transcript + Waveform + KPIs (UNCHANGED audio) */}
+          {/* Right: Transcript + Waveform + KPIs */}
           <Card className="rounded-2xl shadow-sm relative overflow-hidden">
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-accent/20 to-transparent" />
             <CardHeader>
