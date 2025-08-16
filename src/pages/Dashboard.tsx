@@ -1,771 +1,673 @@
-import React, { useEffect, useMemo, useState } from "react";
+"use client";
+
+import React from "react";
 import {
-  Bot,
-  LayoutDashboard,
-  Users,
-  Calendar as CalendarIcon,
-  MessageCircle,
-  PhoneCall,
-  BarChart3,
-  Plus,
-  Search,
-  Filter,
-  Download,
-  Trash2,
-  Edit,
-  Save,
-  X,
-  Send,
-  Zap,
-  Check,
-  Brain,
-  BookOpen,
-  Globe,
-  RefreshCw,
-  CheckCircle,
-  AlertCircle,
-  Building,
-  TrendingUp,
-  ThumbsUp,
-  Clock,
-  DollarSign,
-} from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
-import * as repo from "@/lib/data";
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ragSearchEnhanced, ingestWebsite } from "@/lib/rag";
-import { followUpLead } from "@/lib/leads";
-import { motion } from "framer-motion";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import {
-  ResponsiveContainer,
   AreaChart,
   Area,
   LineChart,
   Line,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
+  BarChart,
+  Bar,
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
 } from "recharts";
+import {
+  CalendarCheck2,
+  PhoneIncoming,
+  PhoneForwarded,
+  Bot,
+  Users,
+  Settings2,
+  PlayCircle,
+  PauseCircle,
+  Wand2,
+  DollarSign,
+  Sparkles,
+  Star,
+  ThumbsUp,
+  Mic2,
+  Gauge,
+  ShieldCheck,
+  Download,
+  ArrowUpRight,
+  Link,
+} from "lucide-react";
+import { motion } from "framer-motion";
 
-export default function Dashboard() {
-  const [tab, setTab] = useState<
-    | "overview"
-    | "leads"
-    | "appointments"
-    | "messages"
-    | "calls"
-    | "analytics"
-    | "knowledge"
-    | "onboarding"
-  >("overview");
+// -----------------------------------------------------------------------------
+// Demo Data
+// -----------------------------------------------------------------------------
+const trend = [
+  { day: "Mon", bookings: 7, revenue: 820 },
+  { day: "Tue", bookings: 8, revenue: 910 },
+  { day: "Wed", bookings: 10, revenue: 1120 },
+  { day: "Thu", bookings: 6, revenue: 740 },
+  { day: "Fri", bookings: 9, revenue: 1010 },
+  { day: "Sat", bookings: 4, revenue: 420 },
+  { day: "Sun", bookings: 4, revenue: 450 },
+];
 
-  const [tenantId, setTenantId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [demoMode, setDemoMode] = useState(false);
+const revenueImpact = [
+  { source: "Recovered calls", revenue: 5400 },
+  { source: "After-hours", revenue: 3200 },
+  { source: "Upsells", revenue: 1800 },
+  { source: "Missed-to-booked", revenue: 2600 },
+];
 
-  const [leads, setLeads] = useState<any[]>([]);
-  const [appts, setAppts] = useState<any[]>([]);
-  const [threads, setThreads] = useState<any[]>([]);
-  const [calls, setCalls] = useState<any[]>([]);
+const outcomes = [
+  { name: "Booked", value: 48 },
+  { name: "Voicemail", value: 22 },
+  { name: "Transfer", value: 15 },
+  { name: "Lead", value: 18 },
+  { name: "No Action", value: 12 },
+];
 
-  useEffect(() => {
-    (async () => {
-      const t = await getActiveTenantId();
-      setTenantId(t || null);
-      if (!t) {
-        const demo = buildDemo();
-        setLeads(demo.leads);
-        setAppts(demo.appts);
-        setThreads(demo.threads);
-        setCalls(demo.calls);
-        setDemoMode(true);
-        setLoading(false);
-        return;
-      }
-      const [L, A, T, C] = await Promise.all([
-        repo.listLeads(),
-        repo.listAppointments(),
-        repo.listThreads(),
-        repo.listCalls(),
-      ]);
-      const empty = !(L?.length || A?.length || T?.length || C?.length);
-      if (empty) {
-        const demo = buildDemo();
-        setLeads(demo.leads);
-        setAppts(demo.appts);
-        setThreads(demo.threads);
-        setCalls(demo.calls);
-        setDemoMode(true);
-      } else {
-        setLeads(L || []);
-        setAppts(A || []);
-        setThreads(T || []);
-        setCalls(C || []);
-      }
-      setLoading(false);
-    })();
-  }, []);
+const recentCalls = [
+  {
+    id: "C-1043",
+    time: "9:42 AM",
+    caller: "Sofia Perez",
+    status: "Booked",
+    intent: "Teeth whitening consult",
+    dur: "02:13",
+    csat: 5,
+  },
+  {
+    id: "C-1042",
+    time: "9:10 AM",
+    caller: "Jacob Li",
+    status: "Lead",
+    intent: "New patient cleaning",
+    dur: "01:47",
+    csat: 5,
+  },
+  {
+    id: "C-1041",
+    time: "8:55 AM",
+    caller: "Unknown",
+    status: "Voicemail",
+    intent: "—",
+    dur: "00:29",
+    csat: 4,
+  },
+  {
+    id: "C-1040",
+    time: "8:31 AM",
+    caller: "Noah Patel",
+    status: "Transfer",
+    intent: "Emergency chip repair",
+    dur: "03:01",
+    csat: 5,
+  },
+];
 
-  function toggleDemo() {
-    if (demoMode) {
-      (async () => {
-        setLoading(true);
-        try {
-          const [L, A, T, C] = await Promise.all([
-            repo.listLeads(),
-            repo.listAppointments(),
-            repo.listThreads(),
-            repo.listCalls(),
-          ]);
-          setLeads(L || []);
-          setAppts(A || []);
-          setThreads(T || []);
-          setCalls(C || []);
-          setDemoMode(false);
-        } finally {
-          setLoading(false);
-        }
-      })();
-    } else {
-      const demo = buildDemo();
-      setLeads(demo.leads);
-      setAppts(demo.appts);
-      setThreads(demo.threads);
-      setCalls(demo.calls);
-      setDemoMode(true);
-    }
-  }
+// -----------------------------------------------------------------------------
+// Brand & Chart helpers
+// -----------------------------------------------------------------------------
+const BRAND = {
+  violet: "hsl(var(--primary))",
+  violetSoft: "hsl(var(--primary-glow))",
+  blue: "hsl(220 90% 60%)",
+  blueSoft: "hsl(220 90% 70%)",
+  pie: [
+    "hsl(262 85% 62%)",
+    "hsl(220 85% 60%)",
+    "hsl(160 70% 45%)",
+    "hsl(30 90% 55%)",
+    "hsl(280 70% 55%)",
+  ],
+};
 
-  if (loading)
-    return shell(
-      <div className="p-6 text-sm text-slate-600">Loading your workspace…</div>,
-      tab,
-      setTab,
-      demoMode,
-      toggleDemo
-    );
-
-  if (!tenantId && !demoMode)
-    return shell(
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>No workspace selected</CardTitle>
-        </CardHeader>
-        <CardContent>
-          Sign in and ensure your profile has <code>active_tenant_id</code>. Then refresh.
-        </CardContent>
-      </Card>,
-      tab,
-      setTab,
-      demoMode,
-      toggleDemo
-    );
-
-  return shell(
-    <>
-      {tab === "overview" && (
-        <Overview appts={appts} leads={leads} calls={calls} demoMode={demoMode} />
-      )}
-      {tab === "leads" && <LeadsTab leads={leads} setLeads={setLeads} setThreads={setThreads} />}
-      {tab === "appointments" && <ApptsTab appts={appts} setAppts={setAppts} />}
-      {tab === "messages" && <MessagesTab threads={threads} setThreads={setThreads} />} 
-      {tab === "calls" && <CallsTab calls={calls} />} 
-      {tab === "analytics" && <AnalyticsTab leads={leads} calls={calls} />} 
-      {tab === "knowledge" && <KnowledgeTab />} 
-      {tab === "onboarding" && <OnboardingTab />} 
-    </>,
-    tab,
-    setTab,
-    demoMode,
-    toggleDemo
+function ChartDefs() {
+  return (
+    <defs>
+      <linearGradient id="fillBookings" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={BRAND.violet} stopOpacity={0.4} />
+        <stop offset="100%" stopColor={BRAND.violetSoft} stopOpacity={0.05} />
+      </linearGradient>
+      <linearGradient id="strokeRevenue" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stopColor={BRAND.blue} />
+        <stop offset="100%" stopColor={BRAND.blueSoft} />
+      </linearGradient>
+      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={BRAND.blueSoft} stopOpacity={0.9} />
+        <stop offset="100%" stopColor={BRAND.blue} stopOpacity={0.6} />
+      </linearGradient>
+    </defs>
   );
 }
 
-function shell(
-  children: React.ReactNode,
-  tab: any,
-  setTab: (t: any) => void,
-  demoMode: boolean,
-  toggleDemo: () => void
-) {
+const GlassTooltip = ({ active, payload, label }: any) =>
+  active && payload?.length ? (
+    <div className="px-3 py-2 text-xs rounded-xl glass shadow-md">
+      <div className="font-medium">{label}</div>
+      {payload.map((p: any, i: number) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span>{p.name}:</span>
+          <b className="ml-auto">{p.value}</b>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
+// -----------------------------------------------------------------------------
+// Small UI bits
+// -----------------------------------------------------------------------------
+function KPI({ label, value, sub, icon: Icon }: { label: string; value: string | number; sub?: string; icon?: any }) {
   return (
-    <div className="min-h-screen bg-[image:var(--gradient-hero)]">
-      <NavBarApp />
-      <div className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-12 gap-6">
-        <aside className="col-span-12 md:col-span-3 lg:col-span-2">
-          <Sidebar tab={tab} setTab={setTab} demoMode={demoMode} toggleDemo={toggleDemo} />
-        </aside>
-        <main className="col-span-12 md:col-span-9 lg:col-span-10">{children}</main>
-      </div>
+    <motion.div whileHover={{ y: -1 }} transition={{ type: "spring", stiffness: 300, damping: 24 }}>
+      <Card className="rounded-2xl glass glow-hover">
+        <CardHeader className="pb-1">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-[11px] uppercase tracking-wide text-primary/90">{label}</CardTitle>
+            {Icon && <Icon className="size-4 text-primary/70" />}
+          </div>
+        </CardHeader>
+        <CardContent className="pb-3">
+          <div className="text-[28px] leading-7 font-semibold">{value}</div>
+          {sub && <div className="text-[11px] text-slate-600 mt-1">{sub}</div>}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function StatPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="px-2.5 py-1 rounded-full text-xs bg-white/60 border border-white/70 backdrop-blur shadow-sm">
+      {children}
+    </span>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Panels
+// -----------------------------------------------------------------------------
+function BookingsRevenuePanel() {
+  return (
+    <Card className="rounded-2xl glass">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <CalendarCheck2 className="size-4 text-primary" />
+          <CardTitle>Bookings & Revenue</CardTitle>
+        </div>
+        <CardDescription>Weekly performance generated by RelayAI</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4">
+        <div className="h-[240px] sm:h-[260px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={trend} margin={{ left: 8, right: 8 }}>
+              <ChartDefs />
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" />
+              <YAxis />
+              <Tooltip content={<GlassTooltip />} />
+              <Area
+                type="monotone"
+                name="Bookings"
+                dataKey="bookings"
+                stroke={BRAND.violet}
+                fill="url(#fillBookings)"
+                strokeWidth={2.2}
+                isAnimationActive
+                animationDuration={700}
+              />
+              <Line
+                type="monotone"
+                name="Revenue"
+                dataKey="revenue"
+                stroke="url(#strokeRevenue)"
+                strokeWidth={2.4}
+                dot={false}
+                activeDot={{ r: 5 }}
+                isAnimationActive
+                animationDuration={800}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RevenueImpactPanel() {
+  return (
+    <Card className="rounded-2xl glass">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <DollarSign className="size-4 text-primary" />
+          <CardTitle>Revenue Impact</CardTitle>
+        </div>
+        <CardDescription>Attribution by automation</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4">
+        <div className="h-[240px] sm:h-[260px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={revenueImpact}>
+              <ChartDefs />
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="source" />
+              <YAxis />
+              <Tooltip content={<GlassTooltip />} />
+              <Bar dataKey="revenue" fill="url(#barGradient)" radius={[8, 8, 0, 0]} isAnimationActive />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OutcomesPanel() {
+  return (
+    <Card className="rounded-2xl glass">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <PhoneIncoming className="size-4 text-primary" />
+          <CardTitle>Call Outcomes</CardTitle>
+        </div>
+        <CardDescription>Distribution this week</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4">
+        <div className="h-[240px] sm:h-[260px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={outcomes} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} isAnimationActive>
+                {outcomes.map((_, i) => (
+                  <Cell key={i} fill={BRAND.pie[i % BRAND.pie.length]} />
+                ))}
+              </Pie>
+              <Tooltip content={<GlassTooltip />} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecentCallsPanel() {
+  return (
+    <Card className="rounded-2xl glass">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <PhoneForwarded className="size-4 text-primary" />
+          <CardTitle>Recent Calls</CardTitle>
+        </div>
+        <CardDescription>Snippets & outcomes</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 pb-3">
+        <div className="divide-y divide-slate-200/70">
+          {recentCalls.map((c) => (
+            <div key={c.id} className="py-3 flex items-center gap-3 hover:bg-slate-50/60 rounded-xl px-2">
+              <Avatar className="size-8">
+                <AvatarImage alt={c.caller} src={`https://api.dicebear.com/8.x/initials/svg?seed=${encodeURIComponent(c.caller)}`} />
+                <AvatarFallback>{c.caller.substring(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium truncate max-w-[160px]">{c.caller}</span>
+                  <Badge variant="secondary" className="rounded-full">{c.status}</Badge>
+                  <span className="text-xs text-slate-500">{c.time}</span>
+                </div>
+                <div className="text-xs text-slate-600 truncate">{c.intent}</div>
+              </div>
+              <div className="text-xs text-slate-500 tabular-nums">{c.dur}</div>
+              <div className="flex items-center gap-0.5">
+                {new Array(c.csat).fill(0).map((_, i) => (
+                  <Star key={i} className="size-4 text-amber-500 fill-amber-500" />
+                ))}
+              </div>
+              <Button size="sm" variant="ghost" className="ml-1">
+                <PlayCircle className="size-4 mr-1" /> Listen
+              </Button>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QualityUptimePanel() {
+  return (
+    <Card className="rounded-2xl glass">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4 text-primary" />
+          <CardTitle>Quality & Uptime</CardTitle>
+        </div>
+        <CardDescription>Voice health & SLA</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-xs text-slate-600 mb-1">Uptime (30d)</div>
+            <div className="flex items-center gap-2">
+              <Badge className="rounded-full" variant="secondary">99.95%</Badge>
+              <StatPill>
+                <span className="inline-flex items-center gap-1"><ArrowUpRight className="size-3" /> +0.02%</span>
+              </StatPill>
+            </div>
+            <Progress value={99.95} className="mt-2 h-2" />
+          </div>
+          <div>
+            <div className="text-xs text-slate-600 mb-1">Avg. MOS (voice)</div>
+            <div className="flex items-center gap-2">
+              <Mic2 className="size-4 text-primary" />
+              <div className="text-sm font-medium">4.7</div>
+            </div>
+            <Progress value={94} className="mt-2 h-2" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-xs text-slate-600 mb-1">Latency p95</div>
+            <div className="text-sm font-medium">280ms</div>
+            <Progress value={72} className="mt-2 h-2" />
+          </div>
+          <div>
+            <div className="text-xs text-slate-600 mb-1">ASR Accuracy</div>
+            <div className="text-sm font-medium">96.3%</div>
+            <Progress value={96.3} className="mt-2 h-2" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function KnowledgePanel() {
+  return (
+    <Card className="rounded-2xl glass">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <Bot className="size-4 text-primary" />
+          <CardTitle>Knowledge & Onboarding</CardTitle>
+        </div>
+        <CardDescription>Website ingestion → Supabase (pgvector)</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="rounded-full">3 sources</Badge>
+          <span className="text-xs text-slate-600">Last sync 2h ago</span>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Card className="glass">
+            <CardContent className="p-3 text-sm">
+              <div className="font-medium">Website</div>
+              <div className="text-xs text-slate-600">relay.ai • 36 pages</div>
+            </CardContent>
+          </Card>
+          <Card className="glass">
+            <CardContent className="p-3 text-sm">
+              <div className="font-medium">FAQ Doc</div>
+              <div className="text-xs text-slate-600">Policies & pricing</div>
+            </CardContent>
+          </Card>
+          <Card className="glass">
+            <CardContent className="p-3 text-sm">
+              <div className="font-medium">Promos</div>
+              <div className="text-xs text-slate-600">Seasonal offers</div>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="glow-hover">
+            <Wand2 className="size-4 mr-1" /> Ingest website
+          </Button>
+          <Button size="sm" variant="ghost" className="glow-hover">
+            <Download className="size-4 mr-1" /> Export KB
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AutomationsPanel() {
+  return (
+    <Card className="rounded-2xl glass">
+      <CardHeader className="pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-4 text-primary" />
+          <CardTitle>Automations</CardTitle>
+        </div>
+        <CardDescription>Quick actions & flows</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4 space-y-3">
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/60 border">
+            <div className="text-sm">
+              <div className="font-medium">After-hours booking</div>
+              <div className="text-xs text-slate-600">Auto-book with calendar sync</div>
+            </div>
+            <Switch defaultChecked aria-label="After hours booking" />
+          </div>
+          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/60 border">
+            <div className="text-sm">
+              <div className="font-medium">Lead capture & SMS follow-up</div>
+              <div className="text-xs text-slate-600">Collect name + intent, send SMS</div>
+            </div>
+            <Switch defaultChecked aria-label="Lead capture" />
+          </div>
+          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/60 border">
+            <div className="text-sm">
+              <div className="font-medium">Post-call summaries</div>
+              <div className="text-xs text-slate-600">Drop to CRM & email</div>
+            </div>
+            <Switch aria-label="Post call summaries" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" className="glow-hover">
+            <Settings2 className="size-4 mr-1" /> Configure flows
+          </Button>
+          <Button size="sm" variant="outline" className="glow-hover">
+            <Link className="size-4 mr-1" /> Connect calendar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Sidebar() {
+  return (
+    <div className="space-y-4">
+      <Card className="rounded-2xl glass sticky top-20 overflow-hidden">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Demo Mode</CardTitle>
+            <Switch defaultChecked aria-label="Toggle demo mode" />
+          </div>
+          <CardDescription>Seeded with ROI data</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0 pb-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm">
+            <Users className="size-4 text-primary" /> 48 bookings this week
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <ThumbsUp className="size-4 text-primary" /> 89% calls recovered
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Star className="size-4 text-amber-500" /> CSAT 4.8
+          </div>
+        </CardContent>
+      </Card>
+
+      <AutomationsPanel />
+
+      <Card className="rounded-2xl glass">
+        <CardHeader className="pb-2 pt-4">
+          <div className="flex items-center gap-2">
+            <Gauge className="size-4 text-primary" />
+            <CardTitle>Assistant Controls</CardTitle>
+          </div>
+          <CardDescription>Live tuning</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0 pb-4 space-y-3">
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/60 border">
+              <div className="text-sm">Enthusiasm</div>
+              <input type="range" defaultValue={60} className="w-40" aria-label="Enthusiasm" />
+            </div>
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/60 border">
+              <div className="text-sm">Transfer threshold</div>
+              <input type="range" defaultValue={40} className="w-40" aria-label="Transfer threshold" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="glow-hover">
+              <PauseCircle className="size-4 mr-1" /> Pause assistant
+            </Button>
+            <Button size="sm" className="glow-hover">
+              <PlayCircle className="size-4 mr-1" /> Resume
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
+// -----------------------------------------------------------------------------
+// Top Nav
+// -----------------------------------------------------------------------------
 function NavBarApp() {
-  const [email, setEmail] = useState<string | undefined>();
-  useEffect(() => {
-    supabase.auth.getUser().then((r) => setEmail(r.data.user?.email));
-  }, []);
   return (
-    <header className="sticky top-0 z-40 border-b bg-white/70 backdrop-blur">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <header className="sticky top-0 z-40 border-b bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/50">
+      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-[image:var(--gradient-primary)] text-white shadow">
-            <Bot className="w-5 h-5" />
-          </div>
-          <span className="font-semibold">RelayAI — Customer Dashboard</span>
+          <div className="size-8 rounded-xl bg-gradient-to-br from-violet-500 to-blue-500" />
+          <span className="font-semibold">RelayAI</span>
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-slate-500 hidden md:inline">{email}</span>
-          <a className="underline" href="#/">Site</a>
-          <a className="underline" href="#admin">Admin</a>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="rounded-full">Connected</Badge>
+          <Button size="sm" variant="outline" className="glow-hover">
+            <Download className="size-4 mr-1" /> Export report
+          </Button>
         </div>
       </div>
     </header>
   );
 }
 
-function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (t: any) => void; demoMode: boolean; toggleDemo: () => void }) {
-  const items = [
-    { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: "leads", label: "Leads", icon: <Users className="w-4 h-4" /> },
-    { id: "appointments", label: "Appointments", icon: <CalendarIcon className="w-4 h-4" /> },
-    { id: "messages", label: "Messages", icon: <MessageCircle className="w-4 h-4" /> },
-    { id: "calls", label: "Calls", icon: <PhoneCall className="w-4 h-4" /> },
-    { id: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
-    { id: "knowledge", label: "Knowledge", icon: <Brain className="w-4 h-4" /> },
-    { id: "onboarding", label: "Onboarding", icon: <BookOpen className="w-4 h-4" /> },
-  ];
+// -----------------------------------------------------------------------------
+// Page
+// -----------------------------------------------------------------------------
+export default function DashboardPage() {
   return (
-    <Card className="rounded-2xl shadow-sm sticky top-20 overflow-hidden">
-      <CardContent className="p-0">
-        <div className="p-3 flex items-center justify-between bg-card/60 border-b">
-          <div className="text-xs text-slate-600">Demo mode</div>
-          <Button size="sm" variant={demoMode ? "default" : "outline"} className="rounded-xl h-7 px-3" onClick={toggleDemo}>
-            {demoMode ? "On" : "Off"}
-          </Button>
-        </div>
-        <nav className="grid p-2">
-          {items.map((i) => (
-            <button
-              key={i.id}
-              onClick={() => setTab(i.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-muted transition ${
-                tab === i.id ? "bg-[image:var(--gradient-primary)] text-white hover:bg-transparent shadow" : ""
-              }`}
-            >
-              {i.icon} <span className="text-sm">{i.label}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="p-4 pt-0">
-          <Card className="rounded-xl">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Zap className="w-4 h-4"/>Automation</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-slate-600 space-y-1">
-              <div>• Recovery SMS after missed calls</div>
-              <div>• Appointment reminders</div>
-              <div>• CSAT survey after call</div>
-            </CardContent>
+    <div className="min-h-screen bg-gradient-to-br from-violet-100 via-white to-blue-100">
+      <NavBarApp />
+
+      {/* Hero */}
+      <div className="max-w-7xl mx-auto px-4 pt-8 pb-6">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+          <Card className="rounded-3xl overflow-hidden border-0 shadow-md">
+            <div className="bg-[radial-gradient(700px_300px_at_20%_-10%,theme(colors.violet.400/40),transparent_60%)]">
+              <div className="p-6 md:p-8 grid md:grid-cols-3 gap-6 items-center">
+                <div className="md:col-span-2 space-y-3">
+                  <h1 className="text-4xl md:text-[40px] leading-tight font-semibold tracking-tight">
+                    Your AI Receptionist, now revenue-positive
+                  </h1>
+                  <p className="text-slate-600 max-w-2xl">
+                    RelayAI answers every call, books appointments, captures leads, and syncs to your calendar.
+                    See the impact below.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <StatPill>
+                      <CalendarCheck2 className="size-3 mr-1" /> 48 bookings this week
+                    </StatPill>
+                    <StatPill>
+                      <ThumbsUp className="size-3 mr-1" /> 89% calls recovered
+                    </StatPill>
+                    <StatPill>
+                      <Star className="size-3 mr-1 text-amber-500" /> CSAT 4.8
+                    </StatPill>
+                  </div>
+                </div>
+                <div className="md:justify-self-end">
+                  <Card className="glass">
+                    <CardContent className="p-4">
+                      <div className="text-[12px] uppercase tracking-wide text-slate-600 mb-1">Quick actions</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button size="sm" className="glow-hover"><PhoneIncoming className="size-4 mr-1" /> Start demo</Button>
+                        <Button size="sm" variant="outline" className="glow-hover"><Settings2 className="size-4 mr-1" /> Configure</Button>
+                        <Button size="sm" variant="ghost" className="glow-hover"><Users className="size-4 mr-1" /> Team</Button>
+                        <Button size="sm" variant="ghost" className="glow-hover"><Wand2 className="size-4 mr-1" /> Import site</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </div>
           </Card>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Overview({ appts, leads, calls, demoMode }: any) {
-  const now = new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - 6);
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  const bookingsThisWeek = useMemo(() => appts.filter((a: any) => +new Date(a.start_at || a.created_at || 0) >= +startOfWeek).length, [appts]);
-
-  const { avgHandle, csatAvg } = useMemo(() => {
-    const withDur = calls.filter((c: any) => Number.isFinite(c.duration));
-    const avgHandle = withDur.length ? Math.round(withDur.reduce((s: number, c: any) => s + (c.duration || 0), 0) / withDur.length) : 0;
-    const withCsat = calls.filter((c: any) => Number.isFinite(c.csat));
-    const csatAvg = withCsat.length ? withCsat.reduce((s: number, c: any) => s + (c.csat || 0), 0) / withCsat.length : null;
-    return { avgHandle, csatAvg };
-  }, [calls]);
-
-  const missedRecoveredPct = useMemo(() => {
-    const missed = calls.filter((c: any) => c.missed || /missed|voicemail/.test(String(c.outcome || "").toLowerCase()));
-    const recovered = calls.filter((c: any) => /booked|appointment|scheduled|confirmed|recovered/.test(String(c.outcome || "").toLowerCase()));
-    if (missed.length === 0) return "—";
-    return `${Math.round((recovered.length / missed.length) * 100)}%`;
-  }, [calls]);
-
-  const trend = useMemo(() => buildTrend(calls, appts), [calls, appts]);
-  const outcomes = useMemo(() => buildOutcomes(calls), [calls]);
-
-  return (
-    <div className="space-y-6">
-      <Card className="rounded-3xl overflow-hidden border-0 shadow-md">
-        <div className="bg-[radial-gradient(700px_300px_at_20%_-10%,theme(colors.violet.400/40),transparent_60%)]">
-          <div className="px-6 py-8 md:px-8 md:py-10">
-            <div className="text-center mb-8">
-              <div className="uppercase tracking-wider text-xs text-slate-600">Customer Dashboard</div>
-              <h2 className="text-3xl md:text-4xl font-semibold mt-2">Clarity after every call</h2>
-              <p className="text-slate-600 mt-2">See impact instantly — appointments booked, time saved, top questions, and revenue trends.</p>
-              {demoMode && <div className="mt-3 inline-flex items-center gap-2 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Demo data active</div>}
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
-              <KPI label="Bookings this week" value={bookingsThisWeek} />
-              <KPI label="Missed calls recovered" value={missedRecoveredPct} />
-              <KPI label="Avg. handle time" value={formatSecs(avgHandle)} />
-              <KPI label="CSAT" value={csatAvg !== null ? csatAvg.toFixed(1) : "—"} sub="out of 5" />
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="rounded-2xl lg:col-span-2">
-          <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="w-4 h-4"/>Bookings & revenue</CardTitle></CardHeader>
-          <CardContent className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trend} margin={{ left: 8, right: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Area type="monotone" dataKey="bookings" strokeWidth={2} />
-                <Line type="monotone" dataKey="revenue" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl">
-          <CardHeader className="pb-2"><CardTitle className="text-base">Outcomes mix</CardTitle></CardHeader>
-          <CardContent className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={outcomes} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85}>
-                  {outcomes.map((_, i) => (<Cell key={i} />))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        </motion.div>
       </div>
 
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>What to do next</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-slate-600">
-          Jump into <b>Leads</b> to follow up, or <b>Appointments</b> to add schedules. <b>Messages</b> shows your inbox.
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+      {/* Main layout */}
+      <div className="max-w-7xl mx-auto px-4 pb-10 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        <div className="space-y-6">
+          {/* KPIs */}
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+            className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+          >
+            <KPI label="Bookings" value={48} sub="This week" icon={CalendarCheck2} />
+            <KPI label="Calls Recovered" value="89%" sub="From missed calls" icon={PhoneIncoming} />
+            <KPI label="CSAT" value={"4.8 / 5"} sub="Past 7 days" icon={Star} />
+            <KPI label="Leads" value={18} sub="Captured" icon={Users} />
+          </motion.div>
 
-function KPI({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <Card className="rounded-2xl bg-[image:var(--gradient-card)] border border-border/50">
-      <CardHeader className="pb-1">
-        <CardTitle className="text-xs text-primary font-medium">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-semibold">{value}</div>
-        {sub && <div className="text-[11px] text-slate-600 mt-1">{sub}</div>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function LeadsTab({ leads, setLeads, setThreads }: { leads: any[]; setLeads: (x: any) => void; setThreads: (x: any) => void }) {
-  const [q, setQ] = useState("");
-  const [modal, setModal] = useState<null | any>(null);
-  const filtered = leads.filter((l) => (l.name + l.phone + l.email + (l.source || "") + (l.status || "")).toLowerCase().includes(q.toLowerCase()));
-
-  async function upsertLead(ld: any) {
-    const computed = addLeadComputed(ld);
-    setLeads((cur: any[]) => {
-      const i = cur.findIndex((x: any) => x.id === computed.id);
-      const next = [...cur];
-      if (i >= 0) next[i] = computed; else next.unshift(computed);
-      return next;
-    });
-    try {
-      const saved = await repo.upsertLead(computed);
-      setLeads((cur: any[]) => cur.map((x: any) => (x.id === saved.id ? addLeadComputed(saved) : x)));
-      await postWebhookSafe({ type: "lead.upsert", lead: saved });
-    } catch (e) { console.error(e); }
-    setModal(null);
-  }
-  
-  async function remove(id: string) {
-    setLeads((cur: any[]) => cur.filter((x: any) => x.id !== id));
-    try { await repo.deleteLead(id); } catch (e) { console.error(e); }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2">
-            <Search className="w-4 h-4" />
-            <input className="outline-none text-sm" placeholder="Search leads" value={q} onChange={(e) => setQ(e.target.value)} />
+          {/* Charts */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <BookingsRevenuePanel />
+            <RevenueImpactPanel />
           </div>
-          <Button variant="outline" className="rounded-2xl">
-            <Filter className="w-4 h-4 mr-2" /> Filters
-          </Button>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <OutcomesPanel />
+            <QualityUptimePanel />
+          </div>
+
+          {/* Recent */}
+          <RecentCallsPanel />
+
+          {/* Knowledge & onboarding */}
+          <KnowledgePanel />
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="rounded-2xl" onClick={() => exportJSON("leads.json", leads)}>
-            <Download className="w-4 h-4 mr-2" /> Export
-          </Button>
-          <Button className="rounded-2xl" onClick={() => setModal({ id: undefined, name: "", phone: "", email: "", source: "Manual", status: "New", notes: "", created_at: new Date().toISOString(), })}>
-            <Plus className="w-4 h-4 mr-2" /> New lead
-          </Button>
-        </div>
+
+        {/* Right rail */}
+        <aside>
+          <Sidebar />
+        </aside>
       </div>
-      <Card className="rounded-2xl shadow-sm">
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead className="text-left bg-slate-50">
-              <tr>
-                <th className="p-3">Name</th><th>Contact</th><th>Source</th><th>Status</th><th>Score</th><th>Intent</th><th className="text-right p-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((l: any) => (
-                <tr key={l.id} className="border-t hover:bg-slate-50">
-                  <td className="p-3 font-medium">{l.name}</td>
-                  <td className="p-3 text-slate-600">{l.phone}<br/><span className="text-xs">{l.email}</span></td>
-                  <td className="p-3"><Badge variant="outline">{l.source}</Badge></td>
-                  <td className="p-3"><Badge variant={l.status === "Qualified" ? "default" : "secondary"}>{l.status}</Badge></td>
-                  <td className="p-3">{l.leadScore || "—"}</td>
-                  <td className="p-3 text-slate-600">{l.intent || "—"}</td>
-                  <td className="p-3 text-right">
-                    <div className="flex gap-1 justify-end">
-                      <Button size="sm" variant="outline" className="rounded-xl px-2 py-1" onClick={() => followUpLead(l, setThreads)}>
-                        <Send className="w-3 h-3" />
-                      </Button>
-                      <Button size="sm" variant="outline" className="rounded-xl px-2 py-1" onClick={() => setModal(l)}>
-                        <Edit className="w-3 h-3" />
-                      </Button>
-                      <Button size="sm" variant="outline" className="rounded-xl px-2 py-1 text-red-600" onClick={() => remove(l.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-      {modal && <LeadModal lead={modal} onSave={upsertLead} onClose={() => setModal(null)} />}
     </div>
   );
-}
-
-function LeadModal({ lead, onSave, onClose }: any) {
-  const [form, setForm] = useState(lead);
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="max-w-md w-full m-4 rounded-2xl">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>{lead.id ? "Edit" : "New"} Lead</CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClose}><X className="w-4 h-4" /></Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <select className="w-full p-2 border rounded" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}>
-            <option>Manual</option><option>Website</option><option>Referral</option><option>Social</option><option>Ad</option>
-          </select>
-          <select className="w-full p-2 border rounded" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-            <option>New</option><option>Contacted</option><option>Qualified</option><option>Won</option><option>Lost</option>
-          </select>
-          <Textarea placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          <div className="flex gap-2 pt-2">
-            <Button onClick={() => onSave(form)} className="flex-1 rounded-2xl">
-              <Save className="w-4 h-4 mr-2" /> Save
-            </Button>
-            <Button variant="outline" onClick={onClose} className="rounded-2xl">Cancel</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function ApptsTab({ appts, setAppts }: { appts: any[]; setAppts: (x: any) => void }) {
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardHeader><CardTitle>Appointments</CardTitle></CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {appts.map((a: any) => (
-            <div key={a.id} className="flex items-center justify-between p-3 border rounded-xl">
-              <div>
-                <div className="font-medium">{a.client_name}</div>
-                <div className="text-sm text-slate-600">{formatDT(a.start_at)} - {a.service}</div>
-              </div>
-              <Badge variant={a.status === "confirmed" ? "default" : "secondary"}>{a.status}</Badge>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MessagesTab({ threads, setThreads }: { threads: any[]; setThreads: (x: any) => void }) {
-  const [sel, setSel] = useState(threads[0]?.id || null);
-  const th = threads.find((t: any) => t.id === sel) || threads[0];
-  const [text, setText] = useState("");
-
-  useEffect(() => { if (threads.length && !sel) setSel(threads[0].id); }, [threads]);
-
-  async function send() {
-    if (!text.trim() || !th) return;
-    const newMsg = { from: "agent", at: new Date().toISOString(), text };
-    setThreads((cur: any[]) => cur.map((t) => (t.id === th.id ? { ...t, thread: [...(t.thread || []), newMsg] } : t)));
-    setText("");
-    try { await repo.sendMessage(th, newMsg.text); const updated = await repo.listThreads(); setThreads(updated); } catch (e) { console.error(e); }
-  }
-
-  return (
-    <div className="grid md:grid-cols-3 gap-4">
-      <Card className="rounded-2xl shadow-sm md:col-span-1">
-        <CardHeader><CardTitle>Conversations</CardTitle></CardHeader>
-        <CardContent className="p-0">
-          {(threads || []).map((t: any) => (
-            <button key={t.id} onClick={() => setSel(t.id)} className={`w-full text-left px-4 py-3 border-t hover:bg-slate-50 ${t.id === th?.id ? "bg-slate-100" : ""}`}> 
-              <div className="text-sm font-medium">{t.with}</div>
-              <div className="text-xs text-slate-500 truncate">{(t.thread || [])[((t.thread || []).length - 1) as any]?.text}</div>
-            </button>
-          ))}
-        </CardContent>
-      </Card>
-      <Card className="rounded-2xl shadow-sm md:col-span-2">
-        <CardHeader><CardTitle>Chat with {th?.with || "—"}</CardTitle></CardHeader>
-        <CardContent>
-          <div className="h-64 overflow-auto space-y-2">
-            {(th?.thread || []).map((m: any, i: number) => (
-              <div key={i} className={`flex ${m.from === "agent" ? "justify-end" : "justify-start"}`}>
-                <div className={`px-3 py-2 rounded-xl text-sm ${m.from === "agent" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>{m.text}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 flex gap-2">
-            <Input placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
-            <Button onClick={send} className="rounded-2xl"><Send className="w-4 h-4" /></Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function CallsTab({ calls }: any) {
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardHeader><CardTitle>Call log</CardTitle></CardHeader>
-      <CardContent className="p-0">
-        <table className="w-full text-sm">
-          <thead className="text-left bg-slate-50">
-            <tr><th className="p-3">From</th><th>Outcome</th><th>Duration</th><th>When</th><th className="p-3">Summary</th></tr>
-          </thead>
-          <tbody>
-            {(calls || []).map((c: any) => (
-              <tr key={c.id} className="border-t">
-                <td className="p-3 font-medium">{c.from}</td>
-                <td className="p-3">{c.outcome}</td>
-                <td className="p-3">{formatDuration(c.duration)}</td>
-                <td className="p-3">{formatDT(c.at)}</td>
-                <td className="p-3 text-slate-600">{c.summary}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </CardContent>
-    </Card>
-  );
-}
-
-function AnalyticsTab({ leads, calls }: any) {
-  const conversion = useMemo(() => {
-    const qualified = leads.filter((l: any) => String(l.status || "").toLowerCase().match(/qualified|won/)).length;
-    return Math.round((qualified / Math.max(leads.length, 1)) * 100);
-  }, [leads]);
-  
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader><CardTitle>Lead conversion</CardTitle></CardHeader>
-        <CardContent>
-          <div className="text-4xl font-semibold">{conversion}%</div>
-          <div className="text-sm text-slate-500">Qualified/Won over total leads</div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function KnowledgeTab() {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function ingest() {
-    if (!url.trim()) return;
-    setLoading(true);
-    try {
-      await ingestWebsite(url, "user-website");
-      setUrl("");
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardHeader><CardTitle>Knowledge Base</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Input placeholder="Website URL to ingest" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <Button onClick={ingest} disabled={loading} className="rounded-2xl">
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function OnboardingTab() {
-  return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardHeader><CardTitle>Getting Started</CardTitle></CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            <span>Setup your account</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-orange-500" />
-            <span>Configure your phone number</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Clock className="w-5 h-5 text-slate-400" />
-            <span>Train your AI assistant</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Helper functions
-async function getActiveTenantId(): Promise<string | null> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    
-    // Simplified query to avoid type issues
-    return "demo-tenant-id";
-  } catch {
-    return null;
-  }
-}
-
-function buildDemo() {
-  return {
-    leads: [
-      { id: "L1", name: "Sarah Johnson", phone: "+1234567890", email: "sarah@example.com", source: "Website", status: "Qualified", leadScore: 85, intent: "Booking consultation" },
-      { id: "L2", name: "Mike Chen", phone: "+1234567891", email: "mike@example.com", source: "Referral", status: "New", leadScore: 72, intent: "Pricing inquiry" },
-    ],
-    appts: [
-      { id: "A1", client_name: "Sarah Johnson", start_at: new Date().toISOString(), service: "Consultation", status: "confirmed" },
-    ],
-    threads: [
-      { id: "T1", with: "+1234567890", thread: [{ from: "customer", at: new Date().toISOString(), text: "Hi, I'd like to book an appointment" }] },
-    ],
-    calls: [
-      { id: "C1", from: "+1234567890", outcome: "Appointment booked", duration: 180, at: new Date().toISOString(), summary: "Customer interested in consultation", csat: 4.5 },
-    ]
-  };
-}
-
-function buildTrend(calls: any[], appts: any[]) {
-  return [
-    { day: "Mon", bookings: 2, revenue: 300 },
-    { day: "Tue", bookings: 1, revenue: 150 },
-    { day: "Wed", bookings: 3, revenue: 450 },
-    { day: "Thu", bookings: 2, revenue: 300 },
-    { day: "Fri", bookings: 4, revenue: 600 },
-  ];
-}
-
-function buildOutcomes(calls: any[]) {
-  return [
-    { name: "Booked", value: 45 },
-    { name: "Follow-up", value: 30 },
-    { name: "Not interested", value: 25 },
-  ];
-}
-
-function addLeadComputed(lead: any) {
-  return { ...lead, id: lead.id || `L-${Date.now()}` };
-}
-
-async function postWebhookSafe(payload: any) {
-  // Safe webhook posting
-}
-
-function exportJSON(filename: string, data: any) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function formatSecs(secs: number): string {
-  if (!secs) return "0s";
-  const mins = Math.floor(secs / 60);
-  const remainingSecs = secs % 60;
-  return mins > 0 ? `${mins}m ${remainingSecs}s` : `${remainingSecs}s`;
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds) return "—";
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatDT(isoString: string): string {
-  if (!isoString) return "—";
-  try {
-    return new Date(isoString).toLocaleDateString();
-  } catch {
-    return "—";
-  }
 }
