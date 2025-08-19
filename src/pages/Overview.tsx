@@ -34,17 +34,29 @@ export default function Overview(){
     const { data: prof } = await supabase.from("profiles").select("active_tenant_id").eq("id", uid).single();
     const tid = prof?.active_tenant_id as string;
     setTenantId(tid);
-    // pull KPIs/materialized views if present, fallback to basic aggregates
-    const { data: k } = await supabase.from("vw_dashboard_kpis").select("calls,answered,missed,recovered,bookings,csat_avg,revenue").eq("tenant_id", tid).maybeSingle();
-    if (k) setKpis(k as any);
-    else {
-      const { data: simple } = await supabase.rpc("compute_basic_kpis", { p_tenant: tid });
-      setKpis(simple as any);
-    }
-    const { data: s } = await supabase.from("vw_calls_by_day").select("date,value").eq("tenant_id", tid).order("date");
-    setSeries((s || []) as any);
-    const { data: as } = await supabase.from("agent_settings").select("ai_sms_autoreplies").eq("tenant_id", tid).single();
-    setAutoReplies(!!as?.ai_sms_autoreplies);
+    // Basic KPI calculation from calls table
+    const { data: callsData } = await supabase.from("calls").select("*").eq("tenant_id", tid);
+    const calls = callsData?.length || 0;
+    const answered = callsData?.filter(c => c.outcome === 'answered').length || 0;
+    const missed = callsData?.filter(c => c.outcome === 'missed').length || 0;
+    
+    const { data: appointmentsData } = await supabase.from("appointments").select("*").eq("tenant_id", tid);
+    const bookings = appointmentsData?.length || 0;
+    
+    setKpis({ calls, answered, missed, recovered: 0, bookings, csat_avg: null, revenue: 0 });
+    
+    // Simple chart data from calls
+    const chartData = callsData?.reduce((acc: any, call) => {
+      const date = new Date(call.at).toISOString().split('T')[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {});
+    
+    const series = Object.entries(chartData || {}).map(([date, value]) => ({ date, value: value as number }));
+    setSeries(series);
+    
+    const { data: tenantData } = await supabase.from("tenants").select("*").eq("id", tid).single();
+    setAutoReplies(false); // Default for now
     setLoading(false);
   }
 

@@ -11,7 +11,7 @@ export default function Conversation(){
   useEffect(()=>{
     (async ()=>{
       if (!callId) return;
-      const { data: t } = await supabase.from("call_transcripts").select("*, call_entities(*))").eq("call_id", callId).single();
+      const { data: t } = await supabase.from("calls").select("*").eq("id", callId).single();
       setData(t);
     })();
   },[callId]);
