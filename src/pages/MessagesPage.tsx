@@ -14,6 +14,8 @@ async function getActiveTenantId(): Promise<string | null> {
   return (data as any)?.active_tenant_id || null;
 }
 
+import MessagingToolbar from "@/components/dashboard/MessagingToolbar";
+
 export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [tenantId, setTenantId] = useState<string | null>(null);
