@@ -1,7 +1,7 @@
 // src/lib/webhooks.ts
 export const CONFIG = {
   COMPANY: "Voice Relay Pro",
-  DOMAIN: "voicerelayro.taskara.ai",                   // <-- set your domain (used for mailto/status links)
+  DOMAIN: "voicerelaypro.taskara.ai",                   // <-- set your domain (used for mailto/status links)
   PHONE: "+1-555-555-5555",
   ADDRESS: { street: "100 Main St", city: "Morrisville", region: "NC", postal: "27560", country: "US" },
   GA_MEASUREMENT_ID: "",                       // leave blank to disable GA
