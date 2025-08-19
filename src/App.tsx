@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { loadProfile, setActiveTenant, ensureDemoTenant, myTenants, isSiteAdmin } from "@/lib/tenancy";
 import { signInWithEmail, signOut, onAuth, signInWithOAuth, signInWithSms, verifySms, signInWithPassword, signUpWithPassword, mfaEnrollTotp, mfaVerifyEnrollment } from "@/lib/auth";
 import { CONFIG } from "@/lib/webhooks";
-import { VoiceRelayLogo } from "@/components/VoiceRelayLogo";
+import VoiceRelayLogo from "@/components/VoiceRelayLogo";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SignInScreen from "@/components/SignInScreen";

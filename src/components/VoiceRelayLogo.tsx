@@ -7,7 +7,7 @@ interface VoiceRelayLogoProps {
   className?: string;
 }
 
-export function VoiceRelayLogo({ size = "md", showText = true, className = "" }: VoiceRelayLogoProps) {
+export default function VoiceRelayLogo({ size = "md", showText = true, className = "" }: VoiceRelayLogoProps) {
   const sizeConfig = {
     sm: { icon: 20, text: "text-sm", container: "gap-1.5" },
     md: { icon: 24, text: "text-lg", container: "gap-2" },
@@ -53,3 +53,5 @@ export function VoiceRelayLogo({ size = "md", showText = true, className = "" }:
     </div>
   );
 }
+
+export { VoiceRelayLogo };
