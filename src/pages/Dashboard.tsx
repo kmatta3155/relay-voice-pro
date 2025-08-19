@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import VoiceRelayLogo from "@/components/VoiceRelayLogo";
 import {
   Bot,
   LayoutDashboard,
@@ -230,10 +231,8 @@ function NavBarApp() {
     <header className="sticky top-0 z-40 border-b bg-white/70 backdrop-blur">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-[image:var(--gradient-primary)] text-white shadow">
-            <Bot className="w-5 h-5" />
-          </div>
-          <span className="font-semibold">RelayAI — Customer Dashboard</span>
+          <VoiceRelayLogo size="sm" showText={false} />
+          <span className="font-semibold">Voice Relay Pro — Customer Dashboard</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
           <span className="text-slate-500 hidden md:inline">{email}</span>
