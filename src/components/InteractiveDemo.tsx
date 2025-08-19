@@ -35,7 +35,7 @@ export function InteractiveDemo({ className }: DemoProps) {
         { speaker: "Customer", text: "It's Michael Thompson. My number is 555-0192 and email is mthompson@email.com", timestamp: "09:37 AM", voice: "George" },
         { speaker: "RelayAI", text: "Perfect, Michael! I've got you booked for a 60-minute deep tissue massage this Saturday at 2:15 PM with Sarah. You'll receive a confirmation text shortly. Is there anything specific I should let Sarah know about your preferences?", timestamp: "09:37 AM", voice: "Sarah" },
         { speaker: "Customer", text: "Just that I have some tension in my shoulders from work stress.", timestamp: "09:38 AM", voice: "George" },
-        { speaker: "RelayAI", text: "Absolutely, I've made a note about your shoulder tension. Sarah specializes in that area and will take excellent care of you. We'll see you Saturday at 2:15 PM, Michael. Thank you for choosing Serenity Spa!", timestamp: "09:38 AM", voice: "Sarah" }
+        { speaker: "Voice Relay Pro", text: "Absolutely, I've made a note about your shoulder tension. Sarah specializes in that area and will take excellent care of you. We'll see you Saturday at 2:15 PM, Michael. Thank you for choosing Serenity Spa!", timestamp: "09:38 AM", voice: "Sarah" }
       ],
       insights: {
         intent: "Appointment Booking",
@@ -249,7 +249,7 @@ export function InteractiveDemo({ className }: DemoProps) {
         // Play business greeting
         setCallPhase('greeting');
         const greeting = {
-          speaker: "RelayAI",
+          speaker: "Voice Relay Pro",
           text: scenarios[currentScenario].businessGreeting,
           timestamp: currentConvo[0]?.timestamp || "now",
           isGreeting: true

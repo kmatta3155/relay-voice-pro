@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { loadProfile, setActiveTenant, ensureDemoTenant, myTenants, isSiteAdmin } from "@/lib/tenancy";
 import { signInWithEmail, signOut, onAuth, signInWithOAuth, signInWithSms, verifySms, signInWithPassword, signUpWithPassword, mfaEnrollTotp, mfaVerifyEnrollment } from "@/lib/auth";
 import { CONFIG } from "@/lib/webhooks";
+import { VoiceRelayLogo } from "@/components/VoiceRelayLogo";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SignInScreen from "@/components/SignInScreen";
@@ -115,7 +116,10 @@ function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants
   return (
     <header className="border-b bg-white sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="font-semibold">RelayAI – {tenants.find((t:any)=> t.id===profile?.active_tenant_id)?.name || "Workspace"}</div>
+        <div className="flex items-center gap-3">
+          <VoiceRelayLogo size="sm" />
+          <span className="font-semibold text-foreground">{tenants.find((t:any)=> t.id===profile?.active_tenant_id)?.name || "Workspace"}</span>
+        </div>
         <div className="flex items-center gap-2">
           <select className="border rounded-xl px-2 py-1" value={profile?.active_tenant_id || ""} onChange={(e)=> onSwitch((e.target as HTMLSelectElement).value)}>
             {tenants.map((t:any)=> <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -297,7 +301,7 @@ function ResetPasswordScreen(){
   );
 }
 
-export default function RelayAIPlatformApp() {
+export default function VoiceRelayProApp() {
   const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'|'auth'|'reset'>(() => {
     if (typeof window === 'undefined') return 'site';
     const raw = location.hash || "";

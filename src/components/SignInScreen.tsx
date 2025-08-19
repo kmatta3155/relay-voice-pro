@@ -17,7 +17,7 @@ export default function SignInScreen() {
   const [ok, setOk] = useState("");
 
   useEffect(() => {
-    document.title = `${stage === "signup" ? "Create account" : "Sign in"} | RelayAI Receptionist`;
+    document.title = `${stage === "signup" ? "Create account" : "Sign in"} | Voice Relay Pro`;
   }, [stage]);
 
   const handleLogin = async () => {

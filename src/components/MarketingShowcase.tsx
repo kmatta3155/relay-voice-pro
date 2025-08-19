@@ -99,10 +99,10 @@ export default function MarketingShowcase() {
           >
             <div>
               <h3 className="text-3xl font-bold mb-4">
-                Why businesses choose RelayAI
+                Why businesses choose Voice Relay Pro
               </h3>
               <p className="text-xl text-muted-foreground mb-8">
-                Join thousands of businesses already using RelayAI to capture more leads, 
+                Join thousands of businesses already using Voice Relay Pro to capture more leads, 
                 book more appointments, and never miss an opportunity.
               </p>
             </div>
@@ -147,7 +147,7 @@ export default function MarketingShowcase() {
             <div className="relative rounded-3xl overflow-hidden shadow-[var(--shadow-premium)]">
               <img 
                 src={dashboardPreview} 
-                alt="RelayAI Dashboard Preview" 
+                alt="Voice Relay Pro Dashboard Preview" 
                 className="w-full h-auto"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
@@ -170,7 +170,7 @@ export default function MarketingShowcase() {
                   </div>
                 </div>
                 <p className="text-sm italic">
-                  "RelayAI increased our bookings by 40% in the first month. 
+                  "Voice Relay Pro increased our bookings by 40% in the first month. 
                   It's like having a perfect receptionist who never sleeps."
                 </p>
               </motion.div>

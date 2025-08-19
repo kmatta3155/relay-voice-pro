@@ -29,6 +29,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { VoiceRelayLogo } from "@/components/VoiceRelayLogo";
 import freshaLogo from "@/assets/logos/fresha.svg";
 import squareLogo from "@/assets/logos/square.svg";
 import vagaroLogo from "@/assets/logos/vagaro.svg";
@@ -47,9 +48,9 @@ import { supabase } from "@/lib/supabaseClient";
    ========================= */
 function SEOHead() {
   React.useEffect(() => {
-    const title = "RelayAI — The AI Receptionist That Trains From Your Website";
+    const title = "Voice Relay Pro — The AI Voice Receptionist That Trains From Your Website";
     const description =
-      "Never miss a call again. RelayAI answers, books, and handles FAQs 24/7 — auto-trained from your website in minutes. See the onboarding → training → live call → dashboard demo.";
+      "Never miss a call again. Voice Relay Pro answers, books, and handles FAQs 24/7 — auto-trained from your website in minutes. See the onboarding → training → live call → dashboard demo.";
     document.title = title;
 
     const ensureMeta = (name: string, content: string) => {
@@ -196,15 +197,7 @@ function NavBar() {
     <header className="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-background/75 border-b">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <motion.div
-            initial={{ rotate: -15, scale: 0.85 }}
-            animate={{ rotate: 0, scale: 1 }}
-            transition={{ type: "spring", stiffness: 220 }}
-            className="p-2 rounded-2xl bg-primary text-primary-foreground shadow"
-          >
-            <Bot className="w-5 h-5" />
-          </motion.div>
-          <span className="font-semibold tracking-tight">RelayAI Receptionist</span>
+          <VoiceRelayLogo size="md" />
         </div>
         <nav className="hidden md:flex items-center gap-6 text-sm">
           <a href="#features" className="hover:opacity-80">Features</a>
@@ -253,7 +246,7 @@ function Hero() {
           </motion.h1>
 
           <p className="mt-5 text-lg text-muted-foreground max-w-xl">
-            RelayAI answers, books, and handles FAQs 24/7 — and it{" "}
+            Voice Relay Pro answers, books, and handles FAQs 24/7 — and it{" "}
             <b>auto-trains from your website in minutes</b>. See the end-to-end demo below.
           </p>
 
@@ -401,7 +394,7 @@ function InteractiveDemo() {
     <section id="interactive-demo" className="px-4 py-16 md:py-24 bg-muted/30">
       <div className="text-center mb-10">
         <p className="uppercase tracking-widest text-sm text-muted-foreground mb-2">Interactive Demo</p>
-        <h2 className="text-3xl md:text-4xl font-semibold leading-tight">See RelayAI learn & book — live</h2>
+        <h2 className="text-3xl md:text-4xl font-semibold leading-tight">See Voice Relay Pro learn & book — live</h2>
         <p className="mt-3 text-muted-foreground">
           Experience onboarding → instant training → call routing → live call → analytics.
         </p>
@@ -450,7 +443,7 @@ function DashboardShowcase() {
         >
           <img
             src={dashboardPreview}
-            alt="RelayAI dashboard preview"
+            alt="Voice Relay Pro Dashboard Preview"
             className="rounded-3xl shadow-[var(--shadow-premium)] ring-1 ring-border w-full"
           />
           <div className="hidden md:block absolute -bottom-6 -right-6">
