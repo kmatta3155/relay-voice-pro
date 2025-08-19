@@ -73,9 +73,12 @@ function AuthGate({ children }: { children: any }) {
   if (loading) return <div className="p-8">Loading…</div>;
   if (!session) return <SignInScreen />;
 
+  // Check if we're rendering Dashboard which has its own header
+  const isDashboard = window.location.hash === "#app";
+  
   return (
     <div className="min-h-screen">
-      <TopBar profile={profile} tenants={tenants} onSwitch={async(id:string)=>{ await setActiveTenant(id); location.reload(); }} onSignOut={async()=>{ await signOut(); location.reload(); }} />
+      {!isDashboard && <TopBar profile={profile} tenants={tenants} onSwitch={async(id:string)=>{ await setActiveTenant(id); location.reload(); }} onSignOut={async()=>{ await signOut(); location.reload(); }} />}
       {children}
     </div>
   );
