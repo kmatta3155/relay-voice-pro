@@ -32,18 +32,29 @@ serve(async (req) => {
     console.log(`Creating tenant: ${body.name} for user: ${body.userId}`);
 
     // Create tenant with slug
-    const slug = body.name
+    const baseSlug = body.name
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
       .replace(/\s+/g, '-') // Replace spaces with hyphens
       .replace(/-+/g, '-') // Replace multiple hyphens with single
       .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+
+    // Ensure slug uniqueness
+    let slug = baseSlug || 'tenant';
+    let suffix = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data: exists } = await sb.from('tenants').select('id').eq('slug', slug).maybeSingle();
+      if (!exists) break;
+      suffix += 1;
+      slug = `${baseSlug}-${suffix}`;
+    }
     
     const { data: tenant, error: terr } = await sb
       .from("tenants")
       .insert({ 
         name: body.name, 
-        slug: slug || 'tenant', // Fallback if slug is empty
+        slug,
         created_by: body.userId 
       })
       .select("id")
@@ -99,9 +110,10 @@ serve(async (req) => {
     return new Response(JSON.stringify({ ok: true, tenantId }), { 
       headers: { ...corsHeaders, "content-type": "application/json" } 
     });
-  } catch (e) {
+  } catch (e: any) {
+    const message = e?.message || e?.error_description || e?.error || (()=>{ try { return JSON.stringify(e); } catch { return String(e); } })();
     console.error("Tenant creation error:", e);
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { 
+    return new Response(JSON.stringify({ ok: false, error: message }), { 
       status: 400, 
       headers: { ...corsHeaders, "content-type": "application/json" } 
     });
