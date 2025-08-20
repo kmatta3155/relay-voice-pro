@@ -127,22 +127,44 @@ function AdminGate({ children }:{ children:any }) {
 }
 
 function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants:any; onSwitch:(id:string)=>void; onSignOut:()=>void }){
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(r => setUser(r.data.user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   return (
     <header className="border-b bg-white sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <VoiceRelayLogo size="sm" />
-          <span className="font-semibold text-foreground">{tenants.find((t:any)=> t.id===profile?.active_tenant_id)?.name || "Workspace"}</span>
+          <span className="font-semibold text-foreground">{tenants?.find((t:any)=> t.id===profile?.active_tenant_id)?.name || "Workspace"}</span>
         </div>
         <div className="flex items-center gap-2">
           <nav className="flex items-center gap-4">
-            <a href="/#app" className="text-sm hover:underline">Dashboard</a>
+            <a href="/" className="text-sm hover:underline">Home</a>
+            {user && <a href="/#app" className="text-sm hover:underline">Dashboard</a>}
             <AdminLink className="text-sm hover:underline" />
           </nav>
-          <select className="border rounded-xl px-2 py-1" value={profile?.active_tenant_id || ""} onChange={(e)=> onSwitch((e.target as HTMLSelectElement).value)}>
-            {tenants.map((t:any)=> <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          <button className="text-sm underline" onClick={onSignOut}>Sign out</button>
+          {user ? (
+            <>
+              {tenants && tenants.length > 0 && (
+                <select className="border rounded-xl px-2 py-1" value={profile?.active_tenant_id || ""} onChange={(e)=> onSwitch((e.target as HTMLSelectElement).value)}>
+                  {tenants.map((t:any)=> <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              )}
+              <button className="text-sm underline" onClick={onSignOut}>Sign out</button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <a href="/#signin" className="text-sm hover:underline">Sign in</a>
+              <a href="/#app" className="text-sm bg-primary text-primary-foreground px-3 py-1 rounded-xl hover:opacity-90">Get started</a>
+            </div>
+          )}
         </div>
       </div>
     </header>

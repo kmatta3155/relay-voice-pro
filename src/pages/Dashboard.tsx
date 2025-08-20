@@ -227,6 +227,12 @@ function NavBarApp() {
   useEffect(() => {
     supabase.auth.getUser().then((r) => setEmail(r.data.user?.email));
   }, []);
+  
+  async function onSignOut(){ 
+    await supabase.auth.signOut(); 
+    window.location.href = '/';
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b bg-white/70 backdrop-blur">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -235,9 +241,12 @@ function NavBarApp() {
           <span className="font-semibold">Voice Relay Pro — Customer Dashboard</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <nav className="flex items-center gap-3">
+            <a className="hover:underline" href="/">Home</a>
+            <a className="hover:underline" href="/#admin">Admin</a>
+          </nav>
           <span className="text-slate-500 hidden md:inline">{email}</span>
-          <a className="underline" href="#/">Site</a>
-          <a className="underline" href="#admin">Admin</a>
+          <button className="underline hover:no-underline" onClick={onSignOut}>Sign out</button>
         </div>
       </div>
     </header>

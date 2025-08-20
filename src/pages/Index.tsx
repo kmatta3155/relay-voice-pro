@@ -206,15 +206,19 @@ function NavBar() {
           <a href="#dashboard" className="hover:opacity-80">Dashboard</a>
           <a href="#faq" className="hover:opacity-80">FAQ</a>
           <a href="#security" className="hover:opacity-80 inline-flex items-center gap-1"><Lock className="w-4 h-4" /> Security</a>
+          {authed && <a href="/#admin" className="hover:opacity-80">Admin</a>}
         </nav>
         <div className="flex items-center gap-2">
           {!authed ? (
             <>
-              <Button asChild variant="ghost"><a href="#signin">Sign in</a></Button>
-              <Button asChild className="rounded-2xl"><a href="#app">Get started</a></Button>
+              <Button asChild variant="ghost"><a href="/#signin">Sign in</a></Button>
+              <Button asChild className="rounded-2xl"><a href="/#app">Get started</a></Button>
             </>
           ) : (
-            <Button asChild className="rounded-2xl"><a href="#app">Open dashboard</a></Button>
+            <>
+              <Button asChild variant="ghost"><a href="/#app">Dashboard</a></Button>
+              <Button variant="outline" className="rounded-2xl" onClick={() => { supabase.auth.signOut(); }}>Sign out</Button>
+            </>
           )}
         </div>
       </div>
