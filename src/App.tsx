@@ -231,6 +231,19 @@ function AdminPanel(){
   return (
     <section className="max-w-5xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-semibold mb-4">Admin</h1>
+      
+      {/* Quick access to new onboarding system */}
+      <div className="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-xl">
+        <h2 className="text-lg font-medium text-violet-900 mb-2">Admin Onboarding</h2>
+        <p className="text-sm text-violet-700 mb-3">Create and configure new customer tenants with our guided onboarding system.</p>
+        <a 
+          href="/admin/onboarding" 
+          className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
+        >
+          Open Admin Onboarding →
+        </a>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-4">
         <div className="rounded-2xl bg-white shadow ring-1 ring-black/5 p-4">
           <div className="text-sm text-slate-500">Environment</div>
