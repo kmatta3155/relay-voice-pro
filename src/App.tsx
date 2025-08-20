@@ -20,6 +20,7 @@ import AdminOnboarding from "@/pages/AdminOnboarding";
 import AcceptInvite from "@/pages/AcceptInvite";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLink from "@/components/admin/AdminLink";
+import { TenantManagement } from "@/components/admin/TenantManagement";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
@@ -233,15 +234,15 @@ function AdminPanel(){
     <section className="max-w-5xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-semibold mb-4">Admin</h1>
       
-      {/* Quick access to new onboarding system */}
+      {/* Quick access to onboarding system */}
       <div className="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-xl">
-        <h2 className="text-lg font-medium text-violet-900 mb-2">Admin Onboarding</h2>
+        <h2 className="text-lg font-medium text-violet-900 mb-2">Tenant Onboarding</h2>
         <p className="text-sm text-violet-700 mb-3">Create and configure new customer tenants with our guided onboarding system.</p>
         <a 
           href="/admin/onboarding" 
           className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
         >
-          Open Admin Onboarding →
+          Open Tenant Onboarding →
         </a>
       </div>
 
@@ -265,6 +266,9 @@ function AdminPanel(){
             <li>Leads (24h): <b>{info.leads24}</b></li>
           </ul>
         </div>
+      </div>
+      <div className="mt-6">
+        <TenantManagement />
       </div>
       <p className="text-xs text-slate-500 mt-4">Signed in as: {info.uid}</p>
     </section>
