@@ -18,9 +18,12 @@ export function useIsAdmin() {
 
       const { data: p } = await supabase
         .from("profiles")
-        .select("active_tenant_id")
+        .select("active_tenant_id, is_site_admin")
         .eq("id", uid)
         .single();
+
+      // Site admin: can access regardless of active tenant
+      if (p?.is_site_admin) { setIsAdmin(true); setLoading(false); return; }
 
       const tid = p?.active_tenant_id as string | undefined;
       if (!tid) { setIsAdmin(false); setLoading(false); return; }

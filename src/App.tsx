@@ -70,7 +70,8 @@ function AuthGate({ children }: { children: any }) {
       if (!session) return;
       const p = await loadProfile(); setProfile(p);
       const ts = await ensureDemoTenant(); setTenants(ts);
-      if (!p?.active_tenant_id && ts[0]) await setActiveTenant(ts[0].id);
+      // Do NOT auto-select a tenant for site admins to keep them in site-admin mode
+      if (!p?.is_site_admin && !p?.active_tenant_id && ts[0]) await setActiveTenant(ts[0].id);
     })();
   }, [session]);
 
