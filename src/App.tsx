@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { loadProfile, setActiveTenant, ensureDemoTenant, myTenants, isSiteAdmin } from "@/lib/tenancy";
+import { loadProfile, setActiveCustomer, ensureDemoCustomer, myCustomers, isSiteAdmin } from "@/lib/customers";
 import { signInWithEmail, signOut, onAuth, signInWithOAuth, signInWithSms, verifySms, signInWithPassword, signUpWithPassword, mfaEnrollTotp, mfaVerifyEnrollment } from "@/lib/auth";
 import { CONFIG } from "@/lib/webhooks";
 import VoiceRelayLogo from "@/components/VoiceRelayLogo";
@@ -20,7 +20,7 @@ import AdminOnboarding from "@/pages/AdminOnboarding";
 import AcceptInvite from "@/pages/AcceptInvite";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLink from "@/components/admin/AdminLink";
-import { TenantManagement } from "@/components/admin/TenantManagement";
+import { CustomerManagement } from "@/components/admin/CustomerManagement";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
@@ -236,13 +236,13 @@ function AdminPanel(){
       
       {/* Quick access to onboarding system */}
       <div className="mb-6 p-4 bg-violet-50 border border-violet-200 rounded-xl">
-        <h2 className="text-lg font-medium text-violet-900 mb-2">Tenant Onboarding</h2>
-        <p className="text-sm text-violet-700 mb-3">Create and configure new customer tenants with our guided onboarding system.</p>
+        <h2 className="text-lg font-medium text-violet-900 mb-2">Customer Onboarding</h2>
+        <p className="text-sm text-violet-700 mb-3">Create and configure new customers with our guided onboarding system.</p>
         <a 
           href="/admin/onboarding" 
           className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
         >
-          Open Tenant Onboarding →
+          Open Customer Onboarding →
         </a>
       </div>
 
@@ -268,7 +268,7 @@ function AdminPanel(){
         </div>
       </div>
       <div className="mt-6">
-        <TenantManagement />
+        <CustomerManagement />
       </div>
       <p className="text-xs text-slate-500 mt-4">Signed in as: {info.uid}</p>
     </section>

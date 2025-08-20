@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 type ListCmd = { action: 'list' };
-type DetailsCmd = { action: 'details'; tenantId: string };
+type DetailsCmd = { action: 'details'; customerId: string };
 type DeleteCmd = { action: 'delete'; tenantId: string };
 
 type Cmd = ListCmd | DetailsCmd | DeleteCmd;
