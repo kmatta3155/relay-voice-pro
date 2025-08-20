@@ -118,12 +118,22 @@ serve(async (req) => {
     }
     
     if (body.action === "invite") {
-      await sb.from("invites").insert({ 
+      const { data, error } = await sb.from("invites").insert({
         tenant_id: body.tenantId, 
         email: body.email, 
-        role: body.role 
-      });
-      return new Response(JSON.stringify({ ok: true }), {
+        role: body.role, 
+        status: "pending",
+      }).select("token").single();
+      if (error) throw error;
+      
+      const siteUrl = Deno.env.get("SITE_URL") || "";
+      const link = `${siteUrl}/accept-invite?token=${data.token}`;
+      
+      return new Response(JSON.stringify({ 
+        ok: true, 
+        token: data.token, 
+        link 
+      }), { 
         headers: { ...corsHeaders, "content-type": "application/json" }
       });
     }

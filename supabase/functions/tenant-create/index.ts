@@ -53,6 +53,11 @@ serve(async (req) => {
       role: "owner" 
     });
 
+    // Set active tenant
+    await sb.from("profiles").update({ 
+      active_tenant_id: tenantId 
+    }).eq("id", body.userId);
+
     // Create agent settings
     await sb.from("agent_settings").insert({ 
       tenant_id: tenantId, 
