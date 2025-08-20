@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TenantManagement } from "@/components/admin/TenantManagement";
+import { Link } from "react-router-dom";
 
 type Counts = { tenants:number; leads:number; appts:number; calls:number; leads24h:number };
 
@@ -137,6 +139,18 @@ export default function Admin() {
       </div>
 
       <Card className="rounded-2xl shadow-sm">
+        <CardHeader><CardTitle>Tenant Onboarding</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Create and configure new customer tenants with our guided onboarding system.
+          </p>
+          <Link to="/admin-onboarding">
+            <Button className="w-full">Create New Tenant</Button>
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl shadow-sm">
         <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button onClick={refreshCounts} variant="outline" className="rounded-2xl">Refresh</Button>
@@ -145,6 +159,8 @@ export default function Admin() {
           </Button>
         </CardContent>
       </Card>
+
+      <TenantManagement />
 
       {msg && <div className="text-sm">{msg}</div>}
       <WhoAmI />

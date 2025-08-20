@@ -230,8 +230,8 @@ export default function AdminOnboarding(){
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-4">
-      <Card className="rounded-2xl">
-        <CardHeader><CardTitle className="text-center">Admin Onboarding Dashboard</CardTitle></CardHeader>
+        <Card className="rounded-2xl">
+          <CardHeader><CardTitle className="text-center">Tenant Onboarding Dashboard</CardTitle></CardHeader>
         <CardContent className="space-y-6">
           <div className="grid md:grid-cols-2 gap-4">
             <div><label className="text-sm">Business name *</label><Input value={name} onChange={e=>setName(e.target.value)} placeholder="Acme Dental"/></div>
