@@ -236,22 +236,22 @@ function chunkTextEnhanced(text: string, businessInfo: any, maxTokens = 500): st
 async function createQuickAnswers(tenantId: string, businessInfo: any, sb: any) {
   if (!businessInfo || Object.keys(businessInfo).length === 0) return;
 
-  // Clear existing quick answers for this tenant first
-  try {
-    const deleteResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/business_quick_answers?tenant_id=eq.${tenantId}`, {
-      method: "DELETE",
-      headers: { 
-        "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, 
-        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
-        "Content-Type": "application/json"
+    // Clear existing quick answers for this tenant first
+    try {
+      const deleteResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/business_quick_answers?tenant_id=eq.${tenantId}`, {
+        method: "DELETE",
+        headers: { 
+          "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, 
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+          "Content-Type": "application/json"
+        }
+      });
+      if (!deleteResponse.ok) {
+        console.log("Could not clear existing quick answers:", await deleteResponse.text());
       }
-    });
-    if (!deleteResponse.ok) {
-      console.log("Could not clear existing quick answers:", await deleteResponse.text());
+    } catch (error) {
+      console.log("Could not clear existing quick answers:", error);
     }
-  } catch (error) {
-    console.log("Could not clear existing quick answers:", error);
-  }
 
   const quickAnswers = [];
 
