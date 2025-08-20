@@ -307,25 +307,41 @@ function ResetPasswordScreen(){
 }
 
 export default function VoiceRelayProApp() {
-  const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'|'auth'|'reset'>(() => {
+  const [mode, setMode] = useState<'site'|'app'|'signin'|'admin'|'auth'|'reset'|'routes'>(() => {
     if (typeof window === 'undefined') return 'site';
     const raw = location.hash || "";
+    const pathname = location.pathname;
+    
+    // Check for regular path routes first
+    if (pathname === '/admin/onboarding' || pathname === '/demo') return 'routes';
+    
     // Force auth mode if tokens are in the hash anywhere (double-hash safe)
     if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) return "auth";
     const h = raw.replace('#','');
     return (['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site');
   });
   useEffect(() => {
-    const onHash = () => {
+    const onHashOrPath = () => {
       const raw = location.hash || "";
+      const pathname = location.pathname;
+      
+      // Check for regular path routes first
+      if (pathname === '/admin/onboarding' || pathname === '/demo') {
+        setMode('routes'); return;
+      }
+      
       if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) {
         setMode("auth"); return;
       }
       const h = raw.replace('#','');
       setMode((['app','signin','admin','auth','reset'].includes(h) ? (h as any) : 'site'));
     };
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    window.addEventListener('hashchange', onHashOrPath);
+    window.addEventListener('popstate', onHashOrPath);
+    return () => {
+      window.removeEventListener('hashchange', onHashOrPath);
+      window.removeEventListener('popstate', onHashOrPath);
+    };
   }, []);
 
   const content = mode === 'app'
@@ -338,7 +354,9 @@ export default function VoiceRelayProApp() {
           ? <AuthCallback />
           : mode === 'reset'
             ? <ResetPasswordScreen />
-            : <MarketingSite />;
+            : mode === 'routes'
+              ? <DashboardShell />
+              : <MarketingSite />;
 
   return (
     <QueryClientProvider client={queryClient}>
