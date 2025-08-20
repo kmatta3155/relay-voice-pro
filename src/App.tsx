@@ -110,11 +110,19 @@ function AdminGate({ children }:{ children:any }) {
   useEffect(()=>{ (async()=>{
     const { data } = await supabase.auth.getSession();
     if(!data.session){ location.hash = "#signin"; return; }
-    setOk(await _isSiteAdmin());
+    
+    // Check if site admin
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_site_admin")
+      .eq("id", data.session.user.id)
+      .single();
+    
+    setOk(!!profile?.is_site_admin);
     setReady(true);
   })(); },[]);
   if(!ready) return <div className="p-6">Checking admin…</div>;
-  if(!ok) return <div className="p-6">403 — Admins only</div>;
+  if(!ok) return <div className="p-6">403 — Site admins only. You need to be marked as is_site_admin=true in the profiles table.</div>;
   return children;
 }
 
@@ -363,7 +371,7 @@ export default function VoiceRelayProApp() {
     : mode === 'signin'
       ? <SignInScreen />
       : mode === 'admin'
-        ? <AuthGate><Admin /></AuthGate>
+        ? <AuthGate><AdminGate><AdminPanel /></AdminGate></AuthGate>
         : mode === 'auth'
           ? <AuthCallback />
           : mode === 'reset'
