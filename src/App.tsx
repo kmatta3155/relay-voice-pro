@@ -17,6 +17,8 @@ import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
 import Demo from "@/pages/Demo";
 import AdminOnboarding from "@/pages/AdminOnboarding";
+import AdminRoute from "@/components/admin/AdminRoute";
+import AdminLink from "@/components/admin/AdminLink";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
@@ -127,7 +129,7 @@ function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants
         <div className="flex items-center gap-2">
           <nav className="flex items-center gap-4">
             <a href="/#app" className="text-sm hover:underline">Dashboard</a>
-            <a href="/admin/onboarding" className="text-sm hover:underline">Admin</a>
+            <AdminLink className="text-sm hover:underline" />
           </nav>
           <select className="border rounded-xl px-2 py-1" value={profile?.active_tenant_id || ""} onChange={(e)=> onSwitch((e.target as HTMLSelectElement).value)}>
             {tenants.map((t:any)=> <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -146,7 +148,14 @@ function DashboardShell(){
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/demo" element={<Demo />} />
-        <Route path="/admin/onboarding" element={<AdminOnboarding />} />
+        <Route 
+          path="/admin/onboarding" 
+          element={
+            <AdminRoute>
+              <AdminOnboarding />
+            </AdminRoute>
+          } 
+        />
         <Route path="/admin" element={<Navigate to="/admin/onboarding" replace />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
