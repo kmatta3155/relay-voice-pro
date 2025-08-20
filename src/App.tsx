@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { loadProfile, setActiveTenant, ensureDemoTenant, myTenants, isSiteAdmin } from "@/lib/tenancy";
@@ -125,6 +125,10 @@ function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants
           <span className="font-semibold text-foreground">{tenants.find((t:any)=> t.id===profile?.active_tenant_id)?.name || "Workspace"}</span>
         </div>
         <div className="flex items-center gap-2">
+          <nav className="flex items-center gap-4">
+            <a href="/#app" className="text-sm hover:underline">Dashboard</a>
+            <a href="/admin/onboarding" className="text-sm hover:underline">Admin</a>
+          </nav>
           <select className="border rounded-xl px-2 py-1" value={profile?.active_tenant_id || ""} onChange={(e)=> onSwitch((e.target as HTMLSelectElement).value)}>
             {tenants.map((t:any)=> <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -143,6 +147,7 @@ function DashboardShell(){
         <Route path="/" element={<Index />} />
         <Route path="/demo" element={<Demo />} />
         <Route path="/admin/onboarding" element={<AdminOnboarding />} />
+        <Route path="/admin" element={<Navigate to="/admin/onboarding" replace />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -313,7 +318,7 @@ export default function VoiceRelayProApp() {
     const pathname = location.pathname;
     
     // Check for regular path routes first
-    if (pathname === '/admin/onboarding' || pathname === '/demo') return 'routes';
+    if (pathname.startsWith('/admin') || pathname === '/demo') return 'routes';
     
     // Force auth mode if tokens are in the hash anywhere (double-hash safe)
     if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) return "auth";
@@ -326,7 +331,7 @@ export default function VoiceRelayProApp() {
       const pathname = location.pathname;
       
       // Check for regular path routes first
-      if (pathname === '/admin/onboarding' || pathname === '/demo') {
+      if (pathname.startsWith('/admin') || pathname === '/demo') {
         setMode('routes'); return;
       }
       
