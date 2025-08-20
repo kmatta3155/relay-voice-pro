@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
+import { Progress } from "@/components/ui/progress";
+import { ingestWebsite } from "@/lib/rag";
+import { Zap, CheckCircle } from "lucide-react";
 
 export default function AdminOnboarding(){
   const { toast } = useToast();
@@ -21,6 +24,10 @@ export default function AdminOnboarding(){
   const [pickedNumber, setPickedNumber] = useState<string>("");
   const [link, setLink] = useState<string>("");
   const [userId, setUserId] = useState<string>("");
+  const [knowledgeUrl, setKnowledgeUrl] = useState("");
+  const [knowledgeBusy, setKnowledgeBusy] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState(0);
+  const [businessInfo, setBusinessInfo] = useState<any>({});
 
   useEffect(()=>{ (async()=>{
     const { data } = await supabase.auth.getUser();
@@ -93,6 +100,74 @@ export default function AdminOnboarding(){
       toast({ title:"Invite created" });
     } catch (error) {
       toast({ title: "Error", description: String(error), variant: "destructive" });
+    }
+  }
+
+  async function handleKnowledgeIngest() {
+    if (!tenantId || !knowledgeUrl) return;
+    setKnowledgeBusy(true);
+    setExtractionProgress(0);
+    
+    try {
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setExtractionProgress(prev => Math.min(prev + 10, 90));
+      }, 500);
+      
+      const result = await ingestWebsite(tenantId, knowledgeUrl);
+      clearInterval(progressInterval);
+      setExtractionProgress(100);
+      
+      // If we got business info, auto-populate hours and services
+      if (result?.business_info) {
+        setBusinessInfo(result.business_info);
+        
+        // Auto-populate business hours if available
+        if (result.business_info.business_hours) {
+          const autoHours = result.business_info.business_hours.map((h: any) => {
+            const day = h.day?.toLowerCase();
+            const dayIndex = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].indexOf(day);
+            if (dayIndex !== -1 && h.hours && h.hours !== "Closed") {
+              const times = h.hours.split(" - ") || h.hours.split("-");
+              if (times.length === 2) {
+                return { dow: dayIndex, open: times[0].trim(), close: times[1].trim() };
+              }
+            }
+            return { dow: dayIndex !== -1 ? dayIndex : 0, open: "09:00", close: "17:00" };
+          });
+          if (autoHours.length > 0) {
+            setHours(autoHours);
+          }
+        }
+        
+        // Auto-populate services if available
+        if (result.business_info.services) {
+          const autoServices = result.business_info.services.map((service: string) => ({
+            name: service,
+            duration_minutes: 30,
+            price: 0 // Will be updated if we can extract pricing
+          }));
+          setServices(autoServices);
+        }
+        
+        toast({ 
+          title: "Knowledge ingested successfully", 
+          description: "Business hours and services have been auto-populated. You can edit them in their respective tabs." 
+        });
+      }
+      
+      setKnowledgeUrl("");
+      setTimeout(() => setExtractionProgress(0), 2000);
+    } catch (e) {
+      setExtractionProgress(0);
+      console.error("Knowledge ingestion failed:", e);
+      toast({ 
+        title: "Ingestion failed", 
+        description: e instanceof Error ? e.message : "Failed to ingest website",
+        variant: "destructive"
+      });
+    } finally {
+      setKnowledgeBusy(false);
     }
   }
 
@@ -177,9 +252,65 @@ export default function AdminOnboarding(){
                 <Button disabled={!pickedNumber} onClick={buyNumber}>Purchase & configure webhooks</Button>
               </TabsContent>
 
-              <TabsContent value="knowledge" className="pt-4">
-                <p className="text-sm mb-2">Open the Knowledge Trainer to ingest site & docs.</p>
-                <Button onClick={()=>window.location.hash="#admin/knowledge"}>Open Knowledge Trainer</Button>
+              <TabsContent value="knowledge" className="pt-4 space-y-4">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      Business Website URL
+                    </label>
+                    <Input 
+                      placeholder="https://example.com" 
+                      value={knowledgeUrl} 
+                      onChange={(e)=> setKnowledgeUrl(e.target.value)}
+                      className="mt-1"
+                    />
+                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <Zap className="h-3 w-3" />
+                      AI extracts business hours, services, contact info, and creates smart knowledge chunks
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    disabled={!knowledgeUrl || knowledgeBusy} 
+                    onClick={handleKnowledgeIngest} 
+                    className="w-full"
+                  >
+                    {knowledgeBusy ? "AI Processing..." : "Analyze & Ingest Website"}
+                  </Button>
+
+                  {extractionProgress > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap className="h-4 w-4 text-primary animate-pulse" />
+                        AI extracting business intelligence...
+                      </div>
+                      <Progress value={extractionProgress} className="h-2" />
+                    </div>
+                  )}
+
+                  {businessInfo.business_hours && (
+                    <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                      <div className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
+                        ✓ Business hours extracted and auto-populated
+                      </div>
+                      <div className="text-xs text-green-600 dark:text-green-300">
+                        Check the "Hours" tab to review and customize
+                      </div>
+                    </div>
+                  )}
+
+                  {businessInfo.services && (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                      <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
+                        ✓ Services extracted and auto-populated
+                      </div>
+                      <div className="text-xs text-blue-600 dark:text-blue-300">
+                        Check the "Services" tab to review, add prices, and customize
+                      </div>
+                    </div>
+                  )}
+                </div>
               </TabsContent>
 
               <TabsContent value="team" className="pt-4">
