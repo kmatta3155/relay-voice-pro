@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { loadProfile, setActiveCustomer, ensureDemoCustomer, myCustomers, isSiteAdmin } from "@/lib/customers";
+import { loadProfile, setActiveCustomer, ensureDemoCustomer, myCustomers, isSiteAdmin, ensureDemoTenant, setActiveTenant } from "@/lib/customers";
 import { signInWithEmail, signOut, onAuth, signInWithOAuth, signInWithSms, verifySms, signInWithPassword, signUpWithPassword, mfaEnrollTotp, mfaVerifyEnrollment } from "@/lib/auth";
 import { CONFIG } from "@/lib/webhooks";
 import VoiceRelayLogo from "@/components/VoiceRelayLogo";

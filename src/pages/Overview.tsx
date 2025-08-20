@@ -29,18 +29,18 @@ export default function Overview(){
     const uid = u.user?.id;
     if (!uid) return;
     // customers list
-    const { data: clist } = await supabase.from("customers").select("id,name").order("name");
+    const { data: clist } = await supabase.from("tenants").select("id,name").order("name");
     setCustomers(clist || []);
-    const { data: prof } = await supabase.from("profiles").select("active_customer_id").eq("id", uid).single();
-    const cid = prof?.active_customer_id as string;
+    const { data: prof } = await supabase.from("profiles").select("active_tenant_id").eq("id", uid).single();
+    const cid = (prof as any)?.active_tenant_id as string;
     setCustomerId(cid);
     // Basic KPI calculation from calls table
-    const { data: callsData } = await supabase.from("calls").select("*").eq("customer_id", cid);
+    const { data: callsData } = await supabase.from("calls").select("*").eq("tenant_id", cid);
     const calls = callsData?.length || 0;
     const answered = callsData?.filter(c => c.outcome === 'answered').length || 0;
     const missed = callsData?.filter(c => c.outcome === 'missed').length || 0;
     
-    const { data: appointmentsData } = await supabase.from("appointments").select("*").eq("customer_id", cid);
+    const { data: appointmentsData } = await supabase.from("appointments").select("*").eq("tenant_id", cid);
     const bookings = appointmentsData?.length || 0;
     
     setKpis({ calls, answered, missed, recovered: 0, bookings, csat_avg: null, revenue: 0 });
@@ -55,7 +55,7 @@ export default function Overview(){
     const series = Object.entries(chartData || {}).map(([date, value]) => ({ date, value: value as number }));
     setSeries(series);
     
-    const { data: customerData } = await supabase.from("customers").select("*").eq("id", cid).single();
+    const { data: customerData } = await supabase.from("tenants").select("*").eq("id", cid).single();
     setAutoReplies(false); // Default for now
     setLoading(false);
   }
@@ -74,7 +74,7 @@ export default function Overview(){
           { label: "Calendar", ok: true },
         ]}/>
         <CustomerBadgeSwitcher customers={customers} active={customerId || undefined} onChange={async (id)=>{
-          await supabase.from("profiles").update({ active_customer_id: id }).eq("id", (await supabase.auth.getUser()).data.user?.id );
+          await supabase.from("profiles").update({ active_tenant_id: id }).eq("id", (await supabase.auth.getUser()).data.user?.id );
           setCustomerId(id); load();
         }}/>
       </div>

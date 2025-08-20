@@ -50,7 +50,7 @@ export function CustomerManagement() {
 
       if (error) throw error;
       if (data?.ok) {
-        setCustomers(data.customers || []);
+        setCustomers(data.tenants || []);
       }
     } catch (error: any) {
       toast({
@@ -66,7 +66,7 @@ export function CustomerManagement() {
   const loadCustomerDetails = async (customerId: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('customers-admin', {
-        body: { action: 'details', customerId }
+        body: { action: 'details', tenantId: customerId }
       });
 
       if (error) throw error;
@@ -90,7 +90,7 @@ export function CustomerManagement() {
   const deleteCustomer = async (customerId: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('customers-admin', {
-        body: { action: 'delete', customerId }
+        body: { action: 'delete', tenantId: customerId }
       });
 
       if (error) throw error;
@@ -128,7 +128,7 @@ export function CustomerManagement() {
     try {
       // Update customer basic info
       const { error: customerError } = await supabase
-        .from('customers')
+        .from('tenants')
         .update({ name: selectedCustomer.name, slug: selectedCustomer.slug })
         .eq('id', selectedCustomer.id);
 
@@ -137,9 +137,9 @@ export function CustomerManagement() {
       // Update branding
       if (customerDetails.branding) {
         const { error: brandingError } = await supabase
-          .from('customer_branding')
+          .from('tenant_branding')
           .upsert({
-            customer_id: selectedCustomer.id,
+            tenant_id: selectedCustomer.id,
             ...customerDetails.branding
           });
         if (brandingError) throw brandingError;
@@ -150,7 +150,7 @@ export function CustomerManagement() {
         const { error: agentError } = await supabase
           .from('agent_settings')
           .upsert({
-            customer_id: selectedCustomer.id,
+            tenant_id: selectedCustomer.id,
             ...customerDetails.agent
           });
         if (agentError) throw agentError;
