@@ -31,10 +31,21 @@ serve(async (req) => {
 
     console.log(`Creating tenant: ${body.name} for user: ${body.userId}`);
 
-    // Create tenant
+    // Create tenant with slug
+    const slug = body.name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+    
     const { data: tenant, error: terr } = await sb
       .from("tenants")
-      .insert({ name: body.name, created_by: body.userId })
+      .insert({ 
+        name: body.name, 
+        slug: slug || 'tenant', // Fallback if slug is empty
+        created_by: body.userId 
+      })
       .select("id")
       .single();
     
