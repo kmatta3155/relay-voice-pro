@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_settings: {
+        Row: {
+          after_hours_voicemail: boolean | null
+          agent_ws_url: string | null
+          ai_sms_autoreplies: boolean | null
+          created_at: string | null
+          forward_number: string | null
+          greeting: string | null
+          tenant_id: string
+          twilio_number: string | null
+          updated_at: string | null
+          website_url: string | null
+        }
+        Insert: {
+          after_hours_voicemail?: boolean | null
+          agent_ws_url?: string | null
+          ai_sms_autoreplies?: boolean | null
+          created_at?: string | null
+          forward_number?: string | null
+          greeting?: string | null
+          tenant_id: string
+          twilio_number?: string | null
+          updated_at?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          after_hours_voicemail?: boolean | null
+          agent_ws_url?: string | null
+          ai_sms_autoreplies?: boolean | null
+          created_at?: string | null
+          forward_number?: string | null
+          greeting?: string | null
+          tenant_id?: string
+          twilio_number?: string | null
+          updated_at?: string | null
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointments: {
         Row: {
           created_at: string | null
@@ -95,6 +142,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "automations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_hours: {
+        Row: {
+          close_time: string
+          dow: number
+          open_time: string
+          tenant_id: string
+        }
+        Insert: {
+          close_time: string
+          dow: number
+          open_time: string
+          tenant_id: string
+        }
+        Update: {
+          close_time?: string
+          dow?: number
+          open_time?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_hours_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -201,6 +277,67 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      holidays: {
+        Row: {
+          day: string
+          name: string | null
+          tenant_id: string
+        }
+        Insert: {
+          day: string
+          name?: string | null
+          tenant_id: string
+        }
+        Update: {
+          day?: string
+          name?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holidays_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invites: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          role: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          role: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          role?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invites_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -532,6 +669,44 @@ export type Database = {
           },
         ]
       }
+      services: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          duration_minutes: number
+          id: string
+          name: string
+          price: number | null
+          tenant_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          duration_minutes?: number
+          id?: string
+          name: string
+          price?: number | null
+          tenant_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          duration_minutes?: number
+          id?: string
+          name?: string
+          price?: number | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           created_at: string | null
@@ -571,6 +746,35 @@ export type Database = {
             foreignKeyName: "subscriptions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_branding: {
+        Row: {
+          brand_color: string | null
+          logo_url: string | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          brand_color?: string | null
+          logo_url?: string | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          brand_color?: string | null
+          logo_url?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_branding_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -636,6 +840,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tenant_members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_users: {
+        Row: {
+          created_at: string | null
+          role: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          role: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          role?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_users_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

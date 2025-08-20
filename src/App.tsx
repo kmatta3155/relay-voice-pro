@@ -16,6 +16,7 @@ import SignInScreen from "@/components/SignInScreen";
 import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
 import Demo from "@/pages/Demo";
+import AdminOnboarding from "@/pages/AdminOnboarding";
 const queryClient = new QueryClient();
 
 function getQueryParam(name: string) {
@@ -141,6 +142,7 @@ function DashboardShell(){
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/demo" element={<Demo />} />
+        <Route path="/admin/onboarding" element={<AdminOnboarding />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
