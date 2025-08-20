@@ -17,6 +17,7 @@ import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
 import Demo from "@/pages/Demo";
 import AdminOnboarding from "@/pages/AdminOnboarding";
+import AcceptInvite from "@/pages/AcceptInvite";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLink from "@/components/admin/AdminLink";
 const queryClient = new QueryClient();
@@ -178,6 +179,7 @@ function DashboardShell(){
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/demo" element={<Demo />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route 
           path="/admin/onboarding" 
           element={
@@ -357,7 +359,7 @@ export default function VoiceRelayProApp() {
     const pathname = location.pathname;
     
     // Check for regular path routes first
-    if (pathname.startsWith('/admin') || pathname === '/demo') return 'routes';
+    if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite') return 'routes';
     
     // Force auth mode if tokens are in the hash anywhere (double-hash safe)
     if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) return "auth";
@@ -370,7 +372,7 @@ export default function VoiceRelayProApp() {
       const pathname = location.pathname;
       
       // Check for regular path routes first
-      if (pathname.startsWith('/admin') || pathname === '/demo') {
+      if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite') {
         setMode('routes'); return;
       }
       
