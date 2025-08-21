@@ -24,7 +24,15 @@ export default function Onboarding() {
     if (!tenantId || !biz.url) { alert("Enter your business URL"); return; }
     setBusy(true); setDone(null);
     try {
-      await ingestWebsite(tenantId, biz.url, biz.name);
+      await ingestWebsite(tenantId, biz.url, {
+        includeSubdomains: true,
+        maxPages: 120,
+        maxDepth: 4,
+        allowPatterns: ["services|pricing|packages|menu|treatment|book|appointment|schedule"],
+        denyPatterns: ["\\.(pdf|jpg|jpeg|png|gif|webp|svg)$"],
+        includeBookingProviders: true,
+        extraAllowedHosts: []
+      });
       setDone("✅ Imported your site! Jump into Knowledge to review & search.");
     } catch (e) {
       alert(String(e));

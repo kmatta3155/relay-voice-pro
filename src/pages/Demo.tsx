@@ -9,7 +9,7 @@ import AnalyticsDashboard from "@/components/demo/AnalyticsDashboard";
 import CompetitiveShowcase from "@/components/demo/CompetitiveShowcase";
 import ROICalculator from "@/components/demo/ROICalculator";
 import IntegrationShowcase from "@/components/demo/IntegrationShowcase";
-import { KnowledgeShowcase } from "@/components/demo/KnowledgeShowcase";
+import KnowledgeShowcase from "@/components/demo/KnowledgeShowcase";
 import { ragSearch } from "@/lib/rag";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";

@@ -18,6 +18,8 @@ import Admin from "@/pages/Admin";
 import Demo from "@/pages/Demo";
 import AdminOnboarding from "@/pages/AdminOnboarding";
 import AcceptInvite from "@/pages/AcceptInvite";
+import KnowledgePage from "@/pages/KnowledgePage";
+import KnowledgeShowcase from "@/components/demo/KnowledgeShowcase";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLink from "@/components/admin/AdminLink";
 import { CustomerManagement } from "@/components/admin/CustomerManagement";
@@ -181,6 +183,15 @@ function DashboardShell(){
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/demo" element={<Demo />} />
+        <Route path="/demo/knowledge" element={<KnowledgeShowcase />} />
+        <Route 
+          path="/knowledge" 
+          element={
+            <AuthGate>
+              <KnowledgePage />
+            </AuthGate>
+          } 
+        />
         <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route 
           path="/admin/onboarding" 

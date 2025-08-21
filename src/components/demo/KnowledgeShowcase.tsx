@@ -6,7 +6,7 @@ import { Brain, Zap, Clock, Phone, MapPin, Star } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { ingestWebsite } from "@/lib/rag";
 
-export default function KnowledgeShowcase() {
+function KnowledgeShowcase() {
   const [url, setUrl] = useState("https://example.com");
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
@@ -190,3 +190,5 @@ export default function KnowledgeShowcase() {
     </div>
   );
 }
+
+export default KnowledgeShowcase;
