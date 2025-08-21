@@ -8,18 +8,15 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  ragSearchEnhanced,
-  ingestWebsite,
-} from "@/lib/rag";
+import { ragSearchEnhanced, ingestWebsite } from "@/lib/rag";
 import { Badge } from "@/components/ui/badge";
 import {
   Clock,
   Phone,
-  MapPin,
   Mail,
-  Star,
+  MapPin,
   Zap,
+  Star,
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
@@ -44,52 +41,50 @@ export default function KnowledgePage() {
   const [tenantId, setTenantId] = useState("");
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Result[]>([]);
-  const [searchMetadata, setSearchMetadata] = useState<any>(null);
-  const [sources, setSources] = useState<any[]>([]);
-  const [businessInfo, setBusinessInfo] = useState<any>({});
-  const [quickAnswers, setQuickAnswers] = useState<any[]>([]);
   const [progress, setProgress] = useState(0);
   const [activeTab, setActiveTab] = useState("ingestion");
 
-  // crawler options
   const [includeSubs, setIncludeSubs] = useState(true);
   const [maxPages, setMaxPages] = useState(120);
   const [maxDepth, setMaxDepth] = useState(4);
+  const [allow, setAllow] = useState("services|pricing|packages|menu|treatment|book|appointment|schedule");
+  const [deny, setDeny] = useState("\\.(pdf|jpg|jpeg|png|gif|webp|svg)$");
+  const [bookingHosts, setBookingHosts] = useState("zenoti.com");
+
+  const [sources, setSources] = useState<any[]>([]);
+  const [businessInfo, setBusinessInfo] = useState<any>({});
+  const [quickAnswers, setQuickAnswers] = useState<any[]>([]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Result[]>([]);
+  const [searchMeta, setSearchMeta] = useState<any>(null);
 
   useEffect(() => {
     (async () => {
-      const user = (await supabase.auth.getUser()).data.user;
-      if (!user) return;
-      const { data, error } = await supabase
+      const u = (await supabase.auth.getUser()).data.user;
+      if (!u) return;
+      const { data } = await supabase
         .from("profiles")
         .select("active_tenant_id")
-        .eq("id", user.id)
+        .eq("id", u.id)
         .maybeSingle();
-      if (!error && data?.active_tenant_id) {
+      if (data?.active_tenant_id) {
         setTenantId(data.active_tenant_id);
 
-        // Load sources
         const s = await supabase
           .from("knowledge_sources")
           .select("*")
           .order("created_at", { ascending: false });
         if (!s.error && s.data) {
           setSources(s.data);
-          // Extract business info from latest source
-          const latestSource = s.data[0];
+          const latest = s.data[0];
           if (
-            latestSource?.meta &&
-            typeof latestSource.meta === "object" &&
-            !Array.isArray(latestSource.meta) &&
-            "business_info" in latestSource.meta
+            latest?.meta &&
+            typeof latest.meta === "object" &&
+            "business_info" in latest.meta
           ) {
-            setBusinessInfo(latestSource.meta.business_info);
+            setBusinessInfo(latest.meta.business_info);
           }
         }
-
-        // Load quick answers
         const qa = await supabase
           .from("business_quick_answers")
           .select("*")
@@ -103,24 +98,28 @@ export default function KnowledgePage() {
     if (!tenantId || !url) return;
     setBusy(true);
     setProgress(0);
+    const interval = setInterval(() => {
+      setProgress((p) => Math.min(p + 5, 90));
+    }, 400);
     try {
-      const interval = setInterval(() => {
-        setProgress((p) => Math.min(p + 5, 90));
-      }, 400);
       const result = await ingestWebsite(tenantId, url, {
         includeSubdomains: includeSubs,
         maxPages,
         maxDepth,
+        allowPatterns: allow ? [allow] : [],
+        denyPatterns: deny ? [deny] : [],
+        includeBookingProviders: true,
+        extraAllowedHosts: bookingHosts
+          ? bookingHosts.split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
       });
       clearInterval(interval);
       setProgress(100);
-
       if (result?.business_info) {
         setBusinessInfo(result.business_info);
         setActiveTab("business-info");
       }
 
-      // Reload sources
       const s = await supabase
         .from("knowledge_sources")
         .select("*")
@@ -128,33 +127,30 @@ export default function KnowledgePage() {
       if (!s.error && s.data) {
         setSources(s.data);
         if (!result?.business_info) {
-          const latestSource = s.data[0];
+          const latest = s.data[0];
           if (
-            latestSource?.meta &&
-            typeof latestSource.meta === "object" &&
-            !Array.isArray(latestSource.meta) &&
-            "business_info" in latestSource.meta
+            latest?.meta &&
+            typeof latest.meta === "object" &&
+            "business_info" in latest.meta
           ) {
-            setBusinessInfo(latestSource.meta.business_info);
+            setBusinessInfo(latest.meta.business_info);
             setActiveTab("business-info");
           }
         }
       }
-
-      // Reload quick answers
       const qa = await supabase
         .from("business_quick_answers")
         .select("*")
         .eq("tenant_id", tenantId);
       if (!qa.error && qa.data) setQuickAnswers(qa.data);
-
       setUrl("");
-      setTimeout(() => setProgress(0), 2000);
+      setTimeout(() => setProgress(0), 3000);
     } catch (e) {
+      clearInterval(interval);
       setProgress(0);
-      console.error("Ingestion failed:", e);
-      const msg = e instanceof Error ? e.message : "Failed to ingest website";
-      alert(`Ingestion failed: ${msg}`);
+      alert(
+        e instanceof Error ? e.message : "Failed to ingest website",
+      );
     } finally {
       setBusy(false);
     }
@@ -166,7 +162,7 @@ export default function KnowledgePage() {
     try {
       const res = await ragSearchEnhanced(tenantId, query, 8);
       setResults(res.results || []);
-      setSearchMetadata(res);
+      setSearchMeta(res);
     } catch (e) {
       alert(String(e));
     } finally {
@@ -174,12 +170,12 @@ export default function KnowledgePage() {
     }
   }
 
-  const businessInfoCards = [
+  const infoCards = [
     {
       icon: Clock,
       label: "Business Hours",
       value:
-        businessInfo.business_hours?.length > 0
+        businessInfo.business_hours?.length
           ? businessInfo.business_hours
               .map((h: any) =>
                 h.day && h.opens && h.closes
@@ -231,7 +227,7 @@ export default function KnowledgePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Star className="h-5 w-5 text-primary" />
-                AI-Powered Website Ingestion
+                Crawl & Ingest Website
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -241,26 +237,23 @@ export default function KnowledgePage() {
                     <CheckCircle className="h-4 w-4 text-green-500" />
                     Business Website URL
                   </label>
-                    <Input
-                      placeholder="https://example.com"
-                      value={url}
-                      onChange={(e) => setUrl(e.target.value)}
-                      className="mt-1"
-                    />
+                  <Input
+                    placeholder="https://example.com"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    className="mt-1"
+                  />
                   <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <Zap className="h-3 w-3" />
-                    AI extracts business hours, services, contact info, and
-                    builds knowledge chunks.
+                    AI extracts business hours, services, prices, contact info, and
+                    builds a knowledge base.
                   </div>
-                  {/* Crawl options */}
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                  <div className="mt-2 grid md:grid-cols-2 gap-2 text-xs">
                     <label className="inline-flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={includeSubs}
-                        onChange={(e) =>
-                          setIncludeSubs(e.target.checked)
-                        }
+                        onChange={(e) => setIncludeSubs(e.target.checked)}
                       />
                       Include subdomains
                     </label>
@@ -284,6 +277,33 @@ export default function KnowledgePage() {
                           setMaxDepth(Number(e.target.value) || 0)
                         }
                         className="h-7 w-20"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      Allow regex
+                      <Input
+                        value={allow}
+                        onChange={(e) => setAllow(e.target.value)}
+                        className="h-7"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      Deny regex
+                      <Input
+                        value={deny}
+                        onChange={(e) => setDeny(e.target.value)}
+                        className="h-7"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      Extra booking hosts
+                      <Input
+                        value={bookingHosts}
+                        onChange={(e) =>
+                          setBookingHosts(e.target.value)
+                        }
+                        placeholder="zenoti.com, othersite.com"
+                        className="h-7"
                       />
                     </div>
                   </div>
@@ -335,9 +355,7 @@ export default function KnowledgePage() {
                               <AlertCircle className="h-3 w-3 text-orange-500" />
                             )}
                             {s.meta?.crawl_method || "crawler"} •{" "}
-                            {new Date(
-                              s.created_at,
-                            ).toLocaleString()}
+                            {new Date(s.created_at).toLocaleString()}
                           </div>
                         </div>
                       ))
@@ -349,30 +367,30 @@ export default function KnowledgePage() {
                   <h3 className="font-semibold text-sm mb-2">
                     Quick Answers Created
                   </h3>
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {quickAnswers.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">
-                          No quick answers yet
-                        </div>
-                      ) : (
-                        quickAnswers.map((qa, i) => (
-                          <div
-                            key={i}
-                            className="text-xs p-2 rounded bg-white/60 dark:bg-gray-800/60"
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {quickAnswers.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">
+                        No quick answers yet
+                      </div>
+                    ) : (
+                      quickAnswers.map((qa, i) => (
+                        <div
+                          key={i}
+                          className="text-xs p-2 rounded bg-white/60 dark:bg-gray-800/60"
+                        >
+                          <Badge
+                            variant="outline"
+                            className="text-[10px]"
                           >
-                            <Badge
-                              variant="outline"
-                              className="text-[10px]"
-                            >
-                              {qa.question_type}
-                            </Badge>
-                            <div className="mt-1 text-muted-foreground truncate">
-                              {qa.answer}
-                            </div>
+                            {qa.question_type}
+                          </Badge>
+                          <div className="mt-1 text-muted-foreground truncate">
+                            {qa.answer}
                           </div>
-                        ))
-                      )}
-                    </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </Card>
               </div>
             </CardContent>
@@ -381,13 +399,11 @@ export default function KnowledgePage() {
 
         <TabsContent value="business-info" className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
-            {businessInfoCards.map((item, i) => (
+            {infoCards.map((item, i) => (
               <Card key={i} className="rounded-2xl shadow-sm">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
-                    <item.icon
-                      className="h-5 w-5 text-primary mt-1"
-                    />
+                    <item.icon className="h-5 w-5 text-primary mt-1" />
                     <div className="flex-1">
                       <h3 className="font-semibold text-sm">
                         {item.label}
@@ -412,7 +428,7 @@ export default function KnowledgePage() {
             <Card className="rounded-2xl shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">
-                  Services Offered
+                  Services & Pricing
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -464,12 +480,11 @@ export default function KnowledgePage() {
                   placeholder="e.g., What are your business hours?"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  onKeyPress={(e) =>
-                    e.key === "Enter" &&
-                    !busy &&
-                    query &&
-                    handleSearch()
-                  }
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter" && query && !busy) {
+                      handleSearch();
+                    }
+                  }}
                 />
                 <Button
                   onClick={handleSearch}
@@ -479,13 +494,12 @@ export default function KnowledgePage() {
                   {busy ? "Searching…" : "Search"}
                 </Button>
               </div>
-
-              {searchMetadata && (
+              {searchMeta && (
                 <div className="flex gap-2 items-center">
                   <Badge variant="outline">
-                    {searchMetadata.search_type}
+                    {searchMeta.search_type}
                   </Badge>
-                  {searchMetadata.query_expanded && (
+                  {searchMeta.query_expanded && (
                     <Badge variant="secondary">Query Expanded</Badge>
                   )}
                   <span className="text-xs text-muted-foreground">
@@ -493,12 +507,11 @@ export default function KnowledgePage() {
                   </span>
                 </div>
               )}
-
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {results.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Zap className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>Run a search to see intelligent knowledge matches</p>
+                    <p>Run a search to see results</p>
                   </div>
                 ) : (
                   results.map((r, i) => (

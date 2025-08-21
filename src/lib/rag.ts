@@ -1,9 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Crawl and ingest a website into the knowledge base.
- * Accepts optional crawl options (include subdomains, page limits, etc.).
- * Returns { ok, pagesIndexed, business_info } on success.
+ * Crawl and ingest a website. Calls our new universal crawler.
+ * You can override options for subdomains, page limits, depth, rate, allow/deny patterns,
+ * booking providers, etc.
  */
 export async function ingestWebsite(
   tenantId: string,
@@ -17,6 +17,8 @@ export async function ingestWebsite(
     rateLimitMs?: number;
     allowPatterns?: string[];
     denyPatterns?: string[];
+    includeBookingProviders?: boolean;
+    extraAllowedHosts?: string[];
   },
 ) {
   const { data, error } = await supabase.functions.invoke("crawl-ingest", {
@@ -27,9 +29,9 @@ export async function ingestWebsite(
         includeSubdomains: true,
         respectRobots: true,
         followSitemaps: true,
-        maxPages: 120,
+        maxPages: 160,
         maxDepth: 4,
-        rateLimitMs: 400,
+        rateLimitMs: 350,
         ...(options || {}),
       },
     },
@@ -38,6 +40,10 @@ export async function ingestWebsite(
   return data;
 }
 
+/**
+ * RAG search functions remain unchanged.
+ * (ragSearchEnhanced is used by KnowledgePage to search extracted chunks.)
+ */
 export async function ragSearch(
   tenant_id: string,
   query: string,
@@ -62,10 +68,6 @@ export async function getQuickAnswer(
   return data?.[0] || null;
 }
 
-/**
- * Perform an enhanced search: first try quick answers, then fallback to semantic search.
- * Returns result set plus metadata on search type and query expansion.
- */
 export async function ragSearchEnhanced(
   tenant_id: string,
   query: string,
@@ -86,7 +88,6 @@ export async function ragSearchEnhanced(
       query_expanded: false,
     };
   }
-
   const { data, error } = await supabase.functions.invoke("search", {
     body: { tenant_id, query, k },
   });
@@ -100,9 +101,6 @@ export async function ragSearchEnhanced(
   );
 }
 
-/**
- * Log an unanswered user question for later analysis / training.
- */
 export async function logUnanswered(
   tenant_id: string,
   question: string,
