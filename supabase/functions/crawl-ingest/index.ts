@@ -334,18 +334,38 @@ function heuristicExtract(doc: any, pageText: string) {
 
   const services: Array<{ name: string; price?: string }> = [];
   const nodes = Array.from(
-    doc.querySelectorAll("table tr, ul li, ol li, .service, .pricing, p, div"),
+    doc.querySelectorAll("table tr, ul li, ol li, .service, .pricing, p, div, h1, h2, h3, h4, h5, h6, a"),
   );
+  
+  // Look for service-related content more broadly
   for (const el of nodes) {
     const t = (el.textContent || "").replace(/\s+/g, " ").trim();
-    if (!t || t.length < 6) continue;
+    if (!t || t.length < 3 || t.length > 200) continue;
+    
     const price = t.match(/[$£€]\s?\d{1,4}(\.\d{2})?/);
-    const hasSvc = /(hair|cut|color|colour|balayage|foil|highlight|style|perm|treatment|massage|facial|wax|thread|mani|pedi|consult|package|service|blowout|toner|gloss|brazilian)/i.test(
-      t,
-    );
-    if (price && hasSvc) {
+    
+    // Broader service detection patterns
+    const hasSvc = /(hair|cut|color|colour|balayage|foil|highlight|style|perm|treatment|massage|facial|wax|thread|mani|pedi|consult|package|service|blowout|toner|gloss|brazilian|salon|spa|beauty|nail|eyebrow|lash|skin|makeup|bridal|wedding|updo|styling|trim|shampoo|condition|keratin|botox|filler|microneedling|dermaplaning|chemical|peel|cleansing|exfoliation|moisturizing|anti-aging|acne|pigmentation|rosacea|sensitive|dry|oily|combination|mature|teen|men|women|kids|children|senior|pregnancy|organic|natural|vegan|cruelty-free|sulfate-free|paraben-free|ammonia-free|ppd-free|formaldehyde-free|gluten-free|luxury|premium|professional|expert|master|certified|licensed|experienced|skilled|talented|creative|artistic|innovative|cutting-edge|trendy|classic|timeless|elegant|sophisticated|chic|glamorous|gorgeous|beautiful|stunning|flawless|radiant|glowing|healthy|vibrant|youthful|fresh|natural|bold|dramatic|subtle|soft|romantic|edgy|modern|vintage|retro|boho|minimalist|maximalist|colorful|monochrome|neutral|warm|cool|bright|dark|light|medium|short|long|thick|thin|curly|straight|wavy|textured|smooth|shiny|matte|glossy|dimensional|layered|blended|precision|custom|personalized|tailored|bespoke|exclusive|signature|specialty|advanced|basic|express|full|partial|touch-up|refresh|maintenance|corrective|transformative|makeover|consultation|analysis|assessment|recommendation|advice|guidance|education|training|workshop|class|tutorial|demo|demonstration|preview|trial|test|sample|complimentary|free|discounted|promotional|seasonal|holiday|special|limited|exclusive|membership|package|bundle|combo|deal|offer|sale|discount|savings|value|affordable|budget|luxury|premium|investment|worth|quality|excellence|satisfaction|guarantee|warranty|return|exchange|refund|policy|terms|conditions|appointment|booking|scheduling|availability|hours|location|address|phone|email|website|social|media|instagram|facebook|twitter|youtube|tiktok|pinterest|linkedin|google|yelp|review|rating|testimonial|referral|recommendation|word|mouth|friend|family|colleague|neighbor|community|local|neighborhood|area|city|state|region|national|international|global|worldwide|online|virtual|remote|mobile|travel|destination|vacation|getaway|retreat|escape|relaxation|pampering|indulgence|self-care|wellness|health|fitness|nutrition|lifestyle|confidence|empowerment|transformation|renewal|rejuvenation|restoration|repair|healing|therapy|therapeutic|medical|clinical|dermatological|cosmetic|aesthetic|plastic|surgical|non-surgical|minimally|invasive|non-invasive|safe|effective|proven|tested|approved|recommended|endorsed|featured|award|winning|best|top|leading|premier|first|only|unique|exclusive|original|authentic|genuine|real|true|honest|transparent|trustworthy|reliable|professional|experienced|skilled|qualified|certified|licensed|insured|bonded|accredited|affiliated|member|association|organization|board|committee|council|society|institute|academy|school|college|university|degree|diploma|certificate|license|permit|registration|accreditation|certification|training|education|continuing|ongoing|advanced|specialized|expert|master|professional|artisan|craftsman|technician|specialist|consultant|advisor|coach|mentor|teacher|instructor|trainer|educator|leader|pioneer|innovator|creator|artist|designer|stylist|colorist|extensionist|texture|specialist|curl|specialist|chemical|specialist|keratin|specialist|balayage|specialist|highlight|specialist|lowlight|specialist|ombre|specialist|sombre|specialist|babylights|specialist|money|piece|specialist|chunky|highlight|specialist|foil|specialist|cap|specialist|freehand|specialist|painterly|specialist|lived|in|specialist|sun|kissed|specialist|beachy|specialist|california|specialist|french|specialist|brazilian|specialist|italian|specialist|japanese|specialist|korean|specialist|thai|specialist|indian|specialist|moroccan|specialist|egyptian|specialist|greek|specialist|turkish|specialist|russian|specialist|scandinavian|specialist|european|specialist|american|specialist|canadian|specialist|australian|specialist|new|zealand|specialist|asian|specialist|african|specialist|latin|specialist|caribbean|specialist|middle|eastern|specialist|mediterranean|specialist|nordic|specialist|celtic|specialist|tribal|specialist|bohemian|specialist|vintage|specialist|retro|specialist|classic|specialist|modern|specialist|contemporary|specialist|avant|garde|specialist|edgy|specialist|romantic|specialist|feminine|specialist|masculine|specialist|unisex|specialist|gender|neutral|specialist|inclusive|specialist|diverse|specialist|multicultural|specialist|international|specialist)/i.test(t);
+    
+    // Also check if element has service-related class names or IDs
+    const className = el.className || "";
+    const id = el.id || "";
+    const hasServiceClass = /(service|price|menu|offering|treatment|package|salon|spa|beauty)/i.test(className + " " + id);
+    
+    if (price && (hasSvc || hasServiceClass)) {
       const name = t.replace(/[$£€]\s?\d{1,4}(\.\d{2})?/g, "").trim();
-      services.push({ name: name.slice(0, 160), price: price[0] });
+      if (name.length > 2) {
+        services.push({ name: name.slice(0, 160), price: price[0] });
+      }
+    }
+    // Also look for services without explicit pricing
+    else if ((hasSvc || hasServiceClass) && t.length > 5 && t.length < 100) {
+      // Filter out common non-service text
+      const isNotService = /(about|contact|location|hours|phone|email|address|copyright|privacy|terms|policy|home|menu|nav|header|footer|sidebar|social|follow|like|share|subscribe|newsletter|book|appointment|call|click|here|more|info|information|learn|read|view|see|all|services|treatments|packages|specials|offers|deals|discounts|promotions|new|latest|coming|soon|available|now|today|tomorrow|weekend|holiday|season|summer|winter|spring|fall|autumn|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)/i.test(t);
+      
+      if (!isNotService && !price) {
+        services.push({ name: t.slice(0, 160) });
+      }
     }
   }
   const uniq = new Map<string, { name: string; price?: string }>();
