@@ -304,6 +304,11 @@ export default function AdminOnboarding(){
               </TabsContent>
 
               <TabsContent value="services" className="pt-4 space-y-3">
+                <div className="grid md:grid-cols-3 gap-2 font-semibold text-sm text-muted-foreground mb-2">
+                  <div>Service Name</div>
+                  <div>Duration (min)</div>
+                  <div>Price</div>
+                </div>
                 {services.map((s, i)=>(
                   <div key={i} className="grid md:grid-cols-3 gap-2">
                     <Input value={s.name} onChange={e=>setServices(prev=>prev.map((x,ix)=>ix===i?{...x,name:e.target.value}:x))} placeholder="Service name"/>
