@@ -298,14 +298,43 @@ async function extractWithAI(content: string): Promise<{ services: ExtractedServ
   console.log('Using OpenAI for comprehensive content extraction');
   console.log(`Processing ${content.length} characters of content`);
   
-  // Split content into chunks to process more data
-  const maxChunkSize = 30000; // Increased from 15000
-  const chunks = [];
-  for (let i = 0; i < content.length; i += maxChunkSize) {
-    chunks.push(content.slice(i, i + maxChunkSize));
-  }
+  // Prioritize service-rich content first - extract most relevant pages
+  const serviceKeywords = ['service', 'treatment', 'pricing', 'price', 'package', 'facial', 'massage', 'hair', 'nail', 'spa', 'salon', 'menu'];
+  const hoursKeywords = ['hours', 'open', 'close', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   
-  console.log(`Processing ${chunks.length} content chunks`);
+  // Split content into larger chunks to reduce API calls and processing time
+  const maxChunkSize = 50000; // Increased for efficiency
+  const maxChunks = 8; // Limit to prevent timeouts
+  const chunks = [];
+  
+  // Prioritize chunks with service/pricing keywords
+  const contentSections = content.split(/=== PAGE \d+:/);
+  const prioritizedSections = contentSections.sort((a, b) => {
+    const aScore = serviceKeywords.reduce((score, keyword) => 
+      score + (a.toLowerCase().includes(keyword) ? 10 : 0), 0) +
+      hoursKeywords.reduce((score, keyword) => 
+      score + (a.toLowerCase().includes(keyword) ? 5 : 0), 0);
+    const bScore = serviceKeywords.reduce((score, keyword) => 
+      score + (b.toLowerCase().includes(keyword) ? 10 : 0), 0) +
+      hoursKeywords.reduce((score, keyword) => 
+      score + (b.toLowerCase().includes(keyword) ? 5 : 0), 0);
+    return bScore - aScore;
+  });
+  
+  // Combine prioritized sections into chunks
+  let currentChunk = '';
+  for (const section of prioritizedSections) {
+    if (currentChunk.length + section.length > maxChunkSize) {
+      if (currentChunk) chunks.push(currentChunk);
+      currentChunk = section;
+      if (chunks.length >= maxChunks) break;
+    } else {
+      currentChunk += '\n=== PAGE: ' + section;
+    }
+  }
+  if (currentChunk && chunks.length < maxChunks) chunks.push(currentChunk);
+  
+  console.log(`Processing ${chunks.length} prioritized content chunks (max ${maxChunks})`);
   
   let allServices: ExtractedService[] = [];
   let allHours: ExtractedHours[] = [];
@@ -369,9 +398,10 @@ ${chunk}`;
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: prompt }],
-          max_tokens: 3000, // Increased for more comprehensive extraction
-          temperature: 0.1, // Lower temperature for more consistent extraction
+          max_tokens: 4000, // Increased for comprehensive extraction
+          temperature: 0.1,
         }),
+        signal: AbortSignal.timeout(15000) // 15 second timeout per request
       });
 
       if (!response.ok) {
@@ -402,9 +432,9 @@ ${chunk}`;
       continue;
     }
     
-    // Add small delay between requests to avoid rate limits
+    // Shorter delay since we're processing fewer chunks
     if (i < chunks.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
   }
   
