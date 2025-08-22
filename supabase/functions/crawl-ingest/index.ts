@@ -60,29 +60,9 @@ async function fetchWithFirecrawl(url: string, options: CrawlOptions): Promise<{
     },
     body: JSON.stringify({
       url: url,
-      limit: options.maxPages || 50, // Increased to capture more pages
+      limit: options.maxPages || 50,
       scrapeOptions: {
-        formats: ['markdown', 'html'],
-        includeTags: ['title', 'meta', 'script[type="application/ld+json"]', 'div', 'section', 'article', 'table'],
-        onlyMainContent: false,
-        removeBase64Images: true,
-        extractorOptions: {
-          mode: 'llm-extraction-from-raw-html'
-        }
-      },
-      crawlerOptions: {
-        includes: options.includePatterns || [
-          '*services*', '*pricing*', '*packages*', '*menu*', '*treatment*', 
-          '*book*', '*appointment*', '*schedule*', '*about*', '*hours*',
-          '*contact*', '*location*', '*staff*', '*salon*', '*spa*'
-        ],
-        excludes: options.excludePatterns || [
-          '*/blog/*', '*/news/*', '*/privacy*', '*/terms*', 
-          '*wp-admin*', '*login*', '*register*', '*.pdf', '*.jpg', '*.png'
-        ],
-        maxDepth: options.maxDepth || 3,
-        allowBackwardCrawling: true,
-        allowExternalContentLinks: false
+        formats: ['markdown', 'html']
       }
     }),
   });
