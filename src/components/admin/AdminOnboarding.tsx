@@ -79,7 +79,7 @@ const AdminOnboarding = () => {
         body: {
           url: websiteUrl,
           tenant_id: 'demo', // Using demo tenant for admin onboarding
-          options
+          crawlOptions: options
         }
       });
 
