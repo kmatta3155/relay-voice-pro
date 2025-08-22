@@ -363,7 +363,7 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
   return services;
 }
 
-async function extractWithAI(content: string): Promise<{ services: ExtractedService[]; hours: ExtractedHours[] }> {
+async function extractWithAI(content: string): Promise<{ services: ExtractedService[]; hours: ExtractedHours[]; business_info?: any }> {
   if (!OPENAI_API_KEY) {
     console.log('No OpenAI API key available, skipping AI extraction');
     return { services: [], hours: [] };
@@ -549,7 +549,8 @@ ${chunk}`;
   
   return {
     services: uniqueServices,
-    hours: uniqueHours
+    hours: uniqueHours,
+    business_info: businessInfo
   };
 }
 
@@ -707,7 +708,7 @@ serve(async (req) => {
     const result: ExtractionResult = {
       services: uniqueServices,
       hours: uniqueHours,
-      business_info: businessInfo,
+      business_info: aiData.business_info,
       pages_fetched,
       used_firecrawl,
       extraction_method
