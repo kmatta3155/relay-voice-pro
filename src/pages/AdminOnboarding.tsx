@@ -90,21 +90,28 @@ export default function AdminOnboarding() {
       if (file.type === "text/plain") {
         text = await file.text();
       } else if (file.type === "application/pdf") {
-        // For PDFs, we'll extract text on the server side
+        // For PDFs, we'll extract text using Supabase edge function
         const formData = new FormData();
         formData.append('file', file);
         
-        const response = await fetch('/api/extract-pdf', {
-          method: 'POST',
+        const { data, error } = await supabase.functions.invoke('pdf-extract', {
           body: formData
         });
         
-        if (!response.ok) {
-          throw new Error('Failed to extract text from PDF');
+        if (error) {
+          throw new Error(error.message || 'Failed to extract text from PDF');
         }
         
-        const result = await response.json();
-        text = result.text;
+        text = data.text;
+        
+        // Show additional message if it's a fallback response
+        if (data.message) {
+          toast({
+            title: "PDF Processed",
+            description: data.message,
+            variant: "default",
+          });
+        }
       } else {
         // For DOC/DOCX files, we'd need additional handling
         throw new Error('Document format not yet supported. Please use PDF or TXT files, or copy/paste the text manually.');
