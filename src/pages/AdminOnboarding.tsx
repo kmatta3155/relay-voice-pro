@@ -100,7 +100,24 @@ export default function AdminOnboarding() {
   const [manualText, setManualText] = useState("");
   const [validationStatus, setValidationStatus] = useState("");
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: ures } = await supabase.auth.getUser();
+        const uid = ures?.user?.id;
+        if (!uid) return;
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("active_tenant_id")
+          .eq("id", uid)
+          .maybeSingle();
+        setTenantId(p?.active_tenant_id || null);
+      } catch {}
+    })();
+  }, []);
 
   const consolidateAllData = async () => {
     if (dataSources.length === 0) {
@@ -108,14 +125,18 @@ export default function AdminOnboarding() {
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const result = await supabase.functions.invoke('consolidate-business-data', {
-        body: {
-          dataSources: dataSources,
-          tenantId: '0e59c584-15e2-4c96-9396-9760b1a8d447' // Replace with actual tenant ID
-        }
-      });
+setIsLoading(true);
+try {
+  if (!tenantId) {
+    toast({ title: "Error", description: "No active workspace selected", variant: "destructive" });
+    return;
+  }
+  const result = await supabase.functions.invoke('consolidate-business-data', {
+    body: {
+      dataSources: dataSources,
+      tenantId: tenantId
+    }
+  });
 
       if (result.error) {
         throw new Error(result.error.message || 'Data consolidation failed');
@@ -137,23 +158,28 @@ export default function AdminOnboarding() {
     }
   };
 
-  const analyzeWebsite = async (deepCrawl = false) => {
-    if (!websiteUrl.trim()) {
-      toast({ title: "Error", description: "Please enter a website URL", variant: "destructive" });
-      return;
-    }
+const analyzeWebsite = async (deepCrawl = false) => {
+  if (!websiteUrl.trim()) {
+    toast({ title: "Error", description: "Please enter a website URL", variant: "destructive" });
+    return;
+  }
+  if (!tenantId) {
+    toast({ title: "Error", description: "No active workspace selected", variant: "destructive" });
+    return;
+  }
 
-    setIsLoading(true);
-    try {
-      const result = await supabase.functions.invoke('crawl-ingest', {
-        body: {
-          url: websiteUrl,
-          crawlOptions: {
-            ...crawlOptions,
-            maxPages: deepCrawl ? crawlOptions.maxPages * 2 : crawlOptions.maxPages
-          }
+  setIsLoading(true);
+  try {
+    const result = await supabase.functions.invoke('crawl-ingest', {
+      body: {
+        url: websiteUrl,
+        tenant_id: tenantId,
+        options: {
+          ...crawlOptions,
+          maxPages: deepCrawl ? crawlOptions.maxPages * 2 : crawlOptions.maxPages
         }
-      });
+      }
+    });
 
       if (result.error) {
         throw new Error(result.error.message || 'Analysis failed');
