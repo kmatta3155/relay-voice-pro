@@ -177,7 +177,7 @@ export default function AdminOnboarding(){
   async function loadTenants(){
     try {
       setTenantsLoading(true);
-      const { data, error } = await supabase.functions.invoke("tenants-admin", { body: { action: "list" } });
+      const { data, error } = await supabase.functions.invoke("customers-admin", { body: { action: "list" } });
       if (error) throw error;
       setTenants(data?.tenants || []);
     } catch (err:any) {
@@ -194,7 +194,7 @@ export default function AdminOnboarding(){
 
   async function openTenant(id: string){
     try {
-      const { data, error } = await supabase.functions.invoke("tenants-admin", { body: { action: "details", tenantId: id }});
+      const { data, error } = await supabase.functions.invoke("customers-admin", { body: { action: "details", tenantId: id }});
       if (error) throw error;
       setTenantId(id);
       setGreeting(data?.agent?.greeting || "");
@@ -218,7 +218,7 @@ export default function AdminOnboarding(){
   async function deleteTenant(id: string){
     try {
       if (!window.confirm("Delete this tenant and all its data? This cannot be undone.")) return;
-      const { error } = await supabase.functions.invoke("tenants-admin", { body: { action: "delete", tenantId: id }});
+      const { error } = await supabase.functions.invoke("customers-admin", { body: { action: "delete", tenantId: id }});
       if (error) throw error;
       if (tenantId === id) setTenantId(null);
       await loadTenants();
