@@ -37,6 +37,7 @@ interface ExtractedHours {
 interface ExtractionResult {
   services: ExtractedService[];
   hours: ExtractedHours[];
+  business_info?: any;
   pages_fetched: number;
   used_firecrawl: boolean;
   extraction_method: string;
@@ -411,20 +412,21 @@ async function extractWithAI(content: string): Promise<{ services: ExtractedServ
   
   let allServices: ExtractedService[] = [];
   let allHours: ExtractedHours[] = [];
+  let businessInfo: any = null;
   
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     console.log(`Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
     
-    const prompt = `You are a business data extraction expert. Extract ALL services, treatments, packages, and business hours from this salon/spa website content. Be comprehensive and capture every service offered.
+  const prompt = `You are a business data extraction expert. Extract ALL services, treatments, packages, business hours, and business information from this salon/spa website content. Be comprehensive but filter out junk data.
 
 CRITICAL INSTRUCTIONS:
-1. Extract EVERY service, treatment, package, and offering mentioned
-2. Include service packages, bundles, and individual treatments
-3. Look for pricing information in multiple formats ($X, $XX.XX, etc.)
-4. Extract duration from text like "60 minutes", "1 hour", "90 min"
+1. Extract ONLY legitimate services, treatments, packages - NOT navigation text, headers, or contact info
+2. Filter out fragments like "feel free to call", "you can reach us", "we have two locations" 
+3. Look for actual service names like "Haircut", "Color Treatment", "Facial", "Massage"
+4. Extract business addresses, phone numbers, and contact information
 5. Find business hours from any mention of opening/closing times
-6. Include special services, seasonal offerings, and promotions
+6. If no explicit prices exist, do NOT make up prices - omit price field entirely
 
 Return ONLY valid JSON:
 {
@@ -438,25 +440,42 @@ Return ONLY valid JSON:
   ],
   "hours": [
     {
-      "day": "Monday",
+      "day": "Monday", 
       "open_time": "10:00 AM",
       "close_time": "7:00 PM",
       "is_closed": false
     }
-  ]
+  ],
+  "business_info": {
+    "name": "Business Name",
+    "addresses": ["Full address 1", "Full address 2"],
+    "phone": "Phone number",
+    "email": "Email address"
+  }
 }
 
-PRICING EXTRACTION RULES:
-- Extract all price formats: $50, $50.00, 50.00, etc.
-- For price ranges like "$50-80", use the starting price
-- For packages, extract the package price
-- If no price found, omit the price field
+SERVICE EXTRACTION RULES:
+- ONLY extract actual service names, not contact information or location details
+- Skip fragments, partial sentences, and navigation text
+- Look for clear service categories like cuts, color, treatments, facials, etc.
+- If a service name is longer than 100 characters, it's likely junk data - skip it
+
+PRICING RULES:
+- Extract explicit prices only: $50, $50.00, 50.00, etc.
+- For price ranges like "$50-80", use the starting price  
+- If NO pricing information exists on the site, omit all price fields
+- Do NOT assign arbitrary high prices like $2409 or $832
+
+ADDRESS EXTRACTION:
+- Look for complete street addresses with city, state
+- Extract ALL locations if multiple addresses exist
+- Include zip codes when available
 
 HOURS EXTRACTION RULES:
 - Convert all time formats to 12-hour (9:00 AM, 5:30 PM)
 - Handle ranges like "10AM-7PM" or "10:00-19:00"
 - If a day is not mentioned, don't include it
-- Sunday closure should be marked as is_closed: true
+- Mark closed days as is_closed: true
 
 Website Content Chunk ${i + 1}:
 ${chunk}`;
@@ -496,6 +515,11 @@ ${chunk}`;
       }
       if (parsed.hours && Array.isArray(parsed.hours)) {
         allHours.push(...parsed.hours);
+      }
+      
+      // Store business info from first chunk that has it
+      if (parsed.business_info && !businessInfo) {
+        businessInfo = parsed.business_info;
       }
       
       console.log(`Chunk ${i + 1} extracted: ${parsed.services?.length || 0} services, ${parsed.hours?.length || 0} hours`);
@@ -675,6 +699,7 @@ serve(async (req) => {
     const result: ExtractionResult = {
       services: uniqueServices,
       hours: uniqueHours,
+      business_info: businessInfo,
       pages_fetched,
       used_firecrawl,
       extraction_method

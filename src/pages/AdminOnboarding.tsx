@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Clock, 
   DollarSign, 
@@ -17,7 +18,9 @@ import {
   Briefcase,
   AlertCircle,
   CheckCircle,
-  Loader2
+  Loader2,
+  Upload,
+  FileText
 } from "lucide-react";
 
 interface Service {
@@ -38,7 +41,7 @@ interface BusinessInfo {
   name?: string;
   phone?: string;
   email?: string;
-  address?: string;
+  addresses?: string[];
   website?: string;
   description?: string;
   services: Service[];
@@ -48,6 +51,8 @@ interface BusinessInfo {
 export default function AdminOnboarding() {
   const [tenantId, setTenantId] = useState<string>("");
   const [businessUrl, setBusinessUrl] = useState("");
+  const [manualText, setManualText] = useState("");
+  const [extractionMode, setExtractionMode] = useState<"website" | "manual">("website");
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionProgress, setExtractionProgress] = useState("");
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo | null>(null);
@@ -72,10 +77,28 @@ export default function AdminOnboarding() {
   }, []);
 
   async function startExtraction() {
-    if (!tenantId || !businessUrl) {
+    if (!tenantId) {
       toast({
         title: "Missing Information",
+        description: "Tenant ID not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (extractionMode === "website" && !businessUrl) {
+      toast({
+        title: "Missing Information", 
         description: "Please enter your business website URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (extractionMode === "manual" && !manualText.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter your business information text",
         variant: "destructive",
       });
       return;
@@ -84,57 +107,108 @@ export default function AdminOnboarding() {
     setIsExtracting(true);
     setError(null);
     setBusinessInfo(null);
-    setExtractionProgress("Analyzing website structure...");
-
+    
     try {
-      const { data, error } = await supabase.functions.invoke('crawl-ingest', {
-        body: {
-          tenantId,
-          url: businessUrl,
-          options: {
-            includeSubdomains: true,
-            respectRobots: true,
-            followSitemaps: true,
-            maxPages: 25,
-            maxDepth: 3,
-            rateLimitMs: 300,
-            allowPatterns: ["services", "pricing", "packages", "menu", "treatment", "book", "appointment", "schedule", "about", "hours"],
-            denyPatterns: ["\\.(pdf|jpg|jpeg|png|gif|webp|svg|mp4|mp3)$", "wp-admin", "login", "register"],
-            includeBookingProviders: true,
+      if (extractionMode === "website") {
+        setExtractionProgress("Analyzing website structure...");
+        
+        const { data, error } = await supabase.functions.invoke('crawl-ingest', {
+          body: {
+            tenantId,
+            url: businessUrl,
+            options: {
+              includeSubdomains: true,
+              respectRobots: true,
+              followSitemaps: true,
+              maxPages: 25,
+              maxDepth: 3,
+              rateLimitMs: 300,
+              allowPatterns: ["services", "pricing", "packages", "menu", "treatment", "book", "appointment", "schedule", "about", "hours", "contact"],
+              denyPatterns: ["\\.(pdf|jpg|jpeg|png|gif|webp|svg|mp4|mp3)$", "wp-admin", "login", "register"],
+              includeBookingProviders: true,
+            }
           }
-        }
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Extraction failed');
-      }
-
-      if (data?.services || data?.hours) {
-        // Transform the response to match our expected format
-        const businessInfo = {
-          services: data.services?.map((service: any) => ({
-            name: service.name,
-            price: service.price,
-            duration_minutes: service.duration_minutes,
-            category: service.category
-          })) || [],
-          businessHours: data.hours?.map((hour: any) => ({
-            day: hour.day,
-            opens: hour.open_time,
-            closes: hour.close_time,
-            isClosed: hour.is_closed
-          })) || []
-        };
-        
-        setBusinessInfo(businessInfo);
-        setExtractionProgress("Extraction completed successfully!");
-        
-        toast({
-          title: "Extraction Complete!",
-          description: `Found ${data.services?.length || 0} services and ${data.hours?.length || 0} business hours. Pages fetched: ${data.pages_fetched || 0}`,
         });
+
+        if (error) {
+          throw new Error(error.message || 'Extraction failed');
+        }
+
+        if (data?.services || data?.hours || data?.business_info) {
+          // Transform the response to match our expected format
+          const businessInfo = {
+            name: data.business_info?.name,
+            phone: data.business_info?.phone,
+            email: data.business_info?.email,
+            addresses: data.business_info?.addresses,
+            services: data.services?.map((service: any) => ({
+              name: service.name,
+              price: service.price,
+              duration_minutes: service.duration_minutes,
+              category: service.category
+            })) || [],
+            businessHours: data.hours?.map((hour: any) => ({
+              day: hour.day,
+              opens: hour.open_time,
+              closes: hour.close_time,
+              isClosed: hour.is_closed
+            })) || []
+          };
+          
+          setBusinessInfo(businessInfo);
+          setExtractionProgress("Extraction completed successfully!");
+          
+          toast({
+            title: "Extraction Complete!",
+            description: `Found ${data.services?.length || 0} services, ${data.hours?.length || 0} business hours, and ${data.business_info?.addresses?.length || 0} addresses. Pages fetched: ${data.pages_fetched || 0}`,
+          });
+        } else {
+          throw new Error('No data extracted from website');
+        }
       } else {
-        throw new Error('No data extracted from website');
+        setExtractionProgress("Processing manual text...");
+        
+        const { data, error } = await supabase.functions.invoke('text-extract', {
+          body: {
+            tenantId,
+            text: manualText
+          }
+        });
+
+        if (error) {
+          throw new Error(error.message || 'Text extraction failed');
+        }
+
+        if (data?.services || data?.hours || data?.business_info) {
+          const businessInfo = {
+            name: data.business_info?.name,
+            phone: data.business_info?.phone,
+            email: data.business_info?.email,
+            addresses: data.business_info?.addresses,
+            services: data.services?.map((service: any) => ({
+              name: service.name,
+              price: service.price,
+              duration_minutes: service.duration_minutes,
+              category: service.category
+            })) || [],
+            businessHours: data.hours?.map((hour: any) => ({
+              day: hour.day,
+              opens: hour.open_time,
+              closes: hour.close_time,
+              isClosed: hour.is_closed
+            })) || []
+          };
+          
+          setBusinessInfo(businessInfo);
+          setExtractionProgress("Text processing completed!");
+          
+          toast({
+            title: "Processing Complete!",
+            description: `Found ${data.services?.length || 0} services and ${data.hours?.length || 0} business hours from your text.`,
+          });
+        } else {
+          throw new Error('No data extracted from text');
+        }
       }
 
     } catch (error: any) {
@@ -208,35 +282,90 @@ export default function AdminOnboarding() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5" />
-            Website Analysis
+            Business Information Extraction
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="website">Business Website URL</Label>
-            <Input
-              id="website"
-              type="url"
-              placeholder="https://www.yourbusiness.com"
-              value={businessUrl}
-              onChange={(e) => setBusinessUrl(e.target.value)}
-              disabled={isExtracting}
-            />
+          {/* Mode Selection */}
+          <div className="space-y-3">
+            <Label>Extraction Method</Label>
+            <div className="flex gap-4">
+              <Button
+                variant={extractionMode === "website" ? "default" : "outline"}
+                onClick={() => setExtractionMode("website")}
+                disabled={isExtracting}
+                className="flex-1"
+              >
+                <Globe className="h-4 w-4 mr-2" />
+                Website Analysis
+              </Button>
+              <Button
+                variant={extractionMode === "manual" ? "default" : "outline"}
+                onClick={() => setExtractionMode("manual")}
+                disabled={isExtracting}
+                className="flex-1"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Manual Text/PDF
+              </Button>
+            </div>
           </div>
+
+          {extractionMode === "website" ? (
+            <div className="space-y-2">
+              <Label htmlFor="website">Business Website URL</Label>
+              <Input
+                id="website"
+                type="url"
+                placeholder="https://www.yourbusiness.com"
+                value={businessUrl}
+                onChange={(e) => setBusinessUrl(e.target.value)}
+                disabled={isExtracting}
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="manual-text">Business Information</Label>
+              <Textarea
+                id="manual-text"
+                placeholder="Paste your business information here - services, pricing, hours, contact details, etc. You can copy text from PDFs, brochures, or any document containing your business details."
+                value={manualText}
+                onChange={(e) => setManualText(e.target.value)}
+                disabled={isExtracting}
+                rows={10}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Tip: Include service names, prices, durations, business hours, addresses, and contact information for best results.
+              </p>
+            </div>
+          )}
 
           <Button 
             onClick={startExtraction} 
-            disabled={isExtracting || !businessUrl.trim()}
+            disabled={isExtracting || (extractionMode === "website" && !businessUrl.trim()) || (extractionMode === "manual" && !manualText.trim())}
             className="w-full"
             size="lg"
           >
             {isExtracting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analyzing...
+                {extractionMode === "website" ? "Analyzing..." : "Processing..."}
               </>
             ) : (
-              "Start AI Analysis"
+              <>
+                {extractionMode === "website" ? (
+                  <>
+                    <Globe className="h-4 w-4 mr-2" />
+                    Start AI Website Analysis
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Process Business Information
+                  </>
+                )}
+              </>
             )}
           </Button>
 
@@ -306,13 +435,17 @@ export default function AdminOnboarding() {
                   </div>
                 )}
                 
-                {businessInfo.address && (
+                {businessInfo.addresses && businessInfo.addresses.length > 0 && (
                   <div className="space-y-1">
                     <Label className="text-sm font-medium flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
-                      Address
+                      {businessInfo.addresses.length > 1 ? 'Addresses' : 'Address'}
                     </Label>
-                    <p className="text-sm">{businessInfo.address}</p>
+                    <div className="space-y-1">
+                      {businessInfo.addresses.map((address, idx) => (
+                        <p key={idx} className="text-sm">{address}</p>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
