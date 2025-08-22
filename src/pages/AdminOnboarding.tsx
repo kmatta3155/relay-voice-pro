@@ -109,16 +109,32 @@ export default function AdminOnboarding() {
         throw new Error(error.message || 'Extraction failed');
       }
 
-      if (data?.success) {
-        setBusinessInfo(data.data.businessInfo);
+      if (data?.services || data?.hours) {
+        // Transform the response to match our expected format
+        const businessInfo = {
+          services: data.services?.map((service: any) => ({
+            name: service.name,
+            price: service.price,
+            duration_minutes: service.duration_minutes,
+            category: service.category
+          })) || [],
+          businessHours: data.hours?.map((hour: any) => ({
+            day: hour.day,
+            opens: hour.open_time,
+            closes: hour.close_time,
+            isClosed: hour.is_closed
+          })) || []
+        };
+        
+        setBusinessInfo(businessInfo);
         setExtractionProgress("Extraction completed successfully!");
         
         toast({
           title: "Extraction Complete!",
-          description: `Found ${data.data.extractedServices} services and ${data.data.extractedHours} business hours.`,
+          description: `Found ${data.services?.length || 0} services and ${data.hours?.length || 0} business hours. Pages fetched: ${data.pages_fetched || 0}`,
         });
       } else {
-        throw new Error(data?.error || 'Unknown error occurred');
+        throw new Error('No data extracted from website');
       }
 
     } catch (error: any) {
