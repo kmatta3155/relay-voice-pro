@@ -57,6 +57,7 @@ export default function AdminOnboarding() {
   const [extractionProgress, setExtractionProgress] = useState("");
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -75,6 +76,54 @@ export default function AdminOnboarding() {
     }
     loadTenant();
   }, []);
+
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadedFile(file);
+    setExtractionProgress("Reading file...");
+
+    try {
+      let text = "";
+      
+      if (file.type === "text/plain") {
+        text = await file.text();
+      } else if (file.type === "application/pdf") {
+        // For PDFs, we'll extract text on the server side
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch('/api/extract-pdf', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to extract text from PDF');
+        }
+        
+        const result = await response.json();
+        text = result.text;
+      } else {
+        // For DOC/DOCX files, we'd need additional handling
+        throw new Error('Document format not yet supported. Please use PDF or TXT files, or copy/paste the text manually.');
+      }
+
+      setManualText(text);
+      toast({
+        title: "File Processed",
+        description: `Successfully extracted text from ${file.name}`,
+      });
+    } catch (error: any) {
+      console.error("File processing error:", error);
+      toast({
+        title: "File Processing Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  }
 
   async function startExtraction() {
     if (!tenantId) {
@@ -324,20 +373,43 @@ export default function AdminOnboarding() {
               />
             </div>
           ) : (
-            <div className="space-y-2">
-              <Label htmlFor="manual-text">Business Information</Label>
-              <Textarea
-                id="manual-text"
-                placeholder="Paste your business information here - services, pricing, hours, contact details, etc. You can copy text from PDFs, brochures, or any document containing your business details."
-                value={manualText}
-                onChange={(e) => setManualText(e.target.value)}
-                disabled={isExtracting}
-                rows={10}
-                className="resize-none"
-              />
-              <p className="text-xs text-muted-foreground">
-                Tip: Include service names, prices, durations, business hours, addresses, and contact information for best results.
-              </p>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="file-upload">Upload Document</Label>
+                <Input
+                  id="file-upload"
+                  type="file"
+                  accept=".pdf,.txt,.doc,.docx"
+                  onChange={handleFileUpload}
+                  disabled={isExtracting}
+                  className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Upload PDF, TXT, DOC, or DOCX files containing your business information.
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div className="flex-1 border-t"></div>
+                <span className="text-sm text-muted-foreground">OR</span>
+                <div className="flex-1 border-t"></div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="manual-text">Manual Text Entry</Label>
+                <Textarea
+                  id="manual-text"
+                  placeholder="Paste your business information here - services, pricing, hours, contact details, etc. You can copy text from PDFs, brochures, or any document containing your business details."
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                  disabled={isExtracting}
+                  rows={8}
+                  className="resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tip: Include service names, prices, durations, business hours, addresses, and contact information for best results.
+                </p>
+              </div>
             </div>
           )}
 
