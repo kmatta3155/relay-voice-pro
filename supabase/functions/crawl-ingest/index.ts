@@ -650,21 +650,29 @@ serve(async (req) => {
     // Try Firecrawl first, fallback to heuristic
     try {
       if (FIRECRAWL_API_KEY) {
+        console.log('Attempting Firecrawl extraction...');
         const firecrawlResult = await fetchWithFirecrawl(url, options);
         content = firecrawlResult.content;
         pages_fetched = firecrawlResult.pages_fetched;
         used_firecrawl = true;
         extraction_method = 'firecrawl';
+        console.log('Firecrawl extraction successful');
       } else {
         throw new Error('Firecrawl not available');
       }
     } catch (error) {
       console.log('Firecrawl failed, using heuristic approach:', error.message);
-      const heuristicResult = await fetchHeuristic(url, options);
-      content = heuristicResult.content;
-      pages_fetched = heuristicResult.pages_fetched;
-      used_firecrawl = false;
-      extraction_method = 'heuristic';
+      try {
+        const heuristicResult = await fetchHeuristic(url, options);
+        content = heuristicResult.content;
+        pages_fetched = heuristicResult.pages_fetched;
+        used_firecrawl = false;
+        extraction_method = 'heuristic';
+        console.log('Heuristic extraction successful');
+      } catch (heuristicError) {
+        console.error('Both extraction methods failed:', heuristicError.message);
+        throw new Error(`All extraction methods failed: ${heuristicError.message}`);
+      }
     }
 
     if (!content) {
