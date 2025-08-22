@@ -402,12 +402,12 @@ function heuristicExtract(doc: any, pageText: string) {
   
   // Third pass: look for contextual pricing (price near service name)
   const allText = pageText;
-  const lines = allText.split(/[\r\n]+/).filter(line => line.trim().length > 5);
+  const contextLines = allText.split(/[\r\n]+/).filter(line => line.trim().length > 5);
   
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : "";
-    const prevLine = i > 0 ? lines[i - 1].trim() : "";
+  for (let i = 0; i < contextLines.length; i++) {
+    const line = contextLines[i].trim();
+    const nextLine = i + 1 < contextLines.length ? contextLines[i + 1].trim() : "";
+    const prevLine = i > 0 ? contextLines[i - 1].trim() : "";
     
     // Look for service names followed by prices on next line or same line
     const hasCoreService = /(haircut|hair cut|cut|color|colour|balayage|foil|highlight|lowlight|style|styling|perm|treatment|massage|facial|wax|waxing|thread|threading|manicure|mani|pedicure|pedi|consultation|consult|package|blowout|blow dry|toner|gloss|brazilian|keratin|botox|filler|microneedling|dermaplaning|chemical peel|cleansing|updo|trim|shampoo|condition|eyebrow|lash|makeup|bridal)/i.test(line);
