@@ -168,6 +168,7 @@ const analyzeWebsite = async (deepCrawl = false) => {
     return;
   }
 
+  console.log('Starting website analysis with:', { url: websiteUrl, tenantId, deepCrawl });
   setIsLoading(true);
   try {
     const result = await supabase.functions.invoke('crawl-ingest', {
@@ -180,6 +181,8 @@ const analyzeWebsite = async (deepCrawl = false) => {
         }
       }
     });
+
+    console.log('Edge function result:', result);
 
       if (result.error) {
         throw new Error(result.error.message || 'Analysis failed');
