@@ -1,454 +1,396 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { createTenant, adminControl, searchNumbers, purchaseNumber } from "@/lib/admin";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
-import { Progress } from "@/components/ui/progress";
-import { ingestWebsite } from "@/lib/rag";
-import { Zap, CheckCircle } from "lucide-react";
+import { 
+  Clock, 
+  DollarSign, 
+  Globe, 
+  Phone, 
+  Mail, 
+  MapPin, 
+  Briefcase,
+  AlertCircle,
+  CheckCircle,
+  Loader2
+} from "lucide-react";
 
-export default function AdminOnboarding(){
+interface Service {
+  name: string;
+  price?: number | string;
+  duration_minutes?: number;
+  category?: string;
+}
+
+interface BusinessHour {
+  day: string;
+  opens: string;
+  closes: string;
+  isClosed?: boolean;
+}
+
+interface BusinessInfo {
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  website?: string;
+  description?: string;
+  services: Service[];
+  businessHours: BusinessHour[];
+}
+
+export default function AdminOnboarding() {
+  const [tenantId, setTenantId] = useState<string>("");
+  const [businessUrl, setBusinessUrl] = useState("");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState("");
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const [tenantId, setTenantId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [website, setWebsite] = useState("");
-  const [greeting, setGreeting] = useState("");
-  const [brandColor, setBrandColor] = useState("#6d28d9");
-  const [logoUrl, setLogoUrl] = useState("");
-  const [hours, setHours] = useState(Array.from({length:7},(_,i)=>({ dow:i, open:"09:00", close:"17:00" })));
-  const [services, setServices] = useState([{ name:"Consultation", duration_minutes:30, price:0 }]);
-  const [numbers, setNumbers] = useState<any[]>([]);
-  const [pickedNumber, setPickedNumber] = useState<string>("");
-  const [link, setLink] = useState<string>("");
-  const [userId, setUserId] = useState<string>("");
-  const [knowledgeUrl, setKnowledgeUrl] = useState("");
-  const [knowledgeBusy, setKnowledgeBusy] = useState(false);
-  const [extractionProgress, setExtractionProgress] = useState(0);
-  const [businessInfo, setBusinessInfo] = useState<any>({});
-  const [tenants, setTenants] = useState<any[]>([]);
-  const [tenantsLoading, setTenantsLoading] = useState(false);
 
-  useEffect(()=>{ (async()=>{
-    const { data } = await supabase.auth.getUser();
-    if (data.user?.id) setUserId(data.user.id);
-    await loadTenants();
-  })(); },[]);
+  useEffect(() => {
+    async function loadTenant() {
+      try {
+        const user = (await supabase.auth.getUser()).data.user;
+        if (!user) return;
 
-  async function handleCreateTenant(){
-    try {
-      const res = await createTenant({ name, userId, website_url: website, greeting, brand_color: brandColor, logo_url: logoUrl });
-      setTenantId(res.tenantId);
-      toast({ title: "Tenant created", description: res.tenantId });
-    } catch (error) {
-      toast({ title: "Error", description: String(error), variant: "destructive" });
-    }
-  }
-  
-  async function saveBranding(){ 
-    try {
-      await adminControl({ action:"update_branding", tenantId, brand_color: brandColor, logo_url: logoUrl }); 
-      toast({ title: "Branding saved" }); 
-    } catch (error) {
-      toast({ title: "Error", description: String(error), variant: "destructive" });
-    }
-  }
-  
-  async function saveHours(){ 
-    try {
-      await adminControl({ action:"upsert_hours", tenantId, hours }); 
-      toast({ title: "Business hours saved" }); 
-    } catch (error) {
-      toast({ title: "Error", description: String(error), variant: "destructive" });
-    }
-  }
-  
-  async function saveServices(){ 
-    try {
-      await adminControl({ action:"upsert_services", tenantId, services }); 
-      toast({ title: "Services saved" }); 
-    } catch (error) {
-      toast({ title: "Error", description: String(error), variant: "destructive" });
-    }
-  }
-  
-  async function findNumbers(){ 
-    try {
-      const res = await searchNumbers({ country:"US" }); 
-      setNumbers(res.numbers || []); 
-    } catch (error) {
-      toast({ title: "Error", description: String(error), variant: "destructive" });
-    }
-  }
-  
-  async function buyNumber(){
-    try {
-      const base = (import.meta as any).env?.VITE_SUPABASE_URL?.replace(/\/rest\/v1.*$/,"/functions/v1") || "";
-      const res = await purchaseNumber({ phoneNumber: pickedNumber, tenantId: tenantId!, projectBase: base });
-      await adminControl({ action:"update_agent", tenantId, greeting, website_url: website });
-      await supabase.from("agent_settings").update({ twilio_number: res.phoneNumber }).eq("tenant_id", tenantId);
-      toast({ title: "Number purchased", description: res.phoneNumber });
-    } catch (error) {
-      toast({ title: "Error", description: String(error), variant: "destructive" });
-    }
-  }
-  
-  async function createInvite(email:string, role:"admin"|"manager"|"staff"){
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-control", { body: { action: "invite", tenantId, email, role }});
-      if (error) return toast({ title:"Invite error", description: error.message, variant:"destructive" });
-      setLink(data?.link || ""); 
-      toast({ title:"Invite created" });
-    } catch (error) {
-      toast({ title: "Error", description: String(error), variant: "destructive" });
-    }
-  }
-
-  async function handleKnowledgeIngest() {
-    if (!tenantId || !knowledgeUrl) return;
-    setKnowledgeBusy(true);
-    setExtractionProgress(0);
-    
-    try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setExtractionProgress(prev => Math.min(prev + 10, 90));
-      }, 500);
-      
-      const result = await ingestWebsite(tenantId, knowledgeUrl);
-      clearInterval(progressInterval);
-      setExtractionProgress(100);
-      
-      if (result?.business_info) {
-        setBusinessInfo(result.business_info);
-
-        // Auto-populate business hours if available (supports {day, opens, closes} or {day, hours})
-        if (Array.isArray(result.business_info.business_hours)) {
-          const order = ["sun","mon","tue","wed","thu","fri","sat"];
-          const to24h = (t: string) => {
-            const m = t.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
-            if (!m) return t;
-            let hh = parseInt(m[1] || "0", 10);
-            const mm = m[2] ? parseInt(m[2], 10) : 0;
-            const ap = (m[3] || "").toLowerCase();
-            if (ap === "pm" && hh < 12) hh += 12;
-            if (ap === "am" && hh === 12) hh = 0;
-            return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
-          };
-
-          const autoHours = result.business_info.business_hours.map((h: any) => {
-            const dayTok = String(h.day || h.Day || "").toLowerCase().slice(0,3);
-            const dow = Math.max(0, order.indexOf(dayTok));
-            let open = "09:00", close = "17:00";
-            if (h.opens && h.closes) {
-              open = to24h(String(h.opens));
-              close = to24h(String(h.closes));
-            } else if (h.hours && typeof h.hours === "string" && !/closed/i.test(h.hours)) {
-              const parts = h.hours.split(/\s*-\s*|\s*–\s*/);
-              if (parts.length === 2) {
-                open = to24h(parts[0]);
-                close = to24h(parts[1]);
-              }
-            }
-            return { dow, open, close };
-          });
-          if (autoHours.length) setHours(autoHours);
+        const { data } = await supabase.from("profiles").select("active_tenant_id").eq("id", user.id).maybeSingle();
+        if (data?.active_tenant_id) {
+          setTenantId(data.active_tenant_id);
         }
-
-        // Auto-populate services if available (supports [string] or [{name, price}])
-        if (Array.isArray(result.business_info.services)) {
-          const autoServices = result.business_info.services
-            .map((s: any) => {
-              const name = typeof s === "string" ? s : s?.name;
-              if (!name) return null;
-              const priceNum = typeof s?.price !== "undefined"
-                ? parseFloat(String(s.price).toString().replace(/[^0-9.]/g, ""))
-                : 0;
-              return {
-                name: String(name).slice(0, 160),
-                duration_minutes: 30,
-                price: isNaN(priceNum) ? 0 : priceNum,
-              };
-            })
-            .filter(Boolean) as Array<{ name: string; duration_minutes: number; price: number }>;
-          if (autoServices.length) setServices(autoServices);
-        }
-
-        toast({
-          title: "Knowledge ingested successfully",
-          description: "Business hours and services have been auto-populated. You can edit them in their respective tabs.",
-        });
+      } catch (error) {
+        console.error("Error loading tenant:", error);
       }
-      
-      setKnowledgeUrl("");
-      setTimeout(() => setExtractionProgress(0), 2000);
-    } catch (e) {
-      setExtractionProgress(0);
-      console.error("Knowledge ingestion failed:", e);
-      toast({ 
-        title: "Ingestion failed", 
-        description: e instanceof Error ? e.message : "Failed to ingest website",
-        variant: "destructive"
+    }
+    loadTenant();
+  }, []);
+
+  async function startExtraction() {
+    if (!tenantId || !businessUrl) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter your business website URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsExtracting(true);
+    setError(null);
+    setBusinessInfo(null);
+    setExtractionProgress("Analyzing website structure...");
+
+    try {
+      const { data, error } = await supabase.functions.invoke('crawl-ingest', {
+        body: {
+          tenantId,
+          url: businessUrl,
+          options: {
+            includeSubdomains: true,
+            respectRobots: true,
+            followSitemaps: true,
+            maxPages: 25,
+            maxDepth: 3,
+            rateLimitMs: 300,
+            allowPatterns: ["services", "pricing", "packages", "menu", "treatment", "book", "appointment", "schedule", "about", "hours"],
+            denyPatterns: ["\\.(pdf|jpg|jpeg|png|gif|webp|svg|mp4|mp3)$", "wp-admin", "login", "register"],
+            includeBookingProviders: true,
+          }
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Extraction failed');
+      }
+
+      if (data?.success) {
+        setBusinessInfo(data.data.businessInfo);
+        setExtractionProgress("Extraction completed successfully!");
+        
+        toast({
+          title: "Extraction Complete!",
+          description: `Found ${data.data.extractedServices} services and ${data.data.extractedHours} business hours.`,
+        });
+      } else {
+        throw new Error(data?.error || 'Unknown error occurred');
+      }
+
+    } catch (error: any) {
+      console.error("Extraction error:", error);
+      setError(error.message);
+      toast({
+        title: "Extraction Failed",
+        description: error.message,
+        variant: "destructive",
       });
     } finally {
-      setKnowledgeBusy(false);
+      setIsExtracting(false);
     }
   }
 
-  async function loadTenants(){
+  async function saveConfiguration() {
+    if (!businessInfo || !tenantId) return;
+
     try {
-      setTenantsLoading(true);
-      const { data, error } = await supabase.functions.invoke("customers-admin", { body: { action: "list" } });
-      if (error) throw error;
-      setTenants(data?.tenants || []);
-    } catch (err:any) {
-      toast({ title: "Error loading tenants", description: err.message || String(err), variant: "destructive" });
-    } finally {
-      setTenantsLoading(false);
+      // Update tenant info if we have business name
+      if (businessInfo.name) {
+        await supabase.from('tenants').update({
+          name: businessInfo.name
+        }).eq('id', tenantId);
+      }
+
+      // Save agent settings
+      await supabase.from('agent_settings').upsert({
+        tenant_id: tenantId,
+        website_url: businessInfo.website || businessUrl,
+        greeting: businessInfo.description || `Welcome to ${businessInfo.name || 'our business'}! How can I help you today?`,
+      });
+
+      toast({
+        title: "Configuration Saved",
+        description: "Your business information has been successfully configured.",
+      });
+
+    } catch (error: any) {
+      console.error("Save error:", error);
+      toast({
+        title: "Save Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   }
 
-  function timeStr(t?: string){
-    if (!t) return "";
-    return t.slice(0,5);
-  }
+  const formatPrice = (price: number | string | undefined) => {
+    if (!price) return "Call for pricing";
+    const numPrice = typeof price === 'string' ? parseFloat(price.replace(/[^\d.]/g, '')) : price;
+    return isNaN(numPrice) ? "Call for pricing" : `$${numPrice}`;
+  };
 
-  async function openTenant(id: string){
-    try {
-      const { data, error } = await supabase.functions.invoke("customers-admin", { body: { action: "details", tenantId: id }});
-      if (error) throw error;
-      setTenantId(id);
-      setGreeting(data?.agent?.greeting || "");
-      setWebsite(data?.agent?.website_url || "");
-      if (data?.branding) {
-        setBrandColor(data.branding.brand_color || "#6d28d9");
-        setLogoUrl(data.branding.logo_url || "");
-      }
-      if (Array.isArray(data?.hours)) {
-        setHours(data.hours.map((h:any)=>({ dow: h.dow, open: timeStr(h.open_time), close: timeStr(h.close_time) })));
-      }
-      if (Array.isArray(data?.services)) {
-        setServices(data.services.map((s:any)=>({ id: s.id, name: s.name, duration_minutes: s.duration_minutes, price: s.price })));
-      }
-      toast({ title: "Tenant loaded", description: "You can now edit configuration in tabs." });
-    } catch (err:any) {
-      toast({ title: "Failed to open tenant", description: err.message || String(err), variant: "destructive" });
-    }
-  }
-
-  async function deleteTenant(id: string){
-    try {
-      if (!window.confirm("Delete this tenant and all its data? This cannot be undone.")) return;
-      const { error } = await supabase.functions.invoke("customers-admin", { body: { action: "delete", tenantId: id }});
-      if (error) throw error;
-      if (tenantId === id) setTenantId(null);
-      await loadTenants();
-      toast({ title: "Tenant deleted" });
-    } catch (err:any) {
-      toast({ title: "Failed to delete tenant", description: err.message || String(err), variant: "destructive" });
-    }
-  }
+  const formatDuration = (duration?: number) => {
+    if (!duration) return "30 min";
+    return `${duration} min`;
+  };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-4">
-        <Card className="rounded-2xl">
-          <CardHeader><CardTitle className="text-center">Tenant Onboarding Dashboard</CardTitle></CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div><label className="text-sm">Business name *</label><Input value={name} onChange={e=>setName(e.target.value)} placeholder="Acme Dental"/></div>
-            <div><label className="text-sm">Website URL</label><Input value={website} onChange={e=>setWebsite(e.target.value)} placeholder="https://acme.example"/></div>
-            <div className="md:col-span-2"><label className="text-sm">Phone greeting</label><Input value={greeting} onChange={e=>setGreeting(e.target.value)} placeholder="Thanks for calling Acme Dental!"/></div>
-            <div><label className="text-sm">Brand color</label><Input type="color" value={brandColor} onChange={e=>setBrandColor(e.target.value)}/></div>
-            <div><label className="text-sm">Logo URL</label><Input value={logoUrl} onChange={e=>setLogoUrl(e.target.value)} placeholder="https://..."/></div>
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-bold">Business Intelligence Extraction</h1>
+        <p className="text-muted-foreground">
+          Let our AI analyze your website to automatically configure your receptionist
+        </p>
+      </div>
+
+      {/* Extraction Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5" />
+            Website Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="website">Business Website URL</Label>
+            <Input
+              id="website"
+              type="url"
+              placeholder="https://www.yourbusiness.com"
+              value={businessUrl}
+              onChange={(e) => setBusinessUrl(e.target.value)}
+              disabled={isExtracting}
+            />
           </div>
-          <Button onClick={handleCreateTenant} disabled={!name || !userId}>Create Tenant</Button>
-          {tenantId && <div className="text-xs text-zinc-500">Tenant ID: {tenantId}</div>}
+
+          <Button 
+            onClick={startExtraction} 
+            disabled={isExtracting || !businessUrl.trim()}
+            className="w-full"
+            size="lg"
+          >
+            {isExtracting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              "Start AI Analysis"
+            )}
+          </Button>
+
+          {isExtracting && (
+            <div className="bg-muted p-4 rounded-lg">
+              <div className="flex items-center gap-2 text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {extractionProgress}
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg">
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span className="font-medium">Extraction Failed</span>
+              </div>
+              <p className="text-sm text-destructive/80 mt-1">{error}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {tenantId && (
-        <Card className="rounded-2xl">
-          <CardHeader><CardTitle>Configure</CardTitle></CardHeader>
-          <CardContent>
-            <Tabs defaultValue="branding">
-              <TabsList className="flex flex-wrap gap-2">
-                <TabsTrigger value="branding">Branding</TabsTrigger>
-                <TabsTrigger value="hours">Hours</TabsTrigger>
-                <TabsTrigger value="services">Services</TabsTrigger>
-                <TabsTrigger value="number">Number & Agent</TabsTrigger>
-                <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
-                <TabsTrigger value="team">Team</TabsTrigger>
-                <TabsTrigger value="launch">Launch</TabsTrigger>
-              </TabsList>
+      {/* Extracted Business Information */}
+      {businessInfo && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 text-green-600">
+            <CheckCircle className="h-5 w-5" />
+            <span className="font-medium">Analysis Complete</span>
+          </div>
 
-              <TabsContent value="branding" className="pt-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div><label className="text-sm">Brand color</label><Input type="color" value={brandColor} onChange={e=>setBrandColor(e.target.value)}/></div>
-                  <div><label className="text-sm">Logo URL</label><Input value={logoUrl} onChange={e=>setLogoUrl(e.target.value)}/></div>
-                </div>
-                <div className="mt-3"><Button onClick={saveBranding}>Save branding</Button></div>
-              </TabsContent>
-
-              <TabsContent value="hours" className="pt-4 space-y-3">
-                {hours.map((h,i)=>(
-                  <div key={i} className="flex gap-2 items-center">
-                    <div className="w-24 text-sm">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][h.dow]}</div>
-                    <Input className="w-32" value={h.open} onChange={e=>setHours(prev=>prev.map((x,ix)=>ix===i?{...x,open:e.target.value}:x))}/>
-                    <span className="text-sm">to</span>
-                    <Input className="w-32" value={h.close} onChange={e=>setHours(prev=>prev.map((x,ix)=>ix===i?{...x,close:e.target.value}:x))}/>
+          {/* Business Overview */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5" />
+                Business Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                {businessInfo.name && (
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Business Name</Label>
+                    <p className="text-sm">{businessInfo.name}</p>
                   </div>
-                ))}
-                <Button onClick={saveHours}>Save hours</Button>
-              </TabsContent>
-
-              <TabsContent value="services" className="pt-4 space-y-3">
-                <div className="grid md:grid-cols-3 gap-2 font-semibold text-sm text-muted-foreground mb-2">
-                  <div>Service Name</div>
-                  <div>Duration (min)</div>
-                  <div>Price</div>
-                </div>
-                {services.map((s, i)=>(
-                  <div key={i} className="grid md:grid-cols-3 gap-2">
-                    <Input value={s.name} onChange={e=>setServices(prev=>prev.map((x,ix)=>ix===i?{...x,name:e.target.value}:x))} placeholder="Service name"/>
-                    <Input type="number" value={s.duration_minutes} onChange={e=>setServices(prev=>prev.map((x,ix)=>ix===i?{...x,duration_minutes:parseInt(e.target.value)}:x))} placeholder="Duration (min)"/>
-                    <Input type="number" value={s.price ?? 0} onChange={e=>setServices(prev=>prev.map((x,ix)=>ix===i?{...x,price:parseFloat(e.target.value)}:x))} placeholder="Price"/>
+                )}
+                
+                {businessInfo.phone && (
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      Phone
+                    </Label>
+                    <p className="text-sm">{businessInfo.phone}</p>
                   </div>
-                ))}
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={()=>setServices(prev=>[...prev, { name:"New Service", duration_minutes:30, price:0 }])}>Add service</Button>
-                  <Button onClick={saveServices}>Save services</Button>
+                )}
+                
+                {businessInfo.email && (
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      Email
+                    </Label>
+                    <p className="text-sm">{businessInfo.email}</p>
+                  </div>
+                )}
+                
+                {businessInfo.address && (
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      Address
+                    </Label>
+                    <p className="text-sm">{businessInfo.address}</p>
+                  </div>
+                )}
+              </div>
+              
+              {businessInfo.description && (
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium">Description</Label>
+                  <p className="text-sm text-muted-foreground">{businessInfo.description}</p>
                 </div>
-              </TabsContent>
+              )}
+            </CardContent>
+          </Card>
 
-              <TabsContent value="number" className="pt-4 space-y-3">
-                <div className="flex gap-2">
-                  <Button onClick={findNumbers}>Search available numbers</Button>
+          {/* Services */}
+          {businessInfo.services && businessInfo.services.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Services & Pricing ({businessInfo.services.length} found)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid gap-3">
+                    <div className="grid grid-cols-3 gap-4 text-sm font-medium text-muted-foreground border-b pb-2">
+                      <span>Service Name</span>
+                      <span>Duration</span>
+                      <span>Price</span>
+                    </div>
+                    {businessInfo.services.map((service, index) => (
+                      <div key={index} className="grid grid-cols-3 gap-4 text-sm py-2 border-b border-border/50">
+                        <div className="space-y-1">
+                          <span className="font-medium">{service.name}</span>
+                          {service.category && (
+                            <Badge variant="secondary" className="text-xs">
+                              {service.category}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground">
+                          {formatDuration(service.duration_minutes)}
+                        </span>
+                        <span className="font-medium">
+                          {formatPrice(service.price)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid md:grid-cols-3 gap-2">
-                  {numbers.map((n:any)=>(
-                    <button key={n.phone_number} onClick={()=>setPickedNumber(n.phone_number)} className={"p-2 border rounded-xl text-left " + (pickedNumber===n.phone_number?"border-violet-500 ring-2 ring-violet-200":"")}>
-                      <div className="font-medium">{n.friendly_name}</div>
-                      <div className="text-xs text-zinc-500">{n.phone_number}</div>
-                    </button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Business Hours */}
+          {businessInfo.businessHours && businessInfo.businessHours.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Business Hours ({businessInfo.businessHours.length} days found)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {businessInfo.businessHours.map((hour, index) => (
+                    <div key={index} className="flex justify-between items-center py-2 border-b border-border/50 last:border-b-0">
+                      <span className="font-medium capitalize">{hour.day}</span>
+                      <span className="text-muted-foreground">
+                        {hour.isClosed ? 'Closed' : `${hour.opens} - ${hour.closes}`}
+                      </span>
+                    </div>
                   ))}
                 </div>
-                <Button disabled={!pickedNumber} onClick={buyNumber}>Purchase & configure webhooks</Button>
-              </TabsContent>
+              </CardContent>
+            </Card>
+          )}
 
-              <TabsContent value="knowledge" className="pt-4 space-y-4">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                      Business Website URL
-                    </label>
-                    <Input 
-                      placeholder="https://example.com" 
-                      value={knowledgeUrl} 
-                      onChange={(e)=> setKnowledgeUrl(e.target.value)}
-                      className="mt-1"
-                    />
-                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Zap className="h-3 w-3" />
-                      AI extracts business hours, services, contact info, and creates smart knowledge chunks
-                    </div>
-                  </div>
-                  
-                  <Button 
-                    disabled={!knowledgeUrl || knowledgeBusy} 
-                    onClick={handleKnowledgeIngest} 
-                    className="w-full"
-                  >
-                    {knowledgeBusy ? "AI Processing..." : "Analyze & Ingest Website"}
-                  </Button>
-
-                  {extractionProgress > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Zap className="h-4 w-4 text-primary animate-pulse" />
-                        AI extracting business intelligence...
-                      </div>
-                      <Progress value={extractionProgress} className="h-2" />
-                    </div>
-                  )}
-
-                  {businessInfo.business_hours && (
-                    <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
-                      <div className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
-                        ✓ Business hours extracted and auto-populated
-                      </div>
-                      <div className="text-xs text-green-600 dark:text-green-300">
-                        Check the "Hours" tab to review and customize
-                      </div>
-                    </div>
-                  )}
-
-                  {businessInfo.services && (
-                    <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-                      <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
-                        ✓ Services extracted and auto-populated
-                      </div>
-                      <div className="text-xs text-blue-600 dark:text-blue-300">
-                        Check the "Services" tab to review, add prices, and customize
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="team" className="pt-4">
-                <InviteTeam onCreate={createInvite} link={link}/>
-              </TabsContent>
-
-              <TabsContent value="launch" className="pt-4 space-y-3">
-                <p className="text-sm">Optionally seed demo data and go live.</p>
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={async ()=>{ 
-                    try {
-                      await supabase.functions.invoke("seed-demo", { body: { tenantId } }); 
-                      toast({ title: "Demo data seeded" });
-                    } catch (error) {
-                      toast({ title: "Error", description: String(error), variant: "destructive" });
-                    }
-                  }}>Seed Demo</Button>
-                  <Button onClick={()=> window.location.href="/overview"}>Go to Dashboard</Button>
-                </div>
-              </TabsContent>
-
-            </Tabs>
-          </CardContent>
-        </Card>
+          {/* Save Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Save Configuration</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Save this extracted information to configure your AI receptionist. This will update your business settings, services, and operating hours.
+              </p>
+              <Button onClick={saveConfiguration} className="w-full">
+                Save & Configure AI Receptionist
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       )}
-    </div>
-  );
-}
-
-function InviteTeam({ onCreate, link }:{ onCreate:(email:string,role:"admin"|"manager"|"staff")=>void; link:string }){
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin"|"manager"|"staff">("manager");
-  return (
-    <div className="space-y-3">
-      <div className="grid md:grid-cols-3 gap-2">
-        <div className="md:col-span-2">
-          <label className="text-sm">Email</label>
-          <Input value={email} onChange={e=>setEmail(e.target.value)} placeholder="teammate@company.com"/>
-        </div>
-        <div>
-          <label className="text-sm">Role</label>
-          <select className="w-full border rounded-md h-10 px-2" value={role} onChange={e=>setRole(e.target.value as any)}>
-            <option value="admin">Admin</option>
-            <option value="manager">Manager</option>
-            <option value="staff">Staff</option>
-          </select>
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <Button onClick={()=> onCreate(email, role)} disabled={!email}>Create invite</Button>
-        {link && <Button type="button" variant="secondary" onClick={()=>navigator.clipboard.writeText(link)}>Copy invite link</Button>}
-      </div>
-      {link && <div className="text-xs text-zinc-500 break-all">{link}</div>}
     </div>
   );
 }

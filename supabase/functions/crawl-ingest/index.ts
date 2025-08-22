@@ -1,16 +1,18 @@
 // deno-lint-ignore-file no-explicit-any
 /**
- * Universal website crawler + extractor.
- * - Crawls same eTLD+1 (+ subdomains) with respect for robots and sitemaps
- * - Follows <a> and <iframe>; whitelists common booking providers (Square, Vagaro, Fresha, Boulevard, Mindbody, GlossGenius, Acuity, Calendly)
- * - Extracts schema.org JSON-LD first; falls back to heuristics for services/prices, hours, contact, address
- * - Writes into knowledge_sources, knowledge_chunks, business_quick_answers
+ * AI-Powered Business Intelligence Extraction Service
+ * - Crawls business websites with intelligent routing
+ * - Uses OpenAI GPT for structured data extraction
+ * - Extracts services, pricing, business hours, and contact info
+ * - Provides SaaS-grade error handling and logging
  */
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { DOMParser } from "https://esm.sh/linkedom@0.16.10/worker";
 
-type Options = {
+// Types
+interface CrawlOptions {
   includeSubdomains?: boolean;
   respectRobots?: boolean;
   followSitemaps?: boolean;
@@ -21,655 +23,585 @@ type Options = {
   denyPatterns?: string[];
   includeBookingProviders?: boolean;
   extraAllowedHosts?: string[];
-};
-type Payload = { tenantId: string; url: string; options?: Options };
+}
 
-const DEFAULTS: Required<Options> = {
+interface ExtractedService {
+  name: string;
+  description?: string;
+  price?: number | string;
+  duration?: number;
+  category?: string;
+}
+
+interface ExtractedHours {
+  day: string;
+  opens: string;
+  closes: string;
+  isClosed?: boolean;
+}
+
+interface ExtractedBusinessInfo {
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  website?: string;
+  services: ExtractedService[];
+  businessHours: ExtractedHours[];
+  description?: string;
+}
+
+interface CrawlPayload {
+  tenantId: string;
+  url: string;
+  options?: CrawlOptions;
+}
+
+// Configuration
+const DEFAULTS: Required<CrawlOptions> = {
   includeSubdomains: true,
   respectRobots: true,
   followSitemaps: true,
-  maxPages: 160,
-  maxDepth: 4,
-  rateLimitMs: 350,
-  allowPatterns: [],
-  denyPatterns: [],
+  maxPages: 50,
+  maxDepth: 3,
+  rateLimitMs: 500,
+  allowPatterns: ["services", "pricing", "packages", "menu", "treatment", "book", "appointment", "schedule", "about"],
+  denyPatterns: ["\\.(pdf|jpg|jpeg|png|gif|webp|svg|mp4|mp3)$", "wp-admin", "login", "register"],
   includeBookingProviders: true,
   extraAllowedHosts: [],
 };
 
-const BOOKING_HOSTS = new Set<string>([
-  "square.site", "squareup.com",
-  "vagaro.com",
-  "fresha.com", "myfresha.com",
-  "boulevard.io", "blvd.co",
-  "mindbodyonline.com", "mindbody.io",
-  "glossgenius.com",
-  "acuityscheduling.com", "squarespace.com",
-  "calendly.com",
+const BOOKING_HOSTS = new Set([
+  "square.site", "squareup.com", "vagaro.com", "fresha.com", "myfresha.com",
+  "boulevard.io", "blvd.co", "mindbodyonline.com", "mindbody.io",
+  "glossgenius.com", "acuityscheduling.com", "calendly.com"
 ]);
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const TEXT_MIN = 200;
-const CHUNK_MAX = 1400;
-
-function canonical(u: string) {
-  try {
-    const url = new URL(u);
-    url.hash = "";
-    if (!url.pathname) url.pathname = "/";
-    return url.toString();
-  } catch {
-    return "";
-  }
-}
-function eTLDPlusOne(host: string) {
-  const parts = host.split(".").filter(Boolean);
-  return parts.length <= 2 ? host : parts.slice(-2).join(".");
-}
-function sameSiteOrSub(root: string, host: string, includeSubs: boolean) {
-  return host === root || (includeSubs && host.endsWith("." + root));
-}
-function matchesAny(url: string, regexes: string[]) {
-  return regexes.some((r) => new RegExp(r, "i").test(url));
-}
-function shouldFollowUrl(u: string, root: string, opts: Required<Options>) {
-  const host = new URL(u).hostname;
-  if (opts.denyPatterns.length && matchesAny(u, opts.denyPatterns)) return false;
-
-  // Enforce allowPatterns if any
-  const allowOK = !opts.allowPatterns.length || matchesAny(u, opts.allowPatterns);
-
-  // Same domain
-  if (sameSiteOrSub(root, host, opts.includeSubdomains)) return allowOK;
-
-  // Booking providers
-  if (opts.includeBookingProviders) {
-    const base = host.split(".").slice(-2).join(".");
-    if (BOOKING_HOSTS.has(base) || opts.extraAllowedHosts.includes(base)) {
-      // Only follow booking hosts if path hints at services/booking/menu
-      const bookingish = /(book|appointment|service|menu|pricing|packages|schedule)/i.test(u);
-      return allowOK && bookingish;
-    }
-  }
-  return false;
-}
-
-async function fetchText(u: string) {
-  const res = await fetch(u, { redirect: "follow" });
-  if (!res.ok) throw new Error(`Fetch ${res.status} ${u}`);
-  const ct = res.headers.get("content-type") || "";
-  const isHtml = /text\/html|application\/xhtml\+xml/i.test(ct);
-  return { text: isHtml ? await res.text() : "", contentType: ct, ok: isHtml };
-}
-async function fetchRobots(base: URL) {
-  try {
-    const txt = await fetch(new URL("/robots.txt", base)).then((r) => (r.ok ? r.text() : ""));
-    return txt;
-  } catch {
-    return "";
-  }
-}
-function robotsDisallow(robotsTxt: string, path: string) {
-  if (!robotsTxt) return false;
-  const lines = robotsTxt.split(/\r?\n/);
-  let active = false;
-  const disallowed: string[] = [];
-  for (const line of lines) {
-    const l = line.trim();
-    if (/^user-agent:\s*\*/i.test(l)) {
-      active = true;
-      continue;
-    }
-    if (/^user-agent:/i.test(l)) {
-      active = false;
-      continue;
-    }
-    if (active) {
-      const m = l.match(/^disallow:\s*(.*)$/i);
-      if (m) disallowed.push(m[1].trim() || "/");
-    }
-  }
-  return disallowed.some((p) => p !== "/" && path.startsWith(p));
-}
-async function parseSitemaps(baseUrl: string): Promise<string[]> {
-  const base = new URL(baseUrl);
-  const urls: string[] = [];
-  try {
-    const robots = await fetchRobots(base);
-    const sm = [...robots.matchAll(/Sitemap:\s*(.+)\s*/gi)].map((m) => m[1].trim());
-    for (const s of sm) {
-      try {
-        const xml = await fetch(s).then((r) => (r.ok ? r.text() : ""));
-        for (const loc of xml.matchAll(/<loc>([^<]+)<\/loc>/gi)) urls.push(loc[1].trim());
-      } catch {}
-    }
-  } catch {}
-  for (const p of ["/sitemap.xml", "/sitemap_index.xml"]) {
-    try {
-      const xml = await fetch(new URL(p, base)).then((r) => (r.ok ? r.text() : ""));
-      for (const loc of xml.matchAll(/<loc>([^<]+)<\/loc>/gi)) urls.push(loc[1].trim());
-    } catch {}
-  }
-  return Array.from(new Set(urls));
-}
-
-// Structured data extraction
-function readJsonLd(doc: any) {
-  const out: any[] = [];
-  doc.querySelectorAll('script[type="application/ld+json"]').forEach((s: any) => {
-    try {
-      const val = JSON.parse(s.textContent || "null");
-      if (!val) return;
-      Array.isArray(val) ? out.push(...val) : out.push(val);
-    } catch {}
-  });
-  return out;
-}
-function pickFirst<T>(list: (T | null | undefined)[]) {
-  for (const x of list) if (x) return x as T;
-  return null;
-}
-function normalizeHoursFromJsonLd(entries: any[]) {
-  const hours: Array<{ day: string; opens: string; closes: string }> = [];
-  const specs = entries.flatMap((e) =>
-    e?.openingHoursSpecification
-      ? Array.isArray(e.openingHoursSpecification)
-        ? e.openingHoursSpecification
-        : [e.openingHoursSpecification]
-      : [],
-  );
-  for (const s of specs) {
-    const days = s.dayOfWeek
-      ? Array.isArray(s.dayOfWeek)
-        ? s.dayOfWeek
-        : [s.dayOfWeek]
-      : [];
-    for (const d of days) {
-      const dd = d.split("/").pop() || d;
-      if (s.opens && s.closes) hours.push({ day: dd, opens: s.opens, closes: s.closes });
-    }
-  }
-  const ohText = entries.flatMap((e) =>
-    e.openingHours ? (Array.isArray(e.openingHours) ? e.openingHours : [e.openingHours]) : [],
-  );
-  for (const line of ohText) {
-    const m = String(line).match(
-      /(Mo|Tu|We|Th|Fr|Sa|Su)[^\d]*?(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/i,
-    );
-    if (m) hours.push({ day: m[1], opens: m[2], closes: m[3] });
-  }
-  return hours;
-}
-function extractFromSchema(doc: any) {
-  const jsonld = readJsonLd(doc);
-  const tel = pickFirst(jsonld.map((j) => j?.telephone)) || undefined;
-  const email = pickFirst(jsonld.map((j) => j?.email)) || undefined;
-  const addr = pickFirst(jsonld.map((j) => {
-    const a = j?.address;
-    if (!a) return null;
-    if (typeof a === "string") return a;
-    const parts = [
-      a.streetAddress,
-      a.addressLocality,
-      a.addressRegion,
-      a.postalCode,
-    ].filter(Boolean);
-    return parts.join(", ");
-  })) || undefined;
-
-  const services: Array<{ name: string; price?: string }> = [];
-  const addOffer = (o: any) => {
-    if (!o) return;
-    const name = o.itemOffered?.name || o.name || o.description;
-    const price = o.price || o.priceSpecification?.price || o.offers?.price;
-    if (name) services.push({ name: String(name).slice(0, 160), price: price ? `$${price}` : undefined });
-  };
-  jsonld.forEach((j) => {
-    const cat = j?.hasOfferCatalog;
-    if (cat) {
-      const items = cat.itemListElement || cat.itemList || [];
-      (Array.isArray(items) ? items : [items]).forEach((it: any) => addOffer(it));
-    }
-    const offers = j?.offers || j?.makesOffer;
-    if (offers) (Array.isArray(offers) ? offers : [offers]).forEach((o: any) => addOffer(o));
-  });
-
-  const business_hours = normalizeHoursFromJsonLd(jsonld);
-  return { phone: tel, email, address: addr, services, business_hours };
-}
-
-// Heuristics extraction
-const DAY_MAP: Record<string, string> = {
-  mon: "Mon",
-  monday: "Mon",
-  tue: "Tue",
-  tuesday: "Tue",
-  wed: "Wed",
-  wednesday: "Wed",
-  thu: "Thu",
-  thursday: "Thu",
-  fri: "Fri",
-  friday: "Fri",
-  sat: "Sat",
-  saturday: "Sat",
-  sun: "Sun",
-  sunday: "Sun",
-};
-function normalizeDayToken(tok: string) {
-  const key = tok.toLowerCase().slice(0, 9);
-  return DAY_MAP[key] || tok;
-}
-function cleanBodyText(doc: any) {
-  doc
-    .querySelectorAll(
-      "script,style,noscript,svg,iframe,canvas,form,nav,footer,header,aside",
-    )
-    .forEach((n: any) => n.remove());
-  const text = (doc.body?.textContent || "").replace(/\s+/g, " ").trim();
-  return text;
-}
-function splitChunks(text: string) {
-  if (!text || text.length < TEXT_MIN) return [];
-  const out: string[] = [];
-  let buf = "";
-  for (const seg of text.split(/(?<=[\.\!\?])\s+/)) {
-    if ((buf + " " + seg).length > CHUNK_MAX) {
-      if (buf.trim().length) out.push(buf.trim());
-      buf = seg;
-    } else {
-      buf = buf ? buf + " " + seg : seg;
-    }
-  }
-  if (buf.trim().length) out.push(buf.trim());
-  return out.filter((p) => p.length >= TEXT_MIN);
-}
-function heuristicExtract(doc: any, pageText: string) {
-  const phone =
-    pageText.match(/(\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/)?.[0] ||
-    undefined;
-  const email =
-    pageText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || undefined;
-  const address = pageText.match(
-    /\d{2,5}\s+[A-Za-z][A-Za-z\s\.\-]+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr)\b.*?\b[A-Z]{2}\b\s+\d{5}/i,
-  )?.[0];
-
-  const hours: Array<{ day: string; opens: string; closes: string }> = [];
-  const lines = pageText.split(/[\r\n]+/).concat(
-    Array.from(doc.querySelectorAll("li,p,div,span")).map((el: any) =>
-      (el.textContent || "").replace(/\s+/g, " ").trim()
-    ),
-  );
-  for (const raw of lines) {
-    const t = raw.trim();
-    if (!t) continue;
-    // Range "Mon–Fri 9–5"
-    const mRange = t.match(
-      /(Mon|Tue|Tues|Wed|Thu|Thur|Fri|Sat|Sun)[^\w]+(Mon|Tue|Tues|Wed|Thu|Thur|Fri|Sat|Sun).*?(\d{1,2}(:\d{2})?\s?(AM|PM)?)[\s\-–]+(\d{1,2}(:\d{2})?\s?(AM|PM)?)/i,
-    );
-    if (mRange) {
-      const d1 = normalizeDayToken(mRange[1]);
-      const d2 = normalizeDayToken(mRange[2]);
-      const opens = mRange[3];
-      const closes = mRange[6];
-      const order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-      const i1 = order.indexOf(d1);
-      const i2 = order.indexOf(d2);
-      if (i1 >= 0 && i2 >= i1) {
-        for (let i = i1; i <= i2; i++) hours.push({ day: order[i], opens, closes });
-      }
-      continue;
-    }
-    // Single day "Mon 9–5"
-    const mSingle = t.match(
-      /(Mon|Tue|Tues|Wed|Thu|Thur|Fri|Sat|Sun)\s*[:\-]?\s*(\d{1,2}(:\d{2})?\s?(AM|PM)?)\s*[-–]\s*(\d{1,2}(:\d{2})?\s?(AM|PM)?)/i,
-    );
-    if (mSingle) {
-      hours.push({
-        day: normalizeDayToken(mSingle[1]),
-        opens: mSingle[2],
-        closes: mSingle[5],
-      });
-    }
-  }
-
-  const services: Array<{ name: string; price?: string }> = [];
-  
-  // First pass: look for pricing tables and structured service content
-  const tables = Array.from(doc.querySelectorAll("table"));
-  for (const table of tables) {
-    const rows = Array.from(table.querySelectorAll("tr"));
-    for (const row of rows) {
-      const cells = Array.from(row.querySelectorAll("td, th"));
-      if (cells.length >= 2) {
-        const serviceCell = cells[0];
-        const priceCell = cells[1];
-        const serviceName = (serviceCell.textContent || "").trim();
-        const priceText = (priceCell.textContent || "").trim();
-        const price = priceText.match(/[$£€]\s?\d{1,4}(\.\d{2})?/);
-        
-        if (serviceName && price && serviceName.length > 2 && serviceName.length < 100) {
-          const isService = /(hair|cut|color|colour|balayage|foil|highlight|style|perm|treatment|massage|facial|wax|thread|mani|pedi|consult|package|service|blowout|toner|gloss|brazilian|nail|eyebrow|lash|skin|makeup|bridal|wedding|updo|styling|trim|shampoo|condition|keratin)/i.test(serviceName);
-          if (isService) {
-            services.push({ name: serviceName.slice(0, 160), price: price[0] });
-          }
-        }
-      }
-    }
-  }
-  
-  // Second pass: look for service lists and individual service items
-  const nodes = Array.from(
-    doc.querySelectorAll("ul li, ol li, .service, .pricing, .menu-item, .service-item, div[class*='service'], div[class*='price'], p"),
-  );
-  
-  for (const el of nodes) {
-    const t = (el.textContent || "").replace(/\s+/g, " ").trim();
-    if (!t || t.length < 3 || t.length > 200) continue;
-    
-    // Skip phone numbers completely
-    const isPhoneNumber = /(\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(t);
-    if (isPhoneNumber) continue;
-    
-    // Skip common non-service content
-    const isNotService = /(about|contact|location|hours|phone|email|address|copyright|privacy|terms|policy|home|menu|nav|header|footer|sidebar|social|follow|like|share|subscribe|newsletter|book|appointment|call|click|here|more|info|information|learn|read|view|see|all|services|treatments|packages|specials|offers|deals|discounts|promotions|new|latest|coming|soon|available|now|today|tomorrow|weekend|holiday|season|summer|winter|spring|fall|autumn|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|testimonials|testimonial|review|reviews|custom text|love is in the hair)/i.test(t);
-    if (isNotService) continue;
-    
-    const price = t.match(/[$£€]\s?\d{1,4}(\.\d{2})?/);
-    
-    // Core service detection - be more specific
-    const hasCoreService = /(haircut|hair cut|cut|color|colour|balayage|foil|highlight|lowlight|style|styling|perm|treatment|massage|facial|wax|waxing|thread|threading|manicure|mani|pedicure|pedi|consultation|consult|package|blowout|blow dry|toner|gloss|brazilian|keratin|botox|filler|microneedling|dermaplaning|chemical peel|cleansing|updo|trim|shampoo|condition|eyebrow|lash|makeup|bridal)/i.test(t);
-    
-    // Also check if element has service-related class names or IDs
-    const className = el.className || "";
-    const id = el.id || "";
-    const hasServiceClass = /(service|price|menu|offering|treatment|package)/i.test(className + " " + id);
-    
-    if (price && (hasCoreService || hasServiceClass)) {
-      const name = t.replace(/[$£€]\s?\d{1,4}(\.\d{2})?/g, "").trim();
-      if (name.length > 2 && name.length < 100) {
-        services.push({ name: name.slice(0, 160), price: price[0] });
-      }
-    }
-    // Look for services without explicit pricing, but be more restrictive
-    else if (hasCoreService && t.length > 5 && t.length < 80 && !price) {
-      // Additional filtering for quality
-      const hasQualityIndicators = /\b(cut|color|style|treatment|service|package)\b/i.test(t);
-      if (hasQualityIndicators) {
-        services.push({ name: t.slice(0, 160) });
-      }
-    }
-  }
-  
-  // Third pass: look for contextual pricing (price near service name)
-  const allText = pageText;
-  const contextLines = allText.split(/[\r\n]+/).filter(line => line.trim().length > 5);
-  
-  for (let i = 0; i < contextLines.length; i++) {
-    const line = contextLines[i].trim();
-    const nextLine = i + 1 < contextLines.length ? contextLines[i + 1].trim() : "";
-    const prevLine = i > 0 ? contextLines[i - 1].trim() : "";
-    
-    // Look for service names followed by prices on next line or same line
-    const hasCoreService = /(haircut|hair cut|cut|color|colour|balayage|foil|highlight|lowlight|style|styling|perm|treatment|massage|facial|wax|waxing|thread|threading|manicure|mani|pedicure|pedi|consultation|consult|package|blowout|blow dry|toner|gloss|brazilian|keratin|botox|filler|microneedling|dermaplaning|chemical peel|cleansing|updo|trim|shampoo|condition|eyebrow|lash|makeup|bridal)/i.test(line);
-    
-    if (hasCoreService && line.length > 5 && line.length < 100) {
-      const priceInLine = line.match(/[$£€]\s?\d{1,4}(\.\d{2})?/);
-      const priceInNext = nextLine.match(/[$£€]\s?\d{1,4}(\.\d{2})?/);
-      const priceInPrev = prevLine.match(/[$£€]\s?\d{1,4}(\.\d{2})?/);
-      
-      if (priceInLine) {
-        const name = line.replace(/[$£€]\s?\d{1,4}(\.\d{2})?/g, "").trim();
-        if (name.length > 2) {
-          services.push({ name: name.slice(0, 160), price: priceInLine[0] });
-        }
-      } else if (priceInNext && nextLine.length < 50) {
-        services.push({ name: line.slice(0, 160), price: priceInNext[0] });
-      } else if (priceInPrev && prevLine.length < 50) {
-        services.push({ name: line.slice(0, 160), price: priceInPrev[0] });
-      }
-    }
-  }
-  const uniq = new Map<string, { name: string; price?: string }>();
-  for (const s of services) uniq.set((s.name + "|" + (s.price || "")).toLowerCase(), s);
-  return {
-    phone,
-    email,
-    address,
-    business_hours: hours,
-    services: Array.from(uniq.values()),
-  };
-}
-
-const corsHeaders = {
+const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Initialize clients
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const openaiKey = Deno.env.get('OPENAI_API_KEY');
+
+if (!supabaseUrl || !supabaseServiceKey || !openaiKey) {
+  throw new Error('Missing required environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// Utility functions
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+
+function isAllowedHost(url: string, baseUrl: string, options: Required<CrawlOptions>): boolean {
+  try {
+    const urlObj = new URL(url);
+    const baseObj = new URL(baseUrl);
+    
+    // Check booking providers
+    if (options.includeBookingProviders && BOOKING_HOSTS.has(urlObj.hostname)) {
+      return true;
+    }
+    
+    // Check extra allowed hosts
+    if (options.extraAllowedHosts.includes(urlObj.hostname)) {
+      return true;
+    }
+    
+    // Check same domain or subdomain
+    if (options.includeSubdomains) {
+      return urlObj.hostname === baseObj.hostname || urlObj.hostname.endsWith('.' + baseObj.hostname);
+    }
+    
+    return urlObj.hostname === baseObj.hostname;
+  } catch {
+    return false;
+  }
+}
+
+function shouldCrawlUrl(url: string, options: Required<CrawlOptions>): boolean {
+  // Check deny patterns
+  for (const pattern of options.denyPatterns) {
+    if (new RegExp(pattern, 'i').test(url)) {
+      return false;
+    }
+  }
+  
+  // Check allow patterns (if any specified)
+  if (options.allowPatterns.length > 0) {
+    return options.allowPatterns.some(pattern => 
+      new RegExp(pattern, 'i').test(url)
+    );
+  }
+  
+  return true;
+}
+
+async function fetchWithRetry(url: string, retries = 3): Promise<string> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; AI-Receptionist-Bot/1.0)',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      return await response.text();
+    } catch (error) {
+      console.log(`Fetch attempt ${i + 1} failed for ${url}:`, error.message);
+      if (i === retries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+    }
+  }
+  throw new Error('All fetch attempts failed');
+}
+
+function extractLinksFromHtml(html: string, baseUrl: string): string[] {
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const links: string[] = [];
+    
+    // Extract from anchor tags
+    const anchors = doc.querySelectorAll('a[href]');
+    for (const anchor of Array.from(anchors)) {
+      try {
+        const href = anchor.getAttribute('href');
+        if (href) {
+          const absoluteUrl = new URL(href, baseUrl).toString();
+          links.push(absoluteUrl);
+        }
+      } catch {
+        // Skip invalid URLs
+      }
+    }
+    
+    // Extract from iframes (booking widgets)
+    const iframes = doc.querySelectorAll('iframe[src]');
+    for (const iframe of Array.from(iframes)) {
+      try {
+        const src = iframe.getAttribute('src');
+        if (src) {
+          const absoluteUrl = new URL(src, baseUrl).toString();
+          links.push(absoluteUrl);
+        }
+      } catch {
+        // Skip invalid URLs
+      }
+    }
+    
+    return [...new Set(links)]; // Remove duplicates
+  } catch (error) {
+    console.error('Error extracting links:', error);
+    return [];
+  }
+}
+
+async function callOpenAI(prompt: string, systemPrompt: string): Promise<any> {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.choices?.[0]?.message?.content) {
+      throw new Error('Invalid response from OpenAI');
+    }
+
+    return JSON.parse(data.choices[0].message.content);
+  } catch (error) {
+    console.error('OpenAI API call failed:', error);
+    throw error;
+  }
+}
+
+async function extractBusinessInfoWithAI(htmlContent: string, url: string): Promise<ExtractedBusinessInfo> {
+  const systemPrompt = `You are an AI assistant that extracts business information from website content. 
+Extract the following information and return it as valid JSON:
+
+{
+  "name": "Business name",
+  "phone": "Phone number in format (xxx) xxx-xxxx",
+  "email": "Email address",
+  "address": "Full address",
+  "website": "Website URL",
+  "description": "Brief business description",
+  "services": [
+    {
+      "name": "Service name",
+      "description": "Service description",
+      "price": "Price as number or string",
+      "duration": "Duration in minutes as number",
+      "category": "Service category"
+    }
+  ],
+  "businessHours": [
+    {
+      "day": "Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday",
+      "opens": "HH:MM AM/PM",
+      "closes": "HH:MM AM/PM",
+      "isClosed": false
+    }
+  ]
+}
+
+Rules:
+- Extract only factual information present in the content
+- For services, look for pricing, treatments, packages, menus
+- For hours, look for operating hours, business hours, store hours
+- Use null for missing information
+- Ensure valid JSON format
+- Be conservative - only extract clear, unambiguous information`;
+
+  const prompt = `Extract business information from this website content:
+
+URL: ${url}
+
+Content:
+${htmlContent.slice(0, 8000)}...`;
+
+  try {
+    return await callOpenAI(prompt, systemPrompt);
+  } catch (error) {
+    console.error('AI extraction failed:', error);
+    return {
+      services: [],
+      businessHours: [],
+    };
+  }
+}
+
+function extractStructuredData(html: string): Partial<ExtractedBusinessInfo> {
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+    
+    for (const script of Array.from(scripts)) {
+      try {
+        const data = JSON.parse(script.textContent || '');
+        
+        if (data['@type'] === 'LocalBusiness' || data['@type'] === 'Organization') {
+          const extracted: Partial<ExtractedBusinessInfo> = {
+            name: data.name,
+            phone: data.telephone,
+            email: data.email,
+            address: typeof data.address === 'string' ? data.address : 
+                    data.address ? `${data.address.streetAddress || ''} ${data.address.addressLocality || ''} ${data.address.addressRegion || ''} ${data.address.postalCode || ''}`.trim() : undefined,
+            website: data.url,
+            description: data.description,
+            services: [],
+            businessHours: [],
+          };
+          
+          // Extract opening hours
+          if (data.openingHours || data.openingHoursSpecification) {
+            const hours = data.openingHours || data.openingHoursSpecification;
+            if (Array.isArray(hours)) {
+              extracted.businessHours = hours.map((hour: any) => ({
+                day: hour.dayOfWeek || hour.days,
+                opens: hour.opens,
+                closes: hour.closes,
+                isClosed: false
+              })).filter(h => h.day && h.opens && h.closes);
+            }
+          }
+          
+          return extracted;
+        }
+      } catch (error) {
+        console.log('Error parsing structured data:', error);
+      }
+    }
+    
+    return { services: [], businessHours: [] };
+  } catch (error) {
+    console.error('Error extracting structured data:', error);
+    return { services: [], businessHours: [] };
+  }
+}
+
+async function crawlWebsite(startUrl: string, options: Required<CrawlOptions>): Promise<{ pages: Array<{ url: string; content: string }>, totalPages: number }> {
+  const visited = new Set<string>();
+  const toVisit: Array<{ url: string; depth: number }> = [{ url: startUrl, depth: 0 }];
+  const pages: Array<{ url: string; content: string }> = [];
+  
+  console.log(`Starting crawl of ${startUrl} with options:`, options);
+  
+  while (toVisit.length > 0 && pages.length < options.maxPages) {
+    const { url, depth } = toVisit.shift()!;
+    
+    if (visited.has(url) || depth > options.maxDepth) {
+      continue;
+    }
+    
+    visited.add(url);
+    
+    try {
+      console.log(`Crawling (depth ${depth}): ${url}`);
+      
+      const html = await fetchWithRetry(url);
+      pages.push({ url, content: html });
+      
+      // Extract links for next level
+      if (depth < options.maxDepth) {
+        const links = extractLinksFromHtml(html, url);
+        
+        for (const link of links) {
+          const normalizedLink = normalizeUrl(link);
+          
+          if (!visited.has(normalizedLink) && 
+              isAllowedHost(normalizedLink, startUrl, options) &&
+              shouldCrawlUrl(normalizedLink, options)) {
+            toVisit.push({ url: normalizedLink, depth: depth + 1 });
+          }
+        }
+      }
+      
+      // Rate limiting
+      if (options.rateLimitMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, options.rateLimitMs));
+      }
+      
+    } catch (error) {
+      console.error(`Failed to crawl ${url}:`, error.message);
+    }
+  }
+  
+  console.log(`Crawl completed. Visited ${pages.length} pages out of ${visited.size} discovered URLs.`);
+  return { pages, totalPages: pages.length };
+}
+
+async function saveToDatabase(tenantId: string, businessInfo: ExtractedBusinessInfo, pages: Array<{ url: string; content: string }>) {
+  try {
+    // Save knowledge source
+    const { data: sourceData, error: sourceError } = await supabase
+      .from('knowledge_sources')
+      .insert({
+        tenant_id: tenantId,
+        source_url: pages[0]?.url,
+        title: businessInfo.name || 'Website Content',
+        source_type: 'web',
+        meta: {
+          pages_crawled: pages.length,
+          business_info: businessInfo,
+          extraction_date: new Date().toISOString(),
+        }
+      })
+      .select()
+      .single();
+
+    if (sourceError) {
+      throw new Error(`Failed to save knowledge source: ${sourceError.message}`);
+    }
+
+    // Save business hours
+    if (businessInfo.businessHours?.length > 0) {
+      const hoursToInsert = businessInfo.businessHours.map(hour => ({
+        tenant_id: tenantId,
+        dow: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(hour.day.toLowerCase()),
+        open_time: hour.opens,
+        close_time: hour.closes,
+      })).filter(h => h.dow >= 0);
+
+      if (hoursToInsert.length > 0) {
+        // Delete existing hours first
+        await supabase.from('business_hours').delete().eq('tenant_id', tenantId);
+        
+        const { error: hoursError } = await supabase
+          .from('business_hours')
+          .insert(hoursToInsert);
+
+        if (hoursError) {
+          console.error('Failed to save business hours:', hoursError);
+        }
+      }
+    }
+
+    // Save services
+    if (businessInfo.services?.length > 0) {
+      const servicesToInsert = businessInfo.services.map(service => ({
+        tenant_id: tenantId,
+        name: service.name,
+        price: typeof service.price === 'number' ? service.price : parseFloat(String(service.price || '0').replace(/[^\d.]/g, '')) || null,
+        duration_minutes: service.duration || 30,
+      }));
+
+      const { error: servicesError } = await supabase
+        .from('services')
+        .upsert(servicesToInsert, { onConflict: 'tenant_id,name' });
+
+      if (servicesError) {
+        console.error('Failed to save services:', servicesError);
+      }
+    }
+
+    // Generate and save quick answers
+    const quickAnswers = [
+      {
+        tenant_id: tenantId,
+        question_type: 'hours',
+        question_pattern: '(hours|open|close|time|when)',
+        answer: businessInfo.businessHours?.length > 0 
+          ? businessInfo.businessHours.map(h => `${h.day}: ${h.opens} - ${h.closes}`).join(', ')
+          : 'Please contact us for our current business hours.',
+        confidence: 0.9
+      },
+      {
+        tenant_id: tenantId,
+        question_type: 'services',
+        question_pattern: '(service|treatment|price|cost|menu)',
+        answer: businessInfo.services?.length > 0
+          ? `We offer: ${businessInfo.services.map(s => s.name + (s.price ? ` ($${s.price})` : '')).join(', ')}`
+          : 'Please contact us to learn about our services.',
+        confidence: 0.8
+      },
+      {
+        tenant_id: tenantId,
+        question_type: 'contact',
+        question_pattern: '(phone|call|contact|number)',
+        answer: businessInfo.phone || 'Please use the contact form on our website.',
+        confidence: 0.9
+      }
+    ];
+
+    // Delete existing quick answers
+    await supabase.from('business_quick_answers').delete().eq('tenant_id', tenantId);
+    
+    const { error: answersError } = await supabase
+      .from('business_quick_answers')
+      .insert(quickAnswers);
+
+    if (answersError) {
+      console.error('Failed to save quick answers:', answersError);
+    }
+
+    console.log(`Successfully saved data for tenant ${tenantId}`);
+    return sourceData;
+
+  } catch (error) {
+    console.error('Database save error:', error);
+    throw error;
+  }
+}
+
+// Main handler
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: CORS_HEADERS });
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
   }
 
   try {
-    const payload = (await req.json()) as Payload;
-    const opts = { ...DEFAULTS, ...(payload.options || {}) };
-    const start = new URL(payload.url);
-    const root = eTLDPlusOne(start.hostname);
+    const payload: CrawlPayload = await req.json();
+    const { tenantId, url, options = {} } = payload;
 
-    const sb = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const visited = new Set<string>();
-    const queue: Array<{ u: string; depth: number }> = [
-      { u: canonical(start.toString()), depth: 0 },
-    ];
-    const discovered: string[] = [];
-
-    // preload sitemaps
-    if (opts.followSitemaps) {
-      const sm = await parseSitemaps(start.toString());
-      for (const u of sm.slice(0, 300)) {
-        const cu = canonical(u);
-        if (cu && shouldFollowUrl(cu, root, opts)) {
-          queue.push({ u: cu, depth: 0 });
-        }
-      }
+    if (!tenantId || !url) {
+      return new Response(JSON.stringify({ error: 'Missing tenantId or url' }), {
+        status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
-    const robotsTxt = opts.respectRobots ? await fetchRobots(start) : "";
+    const finalOptions = { ...DEFAULTS, ...options };
+    
+    console.log(`Starting extraction for tenant ${tenantId} from ${url}`);
 
-    while (queue.length && discovered.length < opts.maxPages) {
-      const { u, depth } = queue.shift()!;
-      if (!u || visited.has(u)) continue;
-      const uObj = new URL(u);
-
-      // skip disallowed
-      if (
-        opts.respectRobots &&
-        robotsDisallow(robotsTxt, uObj.pathname) &&
-        sameSiteOrSub(root, uObj.hostname, opts.includeSubdomains)
-      ) {
-        continue;
-      }
-      if (!shouldFollowUrl(u, root, opts)) continue;
-
-      visited.add(u);
-      await sleep(opts.rateLimitMs);
-
-      let html = "";
-      let ok = false;
-      try {
-        const res = await fetchText(u);
-        html = res.text;
-        ok = res.ok;
-      } catch {
-        continue;
-      }
-      if (!ok || !html) continue;
-
-      discovered.push(u);
-
-      const dom = new DOMParser().parseFromString(html, "text/html");
-      const title =
-        dom.querySelector("title")?.textContent?.trim() || uObj.hostname;
-
-      const schemaBits = extractFromSchema(dom);
-      const pageText = cleanBodyText(dom);
-      const chunks = splitChunks(pageText);
-      const heur = heuristicExtract(dom, pageText);
-
-      const phone = schemaBits.phone || heur.phone;
-      const email = schemaBits.email || heur.email;
-      const address = schemaBits.address || heur.address;
-      const services =
-        schemaBits.services?.length > 0 ? schemaBits.services : heur.services;
-      const business_hours =
-        schemaBits.business_hours?.length > 0
-          ? schemaBits.business_hours
-          : heur.business_hours;
-
-      const { data: srcRow, error: sErr } = await sb
-        .from("knowledge_sources")
-        .insert({
-          tenant_id: payload.tenantId,
-          source_url: u,
-          title,
-          meta: {
-            crawl_method: "crawler",
-            description:
-              dom
-                .querySelector('meta[name="description"]')
-                ?.getAttribute("content") || "",
-            business_info: {
-              source_url: u,
-              phone,
-              email,
-              address,
-              services,
-              business_hours,
-            },
-          },
-        })
-        .select("id")
-        .single();
-      if (sErr) continue;
-
-      if (chunks.length) {
-        const rows = chunks.slice(0, 60).map((c, i) => ({
-          tenant_id: payload.tenantId,
-          source_id: srcRow.id,
-          content: c,
-          url: u,
-          position: i,
-        }));
-        await sb.from("knowledge_chunks").insert(rows);
-      }
-
-      if (phone) {
-        await sb.from("business_quick_answers").upsert(
-          {
-            tenant_id: payload.tenantId,
-            question_type: "phone",
-            answer: phone,
-          },
-          { onConflict: "tenant_id,question_type" },
-        );
-      }
-      if (email) {
-        await sb.from("business_quick_answers").upsert(
-          {
-            tenant_id: payload.tenantId,
-            question_type: "email",
-            answer: email,
-          },
-          { onConflict: "tenant_id,question_type" },
-        );
-      }
-      if (business_hours?.length) {
-        const hoursText = business_hours
-          .map((h: any) =>
-            h.day && h.opens && h.closes
-              ? `${h.day}: ${h.opens}-${h.closes}`
-              : String(h.day || ""),
-          )
-          .filter(Boolean)
-          .join(" | ");
-        if (hoursText) {
-          await sb.from("business_quick_answers").upsert(
-            {
-              tenant_id: payload.tenantId,
-              question_type: "hours",
-              answer: hoursText,
-            },
-            { onConflict: "tenant_id,question_type" },
-          );
-        }
-      }
-
-      // follow next links
-      if (depth < opts.maxDepth) {
-        const candidates: string[] = [];
-        dom.querySelectorAll("a[href]").forEach((a: any) => {
-          const h = a.getAttribute("href") || "";
-          if (!h || h.startsWith("mailto:") || h.startsWith("tel:")) return;
-          candidates.push(h);
-        });
-        dom.querySelectorAll("iframe[src]").forEach((f: any) => {
-          const s = f.getAttribute("src") || "";
-          if (s) candidates.push(s);
-        });
-        for (const href of candidates) {
-          try {
-            const next = canonical(new URL(href, u).toString());
-            if (!next || visited.has(next)) continue;
-            if (!shouldFollowUrl(next, root, opts)) continue;
-            queue.push({ u: next, depth: depth + 1 });
-          } catch {}
-        }
-      }
+    // Step 1: Crawl the website
+    const { pages, totalPages } = await crawlWebsite(url, finalOptions);
+    
+    if (pages.length === 0) {
+      return new Response(JSON.stringify({ error: 'No pages could be crawled' }), {
+        status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Choose best business_info from recent pages (prefers more services/hours)
-    const { data: rec } = await sb
-      .from("knowledge_sources")
-      .select("meta")
-      .eq("tenant_id", payload.tenantId)
-      .order("created_at", { ascending: false })
-      .limit(40);
+    // Step 2: Extract business information using AI
+    const combinedContent = pages.map(p => p.content).join('\n\n').slice(0, 15000);
+    const structuredData = extractStructuredData(pages[0].content);
+    const aiExtracted = await extractBusinessInfoWithAI(combinedContent, url);
+    
+    // Merge structured data with AI extraction
+    const businessInfo: ExtractedBusinessInfo = {
+      name: structuredData.name || aiExtracted.name,
+      phone: structuredData.phone || aiExtracted.phone,
+      email: structuredData.email || aiExtracted.email,
+      address: structuredData.address || aiExtracted.address,
+      website: structuredData.website || aiExtracted.website || url,
+      description: structuredData.description || aiExtracted.description,
+      services: [...(structuredData.services || []), ...(aiExtracted.services || [])],
+      businessHours: [...(structuredData.businessHours || []), ...(aiExtracted.businessHours || [])],
+    };
 
-    let best: any = null;
-    for (const row of rec || []) {
-      const bi = (row.meta as any)?.business_info;
-      if (!bi) continue;
-      const score =
-        (bi.services?.length ? 1 : 0) +
-        (bi.business_hours?.length ? 1 : 0) +
-        (bi.phone ? 0.25 : 0) +
-        (bi.email ? 0.25 : 0);
-      if (!best || score > best._score) {
-        best = { ...bi, _score: score };
+    // Step 3: Save to database
+    const sourceData = await saveToDatabase(tenantId, businessInfo, pages);
+
+    // Step 4: Return results
+    const response = {
+      success: true,
+      data: {
+        sourceId: sourceData.id,
+        businessInfo,
+        pagesCrawled: totalPages,
+        extractedServices: businessInfo.services?.length || 0,
+        extractedHours: businessInfo.businessHours?.length || 0,
       }
-    }
-    if (best) delete best._score;
+    };
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        pagesIndexed: discovered.length,
-        business_info: best || null,
-      }),
-      {
-        headers: { ...corsHeaders, "content-type": "application/json" },
-      },
-    );
-  } catch (e) {
-    console.error('Crawl-ingest error:', e);
-    return new Response(
-      JSON.stringify({ ok: false, error: String(e) }),
-      { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } },
-    );
+    return new Response(JSON.stringify(response), {
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    console.error('Crawl-ingest error:', error);
+    
+    return new Response(JSON.stringify({ 
+      error: error.message || 'Internal server error',
+      details: error.stack?.split('\n').slice(0, 5).join('\n')
+    }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
   }
 });
