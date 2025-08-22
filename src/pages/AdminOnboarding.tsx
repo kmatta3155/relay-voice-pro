@@ -22,10 +22,11 @@ import {
   Upload,
   FileText
 } from "lucide-react";
-import { getDocument, GlobalWorkerOptions, version as pdfjsVersion } from "pdfjs-dist";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-// Configure PDF.js worker from CDN for reliable client-side parsing
-GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`;
+// Use a locally bundled worker for reliable client-side parsing in all environments
+GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface Service {
   name: string;
