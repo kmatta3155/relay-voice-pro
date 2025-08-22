@@ -364,15 +364,15 @@ serve(async (req) => {
   }
 
   try {
-    const { url, tenant_id, options = {} }: { 
-      url: string; 
-      tenant_id: string; 
-      options?: CrawlOptions 
-    } = await req.json();
+    const body = await req.json();
+    console.log('Received body:', JSON.stringify(body, null, 2));
+    
+    const { url, tenant_id, tenantId, options = {} } = body;
+    const finalTenantId = tenant_id || tenantId;
     
     console.log(`Starting extraction for ${url} with options:`, options);
     
-    if (!url || !tenant_id) {
+    if (!url || !finalTenantId) {
       throw new Error('URL and tenant_id are required');
     }
 
@@ -426,7 +426,7 @@ serve(async (req) => {
     console.log(`Final results: ${uniqueServices.length} services, ${uniqueHours.length} hours entries`);
 
     // Save to database
-    await saveToDatabase(tenant_id, uniqueServices, uniqueHours);
+    await saveToDatabase(finalTenantId, uniqueServices, uniqueHours);
 
     const result: ExtractionResult = {
       services: uniqueServices,
