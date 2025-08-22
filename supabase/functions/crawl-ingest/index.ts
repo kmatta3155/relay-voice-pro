@@ -289,6 +289,79 @@ function extractStructuredData(html: string): { services: ExtractedService[]; ho
   return { services, hours };
 }
 
+// Deterministic HTML parsing for services (tables/lists) from service/pricing pages
+function extractServicesProgrammatically(content: string): ExtractedService[] {
+  const services: ExtractedService[] = [];
+  const pageRegex = /=== PAGE\s+\d+:\s+([^\n]+)\s+===\n([\s\S]*?)(?=\n=== PAGE|\s*$)/g;
+  const candidateUrlPattern = /(service|pricing|menu|treatment)/i;
+
+  const clean = (html: string) => html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const pushService = (name: string, priceText?: string) => {
+    const nameClean = name.trim().replace(/\s{2,}/g, ' ');
+    if (!nameClean || nameClean.length < 2) return;
+    let price: string | undefined;
+    if (priceText) {
+      const numMatch = priceText.match(/(\d{1,4}(?:\.\d{1,2})?)/);
+      if (numMatch) price = `$${numMatch[1]}`;
+    }
+    if (services.find(s => s.name.toLowerCase() === nameClean.toLowerCase())) return;
+    services.push({ name: nameClean, price });
+  };
+
+  let m: RegExpExecArray | null;
+  while ((m = pageRegex.exec(content)) !== null) {
+    const url = m[1];
+    const html = m[2];
+    if (!candidateUrlPattern.test(url)) continue;
+
+    // Table rows: first cell = service name, any following numeric cell = price (take first/min)
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let r: RegExpExecArray | null;
+    while ((r = rowRegex.exec(html)) !== null) {
+      const rowHtml = r[1];
+      const cells = [...rowHtml.matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi)].map(c => clean(c[1]));
+      if (cells.length >= 2) {
+        const name = cells[0];
+        const priceCell = cells.slice(1).find(c => /\$?\d/.test(c));
+        if (name && priceCell) {
+          pushService(name, priceCell);
+          continue;
+        }
+      }
+    }
+
+    // List items like: "Root Color $53+"
+    const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+    let li: RegExpExecArray | null;
+    while ((li = liRegex.exec(html)) !== null) {
+      const text = clean(li[1]);
+      const match = text.match(/^(.{2,100}?)[\s:,-]*\s*(\$?\d[\d\.\+]*)(?:\s|$)/);
+      if (match) {
+        pushService(match[1], match[2]);
+      }
+    }
+
+    // Fallback: plain text lines containing name + price
+    const lineRegex = /([A-Za-z][A-Za-z0-9\s\(\)\/&\.\-]{2,80})\s+(?:–|-|:)?\s*(\$?\d[\d\.\+]*)(?=\s|$)/g;
+    let lineMatch: RegExpExecArray | null;
+    const text = clean(html);
+    while ((lineMatch = lineRegex.exec(text)) !== null) {
+      pushService(lineMatch[1], lineMatch[2]);
+    }
+  }
+
+  console.log(`Deterministic service extraction found ${services.length} services`);
+  return services;
+}
+
 async function extractWithAI(content: string): Promise<{ services: ExtractedService[]; hours: ExtractedHours[] }> {
   if (!OPENAI_API_KEY) {
     console.log('No OpenAI API key available, skipping AI extraction');
@@ -485,19 +558,20 @@ async function saveToDatabase(tenantId: string, services: ExtractedService[], ho
   
   // Save services
   for (const service of services) {
+    const priceNumber = service.price ? Number(String(service.price).replace(/[^0-9.]/g, '')) : null;
+    const duration = service.duration_minutes ?? 30;
     const { error } = await supabase
       .from('services')
       .upsert({
         tenant_id: tenantId,
         name: service.name,
         description: service.description,
-        price: service.price,
-        duration_minutes: service.duration_minutes,
+        price: priceNumber,
+        duration_minutes: duration,
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'tenant_id,name'
       });
-    
     if (error) {
       console.error('Failed to save service:', service.name, error);
     }
@@ -505,13 +579,15 @@ async function saveToDatabase(tenantId: string, services: ExtractedService[], ho
   
   // Save business hours
   for (const hour of hours) {
+    const open = hour.is_closed ? '00:00' : (hour.open_time ? normalizeTime(hour.open_time) : '09:00 AM');
+    const close = hour.is_closed ? '00:00' : (hour.close_time ? normalizeTime(hour.close_time) : '05:00 PM');
     const { error } = await supabase
       .from('business_hours')
       .upsert({
         tenant_id: tenantId,
         dow: mapDayToNumber(hour.day),
-        open_time: hour.open_time ? normalizeTime(hour.open_time) : null,
-        close_time: hour.close_time ? normalizeTime(hour.close_time) : null,
+        open_time: open,
+        close_time: close,
         is_closed: hour.is_closed,
         updated_at: new Date().toISOString()
       }, {
@@ -573,11 +649,13 @@ serve(async (req) => {
 
     // Extract data using multiple methods
     const structuredData = extractStructuredData(content);
+    const deterministicServices = extractServicesProgrammatically(content);
     const aiData = await extractWithAI(content);
     
     // Combine and deduplicate results
-    const allServices = [...structuredData.services, ...aiData.services];
+    const allServices = [...deterministicServices, ...structuredData.services, ...aiData.services];
     const allHours = [...structuredData.hours, ...aiData.hours];
+    extraction_method = `${extraction_method}+deterministic+ai`;
     
     // Deduplicate services by name
     const uniqueServices = allServices.filter((service, index, arr) => 

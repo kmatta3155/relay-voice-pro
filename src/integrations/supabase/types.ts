@@ -153,20 +153,26 @@ export type Database = {
         Row: {
           close_time: string
           dow: number
+          is_closed: boolean | null
           open_time: string
           tenant_id: string
+          updated_at: string | null
         }
         Insert: {
           close_time: string
           dow: number
+          is_closed?: boolean | null
           open_time: string
           tenant_id: string
+          updated_at?: string | null
         }
         Update: {
           close_time?: string
           dow?: number
+          is_closed?: boolean | null
           open_time?: string
           tenant_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -673,29 +679,35 @@ export type Database = {
         Row: {
           active: boolean | null
           created_at: string | null
+          description: string | null
           duration_minutes: number
           id: string
           name: string
           price: number | null
           tenant_id: string
+          updated_at: string | null
         }
         Insert: {
           active?: boolean | null
           created_at?: string | null
+          description?: string | null
           duration_minutes?: number
           id?: string
           name: string
           price?: number | null
           tenant_id: string
+          updated_at?: string | null
         }
         Update: {
           active?: boolean | null
           created_at?: string | null
+          description?: string | null
           duration_minutes?: number
           id?: string
           name?: string
           price?: number | null
           tenant_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
