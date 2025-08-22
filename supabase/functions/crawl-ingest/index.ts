@@ -359,7 +359,17 @@ function heuristicExtract(doc: any, pageText: string) {
   };
 }
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
     const payload = (await req.json()) as Payload;
     const opts = { ...DEFAULTS, ...(payload.options || {}) };
@@ -571,13 +581,14 @@ serve(async (req) => {
         business_info: best || null,
       }),
       {
-        headers: { "content-type": "application/json" },
+        headers: { ...corsHeaders, "content-type": "application/json" },
       },
     );
   } catch (e) {
+    console.error('Crawl-ingest error:', e);
     return new Response(
       JSON.stringify({ ok: false, error: String(e) }),
-      { status: 400 },
+      { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } },
     );
   }
 });
