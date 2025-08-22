@@ -22,6 +22,10 @@ import {
   Upload,
   FileText
 } from "lucide-react";
+import { getDocument, GlobalWorkerOptions, version as pdfjsVersion } from "pdfjs-dist";
+
+// Configure PDF.js worker from CDN for reliable client-side parsing
+GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`;
 
 interface Service {
   name: string;
@@ -90,27 +94,42 @@ export default function AdminOnboarding() {
       if (file.type === "text/plain") {
         text = await file.text();
       } else if (file.type === "application/pdf") {
-        // For PDFs, we'll extract text using Supabase edge function
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const { data, error } = await supabase.functions.invoke('pdf-extract', {
-          body: formData
-        });
-        
-        if (error) {
-          throw new Error(error.message || 'Failed to extract text from PDF');
-        }
-        
-        text = data.text;
-        
-        // Show additional message if it's a fallback response
-        if (data.message) {
-          toast({
-            title: "PDF Processed",
-            description: data.message,
-            variant: "default",
+        try {
+          setExtractionProgress("Parsing PDF pages...");
+          const arrayBuffer = await file.arrayBuffer();
+          const loadingTask = getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
+
+          let allText = "";
+          for (let i = 1; i <= pdf.numPages; i++) {
+            setExtractionProgress(`Extracting text from page ${i}/${pdf.numPages}...`);
+            const page = await pdf.getPage(i);
+            const textContent: any = await page.getTextContent();
+            const pageText = (textContent.items || [])
+              .map((item: any) => (typeof item.str === "string" ? item.str : ""))
+              .join(" ");
+            allText += pageText + "\n";
+          }
+
+          text = allText.trim();
+        } catch (e) {
+          console.warn("Client-side PDF parse failed, falling back to edge function:", e);
+          const formData = new FormData();
+          formData.append('file', file);
+          const { data, error } = await supabase.functions.invoke('pdf-extract', {
+            body: formData
           });
+          if (error) {
+            throw new Error(error.message || 'Failed to extract text from PDF');
+          }
+          text = data.text;
+          if (data.message) {
+            toast({
+              title: "PDF Processed",
+              description: data.message,
+              variant: "default",
+            });
+          }
         }
       } else {
         // For DOC/DOCX files, we'd need additional handling
