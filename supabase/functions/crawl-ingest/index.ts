@@ -44,8 +44,12 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const openaiKey = Deno.env.get('OPENAI_API_KEY');
 
-if (!supabaseUrl || !supabaseServiceKey || !openaiKey) {
-  console.error('Missing environment variables');
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing required environment variables');
+}
+
+if (!openaiKey) {
+  console.log('OpenAI API key not found, will use fallback extraction');
 }
 
 const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
@@ -71,8 +75,78 @@ async function fetchWebsite(url: string): Promise<string> {
   }
 }
 
+function extractStructuredData(htmlContent: string): Partial<ExtractedBusinessInfo> {
+  const result: Partial<ExtractedBusinessInfo> = {};
+  
+  // Extract JSON-LD structured data
+  const jsonLdMatches = htmlContent.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis);
+  if (jsonLdMatches) {
+    for (const match of jsonLdMatches) {
+      try {
+        const jsonLdContent = match.replace(/<script[^>]*>|<\/script>/gi, '').trim();
+        const jsonLd = JSON.parse(jsonLdContent);
+        
+        if (jsonLd['@type'] === 'LocalBusiness' || jsonLd['@type'] === 'Organization') {
+          if (jsonLd.name) result.name = jsonLd.name;
+          if (jsonLd.telephone) result.phone = jsonLd.telephone;
+          if (jsonLd.email) result.email = jsonLd.email;
+          if (jsonLd.description) result.description = jsonLd.description;
+          
+          if (jsonLd.address) {
+            result.address = typeof jsonLd.address === 'string' ? 
+              jsonLd.address : 
+              `${jsonLd.address.streetAddress || ''} ${jsonLd.address.addressLocality || ''} ${jsonLd.address.addressRegion || ''} ${jsonLd.address.postalCode || ''}`.trim();
+          }
+          
+          if (jsonLd.openingHoursSpecification) {
+            const hours = Array.isArray(jsonLd.openingHoursSpecification) ? 
+              jsonLd.openingHoursSpecification : [jsonLd.openingHoursSpecification];
+            
+            result.businessHours = hours.map((h: any) => ({
+              day: h.dayOfWeek?.replace('https://schema.org/', '') || h.dayOfWeek,
+              opens: h.opens,
+              closes: h.closes,
+              isClosed: false
+            }));
+          }
+        }
+      } catch (e) {
+        console.log('Failed to parse JSON-LD section:', e);
+      }
+    }
+  }
+  
+  // Extract basic info from HTML if not found in structured data
+  if (!result.name) {
+    const titleMatch = htmlContent.match(/<title[^>]*>([^<]+)</i);
+    if (titleMatch) result.name = titleMatch[1].trim().replace(/\s+/g, ' ');
+  }
+  
+  // Extract phone numbers
+  if (!result.phone) {
+    const phoneMatch = htmlContent.match(/(?:tel:|phone:|call:)\s*([+\d\s\-\(\)\.]+)/i) ||
+                     htmlContent.match(/(\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4})/);
+    if (phoneMatch) result.phone = phoneMatch[1].trim();
+  }
+  
+  // Extract email
+  if (!result.email) {
+    const emailMatch = htmlContent.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch) result.email = emailMatch[0];
+  }
+  
+  return result;
+}
+
 async function extractWithAI(htmlContent: string, url: string): Promise<ExtractedBusinessInfo> {
-  const systemPrompt = `You are an AI that extracts business information from website content. 
+  // First try structured data extraction
+  const structuredData = extractStructuredData(htmlContent);
+  console.log('Structured data extracted:', structuredData);
+  
+  // If we have OpenAI API key, enhance with AI
+  if (openaiKey && openaiKey !== 'your-openai-api-key') {
+    try {
+      const systemPrompt = `You are an AI that extracts business information from website content. 
 Extract information and return valid JSON in this exact format:
 
 {
@@ -102,50 +176,71 @@ Extract information and return valid JSON in this exact format:
 
 Only extract factual information. Use null for missing data. Return valid JSON only.`;
 
-  const prompt = `Extract business information from this website:
+      const prompt = `Extract business information from this website:
 
 URL: ${url}
 
 Content:
-${htmlContent.slice(0, 10000)}`;
+${htmlContent.slice(0, 8000)}`;
 
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.1,
-        max_tokens: 2000,
-      }),
-    });
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.1,
+          max_tokens: 2000,
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        
+        if (content) {
+          const aiData = JSON.parse(content);
+          console.log('AI extracted data:', aiData);
+          
+          // Merge AI data with structured data, prioritizing AI data
+          return {
+            name: aiData.name || structuredData.name || 'Business',
+            phone: aiData.phone || structuredData.phone || null,
+            email: aiData.email || structuredData.email || null,
+            address: aiData.address || structuredData.address || null,
+            website: url,
+            description: aiData.description || structuredData.description || 'Business information extracted from website',
+            services: aiData.services || [],
+            businessHours: aiData.businessHours || structuredData.businessHours || []
+          };
+        }
+      } else {
+        console.error(`OpenAI API error: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('AI extraction failed, using structured data only:', error);
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    
-    if (!content) {
-      throw new Error('No content from OpenAI');
-    }
-
-    return JSON.parse(content);
-  } catch (error) {
-    console.error('AI extraction failed:', error);
-    return {
-      services: [],
-      businessHours: [],
-    };
+  } else {
+    console.log('No OpenAI API key, using structured data extraction only');
   }
+  
+  // Fallback to structured data only
+  return {
+    name: structuredData.name || 'Business',
+    phone: structuredData.phone || null,
+    email: structuredData.email || null,
+    address: structuredData.address || null,
+    website: url,
+    description: structuredData.description || 'Business information extracted from website',
+    services: [],
+    businessHours: structuredData.businessHours || []
+  };
 }
 
 async function saveToDatabase(tenantId: string, businessInfo: ExtractedBusinessInfo, url: string) {
