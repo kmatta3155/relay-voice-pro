@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.voice]
 verify_jwt = false
+
+[functions.crawl-ingest]
+verify_jwt = false
