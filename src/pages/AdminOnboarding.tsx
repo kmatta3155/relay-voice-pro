@@ -185,7 +185,12 @@ const analyzeWebsite = async (deepCrawl = false) => {
     console.log('Edge function result:', result);
 
       if (result.error) {
-        throw new Error(result.error.message || 'Analysis failed');
+        console.error('Website analysis error:', result.error);
+        throw new Error('Edge Function returned a non-2xx status code');
+      }
+
+      if (!result.data) {
+        throw new Error('No data returned from analysis');
       }
 
       console.log('Website analysis result:', result.data);
