@@ -121,41 +121,64 @@ export default function AdminOnboarding(){
       clearInterval(progressInterval);
       setExtractionProgress(100);
       
-      // If we got business info, auto-populate hours and services
       if (result?.business_info) {
         setBusinessInfo(result.business_info);
-        
-        // Auto-populate business hours if available
-        if (result.business_info.business_hours) {
+
+        // Auto-populate business hours if available (supports {day, opens, closes} or {day, hours})
+        if (Array.isArray(result.business_info.business_hours)) {
+          const order = ["sun","mon","tue","wed","thu","fri","sat"];
+          const to24h = (t: string) => {
+            const m = t.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+            if (!m) return t;
+            let hh = parseInt(m[1] || "0", 10);
+            const mm = m[2] ? parseInt(m[2], 10) : 0;
+            const ap = (m[3] || "").toLowerCase();
+            if (ap === "pm" && hh < 12) hh += 12;
+            if (ap === "am" && hh === 12) hh = 0;
+            return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+          };
+
           const autoHours = result.business_info.business_hours.map((h: any) => {
-            const day = h.day?.toLowerCase();
-            const dayIndex = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].indexOf(day);
-            if (dayIndex !== -1 && h.hours && h.hours !== "Closed") {
-              const times = h.hours.split(" - ") || h.hours.split("-");
-              if (times.length === 2) {
-                return { dow: dayIndex, open: times[0].trim(), close: times[1].trim() };
+            const dayTok = String(h.day || h.Day || "").toLowerCase().slice(0,3);
+            const dow = Math.max(0, order.indexOf(dayTok));
+            let open = "09:00", close = "17:00";
+            if (h.opens && h.closes) {
+              open = to24h(String(h.opens));
+              close = to24h(String(h.closes));
+            } else if (h.hours && typeof h.hours === "string" && !/closed/i.test(h.hours)) {
+              const parts = h.hours.split(/\s*-\s*|\s*–\s*/);
+              if (parts.length === 2) {
+                open = to24h(parts[0]);
+                close = to24h(parts[1]);
               }
             }
-            return { dow: dayIndex !== -1 ? dayIndex : 0, open: "09:00", close: "17:00" };
+            return { dow, open, close };
           });
-          if (autoHours.length > 0) {
-            setHours(autoHours);
-          }
+          if (autoHours.length) setHours(autoHours);
         }
-        
-        // Auto-populate services if available
-        if (result.business_info.services) {
-          const autoServices = result.business_info.services.map((service: string) => ({
-            name: service,
-            duration_minutes: 30,
-            price: 0 // Will be updated if we can extract pricing
-          }));
-          setServices(autoServices);
+
+        // Auto-populate services if available (supports [string] or [{name, price}])
+        if (Array.isArray(result.business_info.services)) {
+          const autoServices = result.business_info.services
+            .map((s: any) => {
+              const name = typeof s === "string" ? s : s?.name;
+              if (!name) return null;
+              const priceNum = typeof s?.price !== "undefined"
+                ? parseFloat(String(s.price).toString().replace(/[^0-9.]/g, ""))
+                : 0;
+              return {
+                name: String(name).slice(0, 160),
+                duration_minutes: 30,
+                price: isNaN(priceNum) ? 0 : priceNum,
+              };
+            })
+            .filter(Boolean) as Array<{ name: string; duration_minutes: number; price: number }>;
+          if (autoServices.length) setServices(autoServices);
         }
-        
-        toast({ 
-          title: "Knowledge ingested successfully", 
-          description: "Business hours and services have been auto-populated. You can edit them in their respective tabs." 
+
+        toast({
+          title: "Knowledge ingested successfully",
+          description: "Business hours and services have been auto-populated. You can edit them in their respective tabs.",
         });
       }
       
