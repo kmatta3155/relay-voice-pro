@@ -25,9 +25,17 @@ serve(async (req) => {
 
     console.log(`Processing PDF file: ${file.name}, size: ${file.size} bytes`);
 
-    // Convert file to base64 for PDF processing
+    // Convert file to base64 for PDF processing (handle large files)
     const arrayBuffer = await file.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Process in chunks to avoid stack overflow with large files
+    let base64 = '';
+    const chunkSize = 1024;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, i + chunkSize);
+      base64 += btoa(String.fromCharCode.apply(null, Array.from(chunk)));
+    }
 
     // Use a PDF extraction API service or simple text extraction
     // For now, we'll use a basic approach and suggest manual text entry
