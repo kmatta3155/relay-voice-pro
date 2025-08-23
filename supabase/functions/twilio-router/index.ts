@@ -71,6 +71,7 @@ serve(async (req) => {
 
     if (agentError || !agentData) {
       console.log('No ready agent found or agent error:', agentError)
+      console.log('Agent lookup for tenant:', tenantId)
       // If no agent in live mode, just hang up politely
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -83,9 +84,11 @@ serve(async (req) => {
       })
     }
 
+    console.log('Agent found:', agentData)
+
     // Only proceed if agent is in live mode
     if (agentData.mode !== 'live') {
-      console.log('Agent is in simulation mode, not handling live calls')
+      console.log('Agent is in simulation mode, not handling live calls. Mode:', agentData.mode)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Thank you for calling. We're currently unavailable. Please try again later.</Say>
@@ -96,6 +99,8 @@ serve(async (req) => {
         headers: { 'Content-Type': 'text/xml' }
       })
     }
+
+    console.log('Proceeding with live agent connection. Agent mode:', agentData.mode)
 
     // Log the call
     await supabase
