@@ -69,7 +69,6 @@ serve(async (req) => {
       // Wait for session.created then configure session
       console.log('Connected to OpenAI, waiting for session.created')
     }
-    }
 
     openAISocket.onmessage = (event) => {
       try {
