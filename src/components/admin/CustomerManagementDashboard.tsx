@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,11 +39,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
   const [activeTab, setActiveTab] = useState('overview');
   const [showAgentTester, setShowAgentTester] = useState(false);
 
-  useEffect(() => {
-    loadCustomerData();
-  }, [tenantId]);
-
-  const loadCustomerData = async () => {
+  const loadCustomerData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -82,7 +78,11 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId, toast]);
+
+  useEffect(() => {
+    loadCustomerData();
+  }, [loadCustomerData]);
 
   const handleTrainAgent = async () => {
     try {
@@ -205,15 +205,17 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
     }
   };
 
+  // Add error boundary for safety
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading customer data...</span>
       </div>
     );
   }
 
-  if (!customerData) {
+  if (!customerData || !customerData.tenant) {
     return (
       <div className="text-center py-8">
         <p className="text-muted-foreground">Customer data not found</p>
