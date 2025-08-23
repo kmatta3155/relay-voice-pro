@@ -114,31 +114,89 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
         return;
       }
 
-      // Stop any current audio
+      // Stop any current audio first
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current = null;
       }
 
-      const audioDataUrl = `data:audio/mpeg;base64,${data.audioContent}`;
-      const audio = new Audio(audioDataUrl);
-      audio.volume = 0.8;
-      
-      currentAudioRef.current = audio;
-      
-      audio.onended = () => {
-        console.log('🔊 Audio playback completed');
-        setIsSpeaking(false);
-        currentAudioRef.current = null;
-        if (messageId) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId ? { ...msg, isPlaying: false } : msg
-          ));
+      console.log(`✅ Audio content received: ${data.audioContent.length} characters`);
+
+      // Create audio with proper error handling and format validation
+      try {
+        // Validate base64 format
+        if (!data.audioContent || typeof data.audioContent !== 'string') {
+          throw new Error('Invalid audio content format');
         }
-      };
-      
-      audio.onerror = (e) => {
-        console.error('Audio playback error:', e);
+
+        const audioDataUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+        const audio = new Audio();
+        
+        // Set up all event handlers before loading
+        audio.onerror = (e) => {
+          console.error('Audio load/play error:', e, audio.error);
+          setIsSpeaking(false);
+          currentAudioRef.current = null;
+          if (messageId) {
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId ? { ...msg, isPlaying: false } : msg
+            ));
+          }
+          toast({
+            title: "Audio Error",
+            description: `Playback failed: ${audio.error?.message || 'Unknown audio error'}`,
+            variant: "destructive"
+          });
+        };
+        
+        audio.onended = () => {
+          console.log('🔊 Audio playback completed');
+          setIsSpeaking(false);
+          currentAudioRef.current = null;
+          if (messageId) {
+            setMessages(prev => prev.map(msg => 
+              msg.id === messageId ? { ...msg, isPlaying: false } : msg
+            ));
+          }
+        };
+
+        audio.onloadeddata = () => {
+          console.log('Audio data loaded successfully');
+        };
+
+        audio.oncanplay = async () => {
+          try {
+            console.log('Audio can play, starting playback');
+            await audio.play();
+            console.log('🔊 Audio playback started successfully');
+          } catch (playError) {
+            console.error('Audio play error:', playError);
+            setIsSpeaking(false);
+            currentAudioRef.current = null;
+            if (messageId) {
+              setMessages(prev => prev.map(msg => 
+                msg.id === messageId ? { ...msg, isPlaying: false } : msg
+              ));
+            }
+            toast({
+              title: "Playback Error",
+              description: `Cannot play audio: ${playError.message}`,
+              variant: "destructive"
+            });
+          }
+        };
+
+        // Set audio properties
+        audio.volume = 0.8;
+        audio.preload = 'auto';
+        currentAudioRef.current = audio;
+        
+        // Load the audio
+        console.log('Loading audio data...');
+        audio.src = audioDataUrl;
+        
+      } catch (audioError) {
+        console.error('Audio creation error:', audioError);
         setIsSpeaking(false);
         currentAudioRef.current = null;
         if (messageId) {
@@ -147,14 +205,11 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
           ));
         }
         toast({
-          title: "Playback Error",
-          description: "Failed to play audio response",
+          title: "Audio System Error",
+          description: `Failed to create audio: ${audioError.message}`,
           variant: "destructive"
         });
-      };
-
-      await audio.play();
-      console.log('🔊 Audio playback started successfully');
+      }
       
     } catch (error) {
       console.error('TTS Error:', error);

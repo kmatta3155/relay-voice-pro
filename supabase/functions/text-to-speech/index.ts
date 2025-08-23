@@ -35,34 +35,41 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'tts-1',
         input: text,
-        voice: 'alloy', // Use OpenAI voice
+        voice: voice_id || 'alloy',
         response_format: 'mp3',
       }),
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error?.message || 'Failed to generate speech')
+      const errorText = await response.text()
+      console.error('OpenAI TTS API error:', errorText)
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
     }
 
-    // Convert audio buffer to base64 (chunked to prevent stack overflow)
-    const arrayBuffer = await response.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
+    // Get the audio as array buffer
+    const audioBuffer = await response.arrayBuffer()
+    console.log(`Generated audio buffer: ${audioBuffer.byteLength} bytes`)
+
+    // Convert to base64 using TextDecoder and btoa properly
+    const uint8Array = new Uint8Array(audioBuffer)
+    let binaryString = ''
     
-    // Convert to base64 in chunks to prevent stack overflow
-    let base64Audio = ''
-    const chunkSize = 32768 // 32KB chunks
-    
+    // Process in smaller chunks to avoid stack overflow
+    const chunkSize = 8192
     for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.slice(i, i + chunkSize)
-      const binaryString = Array.from(chunk, byte => String.fromCharCode(byte)).join('')
-      base64Audio += btoa(binaryString)
+      const chunk = uint8Array.subarray(i, i + chunkSize)
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk))
     }
-
-    console.log(`Generated audio: ${arrayBuffer.byteLength} bytes`)
+    
+    const base64Audio = btoa(binaryString)
+    console.log(`Base64 audio length: ${base64Audio.length} characters`)
 
     return new Response(
-      JSON.stringify({ audioContent: base64Audio }),
+      JSON.stringify({ 
+        audioContent: base64Audio,
+        contentType: 'audio/mpeg',
+        size: audioBuffer.byteLength
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
@@ -70,7 +77,10 @@ serve(async (req) => {
   } catch (error) {
     console.error('TTS Error:', error.message)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: 'Text-to-speech generation failed'
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
