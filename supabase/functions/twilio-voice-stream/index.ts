@@ -66,51 +66,9 @@ serve(async (req) => {
       console.log('Connected to OpenAI Realtime API')
       conversationActive = true
 
-      // Configure session after connection
-      setTimeout(() => {
-        const sessionConfig = {
-          type: 'session.update',
-          session: {
-            modalities: ['text', 'audio'],
-            instructions: agent.system_prompt || 'You are a helpful AI receptionist.',
-            voice: 'alloy',
-            input_audio_format: 'pcm16',
-            output_audio_format: 'pcm16',
-            input_audio_transcription: {
-              model: 'whisper-1'
-            },
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 1000
-            },
-            tools: [
-              {
-                type: 'function',
-                name: 'schedule_appointment',
-                description: 'Schedule an appointment for the caller',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    service: { type: 'string' },
-                    date: { type: 'string' },
-                    time: { type: 'string' },
-                    name: { type: 'string' },
-                    phone: { type: 'string' }
-                  },
-                  required: ['service', 'date', 'time', 'name', 'phone']
-                }
-              }
-            ],
-            tool_choice: 'auto',
-            max_response_output_tokens: 'inf'
-          }
-        }
-        
-        openAISocket!.send(JSON.stringify(sessionConfig))
-        console.log('Session configured')
-      }, 100)
+      // Wait for session.created then configure session
+      console.log('Connected to OpenAI, waiting for session.created')
+    }
     }
 
     openAISocket.onmessage = (event) => {
@@ -121,6 +79,48 @@ serve(async (req) => {
         switch (data.type) {
           case 'session.created':
             console.log('OpenAI session created')
+            // Configure session after receiving session.created
+            const sessionConfig = {
+              type: 'session.update',
+              session: {
+                modalities: ['text', 'audio'],
+                instructions: agent.system_prompt || 'You are a helpful AI receptionist.',
+                voice: 'alloy',
+                input_audio_format: 'g711_ulaw',
+                output_audio_format: 'g711_ulaw',
+                input_audio_transcription: {
+                  model: 'whisper-1'
+                },
+                turn_detection: {
+                  type: 'server_vad',
+                  threshold: 0.5,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 500
+                },
+                tools: [
+                  {
+                    type: 'function',
+                    name: 'schedule_appointment',
+                    description: 'Schedule an appointment for the caller',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        service: { type: 'string' },
+                        date: { type: 'string' },
+                        time: { type: 'string' },
+                        name: { type: 'string' },
+                        phone: { type: 'string' }
+                      },
+                      required: ['service', 'date', 'time', 'name', 'phone']
+                    }
+                  }
+                ],
+                tool_choice: 'auto',
+                max_response_output_tokens: 'inf'
+              }
+            }
+            openAISocket!.send(JSON.stringify(sessionConfig))
+            console.log('Session configuration sent')
             break
 
           case 'session.updated':
@@ -128,14 +128,13 @@ serve(async (req) => {
             break
 
           case 'response.audio.delta':
-            // Convert PCM16 to mulaw and send back to Twilio
+            // Send mulaw audio directly to Twilio (OpenAI now outputs mulaw)
             if (socket.readyState === WebSocket.OPEN && streamSid) {
-              const mulawAudio = convertPCM16ToMulaw(data.delta)
               socket.send(JSON.stringify({
                 event: 'media',
                 streamSid: streamSid,
                 media: {
-                  payload: mulawAudio
+                  payload: data.delta
                 }
               }))
             }
@@ -331,12 +330,11 @@ serve(async (req) => {
           break
 
         case 'media':
-          // Convert mulaw to PCM16 and forward to OpenAI
+          // Send mulaw audio directly to OpenAI (it now accepts mulaw)
           if (openAISocket && openAISocket.readyState === WebSocket.OPEN && conversationActive) {
-            const pcm16Audio = convertMulawToPCM16(message.media.payload)
             openAISocket.send(JSON.stringify({
               type: 'input_audio_buffer.append',
-              audio: pcm16Audio
+              audio: message.media.payload
             }))
           }
           break
