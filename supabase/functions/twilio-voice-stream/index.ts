@@ -23,6 +23,7 @@ serve(async (req) => {
   let openAISocket: WebSocket | null = null
   let conversationActive = false
   let audioBuffer: string[] = []
+  let streamSid: string | null = null
 
   // Get AI agent configuration
   const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.38.4')
