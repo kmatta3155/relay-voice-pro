@@ -205,7 +205,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
       const { data: sessionData, error } = await supabase.functions.invoke('realtime-session', {
         body: {
           instructions: agent.system_prompt,
-          voice: agent.voice_id || 'alloy'
+          voice: 'alloy'
         }
       });
 
@@ -225,7 +225,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
           session: {
             modalities: ['text', 'audio'],
             instructions: agent.system_prompt,
-            voice: agent.voice_id || 'alloy',
+            voice: 'alloy',
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
             input_audio_transcription: { model: 'whisper-1' },

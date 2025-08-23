@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { loadProfile, setActiveCustomer, ensureDemoCustomer, myCustomers, isSiteAdmin, ensureDemoTenant, setActiveTenant } from "@/lib/customers";
@@ -202,6 +202,7 @@ function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants
 function DashboardShell(){
   const [isInCustomerView, setIsInCustomerView] = useState(false);
   const [customerName, setCustomerName] = useState<string>('');
+  const location = useLocation();
 
   useEffect(() => {
     const checkAdminViewStatus = async () => {
@@ -220,7 +221,6 @@ function DashboardShell(){
           .select('name')
           .eq('id', profile.active_tenant_id)
           .single();
-        
         setIsInCustomerView(true);
         setCustomerName(tenant?.name || '');
       } else {
@@ -230,7 +230,7 @@ function DashboardShell(){
     };
 
     checkAdminViewStatus();
-  }, []);
+  }, [location.pathname]);
 
   return (
     <BrowserRouter>

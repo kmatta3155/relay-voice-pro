@@ -33,6 +33,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
   const [customerData, setCustomerData] = useState<CustomerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [showAgentTester, setShowAgentTester] = useState(false);
 
