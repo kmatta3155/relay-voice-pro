@@ -83,10 +83,12 @@ export function CustomerManagement() {
           <h1 className="text-3xl font-bold">Customer Management</h1>
           <p className="text-muted-foreground">Manage all your customers and their AI agents</p>
         </div>
-        <Button onClick={() => window.location.href = '/admin/onboarding'} className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Add New Customer
-        </Button>
+        {customers.length > 0 && (
+          <Button onClick={() => window.location.href = '/admin/onboarding'} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add New Customer
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -118,7 +120,7 @@ export function CustomerManagement() {
             {!searchTerm && (
               <Button onClick={() => window.location.href = '/admin/onboarding'}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add First Customer
+                Add New Customer
               </Button>
             )}
           </CardContent>
