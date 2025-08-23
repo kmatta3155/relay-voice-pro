@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Mic, MicOff, Phone, PhoneOff, Bot, User, Play, Pause, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Phone, PhoneOff, Bot, User, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 
 interface AdminAgentTesterProps {
   open: boolean;
@@ -19,66 +19,86 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  isPlaying?: boolean;
 }
 
 export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }: AdminAgentTesterProps) {
   const { toast } = useToast();
+  
+  // State management
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Audio refs
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ringAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
-  const addMessage = (role: 'user' | 'assistant', content: string) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string) => {
     const message: Message = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random()}`,
       role,
       content,
       timestamp: new Date()
     };
     setMessages(prev => [...prev, message]);
-  };
+    return message.id;
+  }, []);
 
-  const playRingTone = () => {
-    // Create a simple ring tone using oscillator
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
-    oscillator.frequency.setValueAtTime(450, audioContext.currentTime + 0.5);
-    
-    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-    gainNode.gain.setValueAtTime(0, audioContext.currentTime + 1);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 1);
-  };
+  const createRingtone = useCallback(() => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Create classic phone ring tone
+      oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(480, audioContext.currentTime + 0.4);
+      oscillator.frequency.setValueAtTime(440, audioContext.currentTime + 0.8);
+      oscillator.frequency.setValueAtTime(480, audioContext.currentTime + 1.2);
+      
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime + 1.6);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 1.6);
+      
+      return oscillator;
+    } catch (error) {
+      console.error('Failed to create ringtone:', error);
+      return null;
+    }
+  }, []);
 
-  const playTTS = async (text: string): Promise<void> => {
-    console.log(`🎵 Playing TTS for: "${text.slice(0, 50)}..."`);
+  const playTTS = useCallback(async (text: string, messageId?: string): Promise<void> => {
+    console.log(`🎵 Generating TTS for: "${text.slice(0, 50)}..."`);
     
     try {
       setIsSpeaking(true);
+      
+      if (messageId) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === messageId ? { ...msg, isPlaying: true } : msg
+        ));
+      }
 
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { 
-          text, 
+          text: text.slice(0, 500), // Limit text length for better performance
           voice_id: 'alloy'
         }
       });
-
-      console.log('TTS Response:', { data, error });
 
       if (error) {
         console.error('TTS Error:', error);
         toast({
           title: "Audio Error",
-          description: "Failed to generate speech audio",
+          description: "Failed to generate speech audio. Please try again.",
           variant: "destructive"
         });
         return;
@@ -87,14 +107,18 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
       if (!data?.audioContent) {
         console.error('No audio content received');
         toast({
-          title: "Audio Error",
-          description: "No audio content received",
+          title: "Audio Error", 
+          description: "No audio content received from TTS service",
           variant: "destructive"
         });
         return;
       }
 
-      console.log(`✅ Audio content received: ${data.audioContent.length} characters`);
+      // Stop any current audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
 
       const audioDataUrl = `data:audio/mpeg;base64,${data.audioContent}`;
       const audio = new Audio(audioDataUrl);
@@ -103,79 +127,127 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
       currentAudioRef.current = audio;
       
       audio.onended = () => {
-        console.log('Audio playback ended');
+        console.log('🔊 Audio playback completed');
         setIsSpeaking(false);
         currentAudioRef.current = null;
+        if (messageId) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId ? { ...msg, isPlaying: false } : msg
+          ));
+        }
       };
       
       audio.onerror = (e) => {
         console.error('Audio playback error:', e);
         setIsSpeaking(false);
         currentAudioRef.current = null;
+        if (messageId) {
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId ? { ...msg, isPlaying: false } : msg
+          ));
+        }
         toast({
-          title: "Audio Error",
-          description: "Failed to play audio",
+          title: "Playback Error",
+          description: "Failed to play audio response",
           variant: "destructive"
         });
       };
 
       await audio.play();
-      console.log('🔊 Audio playback started');
+      console.log('🔊 Audio playback started successfully');
       
     } catch (error) {
-      console.error('Error in TTS playback:', error);
+      console.error('TTS Error:', error);
       setIsSpeaking(false);
       currentAudioRef.current = null;
       
+      if (messageId) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === messageId ? { ...msg, isPlaying: false } : msg
+        ));
+      }
+      
       toast({
-        title: "Audio Error",
-        description: "Failed to play audio response",
+        title: "Audio System Error",
+        description: "Failed to process audio request. Please check your connection.",
         variant: "destructive"
       });
     }
-  };
+  }, [toast]);
 
-  const sendMessageToAgent = async (userMessage: string) => {
+  const sendMessageToAgent = useCallback(async (userMessage: string) => {
+    if (isLoading) {
+      toast({
+        title: "Please Wait",
+        description: "Previous request is still processing",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      addMessage('user', userMessage);
+      setIsLoading(true);
+      const userMessageId = addMessage('user', userMessage);
 
-      // Simulate agent response based on common queries
-      let agentResponse = "I understand your request. How can I assist you further?";
-      
-      if (userMessage.toLowerCase().includes('hours')) {
-        agentResponse = "Our business hours are Monday through Friday, 9 AM to 6 PM, and Saturday 10 AM to 4 PM. We're closed on Sundays.";
-      } else if (userMessage.toLowerCase().includes('appointment') || userMessage.toLowerCase().includes('book')) {
-        agentResponse = "I'd be happy to help you book an appointment. What type of service are you interested in, and when would you prefer to schedule it?";
-      } else if (userMessage.toLowerCase().includes('price') || userMessage.toLowerCase().includes('cost')) {
-        agentResponse = "Our pricing varies by service. For example, a standard massage is $80 for 60 minutes. Would you like pricing for a specific service?";
-      } else if (userMessage.toLowerCase().includes('service')) {
-        agentResponse = "We offer massage therapy, facial treatments, and wellness consultations. Each service can be customized to your specific needs.";
-      } else if (userMessage.toLowerCase().includes('cancel')) {
-        agentResponse = "I can help you with cancellations. We require 24-hour notice to avoid any cancellation fees. May I have your appointment details?";
+      // Call the voice edge function for AI response
+      const { data, error } = await supabase.functions.invoke('voice', {
+        body: {
+          message: userMessage,
+          tenant_id: tenantId,
+          agent_name: agent.name || 'AI Assistant',
+          conversation_history: messages.slice(-5).map(m => ({
+            role: m.role,
+            content: m.content
+          }))
+        }
+      });
+
+      if (error) {
+        console.error('Voice function error:', error);
+        toast({
+          title: "AI Error",
+          description: "Failed to get response from AI agent. Please try again.",
+          variant: "destructive"
+        });
+        return;
       }
 
-      // Add a delay to simulate processing
-      setTimeout(async () => {
-        addMessage('assistant', agentResponse);
-        await playTTS(agentResponse);
-      }, 1000);
+      if (!data?.response) {
+        console.error('No response from voice function');
+        toast({
+          title: "AI Error",
+          description: "No response received from AI agent",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Add agent response and play audio
+      const assistantMessageId = addMessage('assistant', data.response);
+      
+      // Small delay before starting TTS to ensure message is rendered
+      setTimeout(() => {
+        playTTS(data.response, assistantMessageId);
+      }, 100);
 
     } catch (error) {
-      console.error('Error sending message to agent:', error);
+      console.error('Error in sendMessageToAgent:', error);
       toast({
-        title: "Error",
-        description: "Failed to get response from AI agent",
+        title: "System Error",
+        description: "Failed to process your message. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [isLoading, addMessage, tenantId, agent.name, messages, playTTS, toast]);
 
-  const startConversation = async () => {
+  const startConversation = useCallback(async () => {
     try {
       setConnectionStatus('connecting');
       
-      // Play ring tone
-      playRingTone();
+      // Play ringtone
+      const ringtone = createRingtone();
       
       // Simulate connection delay
       setTimeout(async () => {
@@ -183,50 +255,57 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
         setIsConnected(true);
         
         toast({
-          title: "Connected",
-          description: "AI agent test session started"
+          title: "Call Connected",
+          description: `Connected to ${agent.name || 'AI Agent'}`,
         });
 
-        // Send initial greeting after a short delay
+        // Send initial greeting
         setTimeout(async () => {
-          const greeting = `Hello! I'm ${agent.name}, your AI assistant. How can I help you today?`;
-          addMessage('assistant', greeting);
-          await playTTS(greeting);
-        }, 500);
+          const greeting = `Hello! I'm ${agent.name || 'your AI assistant'}. Thank you for calling. How can I help you today?`;
+          const greetingId = addMessage('assistant', greeting);
+          
+          // Small delay before TTS
+          setTimeout(() => {
+            playTTS(greeting, greetingId);
+          }, 200);
+        }, 800);
         
-      }, 2000);
+      }, 2500);
 
     } catch (error) {
       console.error('Error starting conversation:', error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : 'Failed to start conversation',
+        title: "Connection Error",
+        description: "Failed to start call. Please try again.",
         variant: "destructive"
       });
       setConnectionStatus('disconnected');
     }
-  };
+  }, [createRingtone, toast, agent.name, addMessage, playTTS]);
 
-  const endConversation = () => {
+  const endConversation = useCallback(() => {
+    // Stop all audio
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
-    if (ringAudioRef.current) {
-      ringAudioRef.current.pause();
-      ringAudioRef.current = null;
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current = null;
     }
+    
     setIsConnected(false);
     setConnectionStatus('disconnected');
     setIsSpeaking(false);
+    setIsLoading(false);
     
     toast({
       title: "Call Ended",
-      description: "AI agent test session ended"
+      description: "AI agent test session completed",
     });
-  };
+  }, [toast]);
 
-  const handleTestMessage = (message: string) => {
+  const handleTestMessage = useCallback((message: string) => {
     if (!isConnected) {
       toast({
         title: "Not Connected",
@@ -236,9 +315,9 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
       return;
     }
     
-    if (isSpeaking) {
+    if (isSpeaking || isLoading) {
       toast({
-        title: "Agent Speaking",
+        title: "Agent Busy",
         description: "Please wait for the agent to finish speaking",
         variant: "destructive"
       });
@@ -246,64 +325,82 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
     }
     
     sendMessageToAgent(message);
-  };
+  }, [isConnected, isSpeaking, isLoading, sendMessageToAgent, toast]);
 
-  const stopCurrentAudio = () => {
+  const stopCurrentAudio = useCallback(() => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
       setIsSpeaking(false);
+      
+      // Update message playing state
+      setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
     }
-  };
+  }, []);
 
-  const handleDialogClose = (open: boolean) => {
+  const handleDialogClose = useCallback((open: boolean) => {
     if (!open) {
       endConversation();
       setMessages([]);
     }
     onOpenChange(open);
-  };
+  }, [endConversation, onOpenChange]);
 
   const testMessages = [
     "What are your business hours?",
     "How much does a massage cost?", 
     "I'd like to book an appointment",
     "What services do you offer?",
-    "Can I cancel my appointment?"
+    "Can I cancel my appointment?",
+    "Do you have availability this week?",
+    "What is your cancellation policy?"
   ];
 
   return (
     <Dialog open={open} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-2xl h-[600px] flex flex-col">
+      <DialogContent className="max-w-3xl h-[700px] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5" />
-            Test AI Agent: {agent.name}
+            <Bot className="h-5 w-5 text-primary" />
+            Test AI Agent: {agent.name || 'AI Assistant'}
           </DialogTitle>
           <DialogDescription>
-            Test the voice conversation with your customer's AI agent
+            Test voice conversations with your customer's AI agent. Production-ready testing environment.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 flex flex-col gap-4 min-h-0">
-          {/* Status Bar */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge variant={connectionStatus === 'connected' ? 'default' : connectionStatus === 'connecting' ? 'secondary' : 'outline'}>
+          {/* Enhanced Status Bar */}
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+            <div className="flex items-center gap-3">
+              <Badge 
+                variant={connectionStatus === 'connected' ? 'default' : connectionStatus === 'connecting' ? 'secondary' : 'outline'}
+                className="capitalize"
+              >
                 {connectionStatus}
               </Badge>
               {isSpeaking && (
                 <Badge variant="outline" className="flex items-center gap-1">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                   <Volume2 className="h-3 w-3" />
-                  Agent Speaking
+                  Speaking
+                </Badge>
+              )}
+              {isLoading && (
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  Processing
                 </Badge>
               )}
             </div>
             
             <div className="flex gap-2">
               {!isConnected ? (
-                <Button onClick={startConversation} disabled={connectionStatus === 'connecting'}>
+                <Button 
+                  onClick={startConversation} 
+                  disabled={connectionStatus === 'connecting'}
+                  className="bg-green-600 hover:bg-green-700"
+                >
                   <Phone className="h-4 w-4 mr-2" />
                   {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Call'}
                 </Button>
@@ -311,7 +408,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
                 <>
                   {isSpeaking && (
                     <Button onClick={stopCurrentAudio} variant="outline" size="sm">
-                      <Pause className="h-4 w-4 mr-2" />
+                      <VolumeX className="h-4 w-4 mr-2" />
                       Stop Audio
                     </Button>
                   )}
@@ -324,59 +421,100 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
             </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 border rounded-lg p-4 overflow-y-auto bg-muted/30">
+          {/* Enhanced Messages Display */}
+          <div className="flex-1 border rounded-lg p-4 overflow-y-auto bg-gradient-to-b from-background to-muted/20">
             {messages.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
+              <div className="text-center text-muted-foreground py-12">
                 {connectionStatus === 'connecting' ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <Phone className="h-8 w-8 animate-pulse" />
-                    <p>Calling agent...</p>
+                  <div className="flex flex-col items-center gap-3">
+                    <Phone className="h-12 w-12 animate-pulse text-primary" />
+                    <p className="text-lg font-medium">Connecting to AI agent...</p>
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                      <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    </div>
                   </div>
                 ) : isConnected ? (
-                  'Conversation ready - try the test messages below'
+                  <div className="flex flex-col items-center gap-3">
+                    <Bot className="h-12 w-12 text-primary" />
+                    <p className="text-lg font-medium">Ready to test</p>
+                    <p>Try the quick test messages below</p>
+                  </div>
                 ) : (
-                  'Click "Start Call" to begin testing'
+                  <div className="flex flex-col items-center gap-3">
+                    <Phone className="h-12 w-12 text-muted-foreground" />
+                    <p className="text-lg font-medium">Click "Start Call" to begin testing</p>
+                    <p>Test your customer's AI agent with realistic scenarios</p>
+                  </div>
                 )}
               </div>
             ) : (
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div key={message.id} className={`flex gap-3 ${message.role === 'assistant' ? '' : 'flex-row-reverse'}`}>
-                    <div className={`p-2 rounded-full ${message.role === 'assistant' ? 'bg-primary' : 'bg-muted'}`}>
+                    <div className={`flex-shrink-0 p-2 rounded-full ${message.role === 'assistant' ? 'bg-primary' : 'bg-secondary'}`}>
                       {message.role === 'assistant' ? 
                         <Bot className="h-4 w-4 text-primary-foreground" /> : 
                         <User className="h-4 w-4" />
                       }
                     </div>
-                    <Card className={`max-w-[80%] ${message.role === 'assistant' ? '' : 'bg-primary text-primary-foreground'}`}>
+                    <Card className={`max-w-[75%] ${message.role === 'assistant' ? 'bg-card' : 'bg-primary text-primary-foreground'}`}>
                       <CardContent className="p-3">
-                        <p className="text-sm">{message.content}</p>
-                        <p className="text-xs opacity-70 mt-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm leading-relaxed">{message.content}</p>
+                          {message.role === 'assistant' && message.isPlaying && (
+                            <Volume2 className="h-3 w-3 text-green-500 animate-pulse flex-shrink-0 mt-0.5" />
+                          )}
+                        </div>
+                        <p className="text-xs opacity-70 mt-2">
                           {message.timestamp.toLocaleTimeString()}
                         </p>
                       </CardContent>
                     </Card>
                   </div>
                 ))}
+                {isLoading && (
+                  <div className="flex gap-3">
+                    <div className="p-2 rounded-full bg-primary">
+                      <Bot className="h-4 w-4 text-primary-foreground" />
+                    </div>
+                    <Card className="bg-card">
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                          </div>
+                          <span className="text-sm text-muted-foreground">Thinking...</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Test Message Buttons */}
+          {/* Enhanced Quick Test Messages */}
           {isConnected && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Quick Test Messages:</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-3 p-3 bg-muted/30 rounded-lg">
+              <p className="text-sm font-medium flex items-center gap-2">
+                <Mic className="h-4 w-4" />
+                Quick Test Messages:
+              </p>
+              <div className="grid grid-cols-2 gap-2">
                 {testMessages.map((message, index) => (
                   <Button
                     key={index}
                     variant="outline"
                     size="sm"
                     onClick={() => handleTestMessage(message)}
-                    disabled={isSpeaking}
+                    disabled={isSpeaking || isLoading}
+                    className="h-auto p-2 text-left justify-start whitespace-normal"
                   >
-                    {message}
+                    "{message}"
                   </Button>
                 ))}
               </div>
