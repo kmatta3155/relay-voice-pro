@@ -364,8 +364,10 @@ const analyzeWebsite = async (deepCrawl = false) => {
       }
 
       console.log('Process completed:', { tenantData, agentData });
-      toast({ title: "Success", description: "Customer onboarded successfully!" });
+      toast({ title: "Success", description: "Customer onboarded successfully! Redirecting to dashboard..." });
       setStep(3);
+      // Redirect to dashboard so the new active tenant is applied across the app
+      setTimeout(() => { window.location.href = '/#app'; }, 1200);
     } catch (error) {
       console.error('Error in onboarding process:', error);
       toast({
