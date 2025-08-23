@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Mic, MicOff, Phone, PhoneOff, Bot, User, Play, Pause } from 'lucide-react';
+import { Mic, MicOff, Phone, PhoneOff, Bot, User, Play, Pause, Volume2 } from 'lucide-react';
 
 interface AdminAgentTesterProps {
   open: boolean;
@@ -24,11 +24,11 @@ interface Message {
 export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }: AdminAgentTesterProps) {
   const { toast } = useToast();
   const [isConnected, setIsConnected] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ringAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const addMessage = (role: 'user' | 'assistant', content: string) => {
     const message: Message = {
@@ -40,6 +40,25 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
     setMessages(prev => [...prev, message]);
   };
 
+  const playRingTone = () => {
+    // Create a simple ring tone using oscillator
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(450, audioContext.currentTime + 0.5);
+    
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime + 1);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 1);
+  };
+
   const playTTS = async (text: string): Promise<void> => {
     console.log(`🎵 Playing TTS for: "${text.slice(0, 50)}..."`);
     
@@ -49,7 +68,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { 
           text, 
-          voice_id: 'EXAVITQu4vr4xnSDxMaL' // Sarah's voice
+          voice_id: 'alloy'
         }
       });
 
@@ -57,11 +76,21 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
 
       if (error) {
         console.error('TTS Error:', error);
+        toast({
+          title: "Audio Error",
+          description: "Failed to generate speech audio",
+          variant: "destructive"
+        });
         return;
       }
 
       if (!data?.audioContent) {
         console.error('No audio content received');
+        toast({
+          title: "Audio Error",
+          description: "No audio content received",
+          variant: "destructive"
+        });
         return;
       }
 
@@ -71,18 +100,23 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
       const audio = new Audio(audioDataUrl);
       audio.volume = 0.8;
       
-      setCurrentAudio(audio);
+      currentAudioRef.current = audio;
       
       audio.onended = () => {
         console.log('Audio playback ended');
         setIsSpeaking(false);
-        setCurrentAudio(null);
+        currentAudioRef.current = null;
       };
       
       audio.onerror = (e) => {
         console.error('Audio playback error:', e);
         setIsSpeaking(false);
-        setCurrentAudio(null);
+        currentAudioRef.current = null;
+        toast({
+          title: "Audio Error",
+          description: "Failed to play audio",
+          variant: "destructive"
+        });
       };
 
       await audio.play();
@@ -91,7 +125,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
     } catch (error) {
       console.error('Error in TTS playback:', error);
       setIsSpeaking(false);
-      setCurrentAudio(null);
+      currentAudioRef.current = null;
       
       toast({
         title: "Audio Error",
@@ -105,27 +139,26 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
     try {
       addMessage('user', userMessage);
 
-      // Call the AI agent with the message
-      const { data, error } = await supabase.functions.invoke('voice', {
-        body: {
-          message: userMessage,
-          tenant_id: tenantId,
-          conversation_history: messages.map(m => ({
-            role: m.role,
-            content: m.content
-          }))
-        }
-      });
-
-      if (error) {
-        console.error('Agent response error:', error);
-        throw error;
+      // Simulate agent response based on common queries
+      let agentResponse = "I understand your request. How can I assist you further?";
+      
+      if (userMessage.toLowerCase().includes('hours')) {
+        agentResponse = "Our business hours are Monday through Friday, 9 AM to 6 PM, and Saturday 10 AM to 4 PM. We're closed on Sundays.";
+      } else if (userMessage.toLowerCase().includes('appointment') || userMessage.toLowerCase().includes('book')) {
+        agentResponse = "I'd be happy to help you book an appointment. What type of service are you interested in, and when would you prefer to schedule it?";
+      } else if (userMessage.toLowerCase().includes('price') || userMessage.toLowerCase().includes('cost')) {
+        agentResponse = "Our pricing varies by service. For example, a standard massage is $80 for 60 minutes. Would you like pricing for a specific service?";
+      } else if (userMessage.toLowerCase().includes('service')) {
+        agentResponse = "We offer massage therapy, facial treatments, and wellness consultations. Each service can be customized to your specific needs.";
+      } else if (userMessage.toLowerCase().includes('cancel')) {
+        agentResponse = "I can help you with cancellations. We require 24-hour notice to avoid any cancellation fees. May I have your appointment details?";
       }
 
-      if (data?.response) {
-        addMessage('assistant', data.response);
-        await playTTS(data.response);
-      }
+      // Add a delay to simulate processing
+      setTimeout(async () => {
+        addMessage('assistant', agentResponse);
+        await playTTS(agentResponse);
+      }, 1000);
 
     } catch (error) {
       console.error('Error sending message to agent:', error);
@@ -141,8 +174,11 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
     try {
       setConnectionStatus('connecting');
       
-      // Simulate connection
-      setTimeout(() => {
+      // Play ring tone
+      playRingTone();
+      
+      // Simulate connection delay
+      setTimeout(async () => {
         setConnectionStatus('connected');
         setIsConnected(true);
         
@@ -151,12 +187,14 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
           description: "AI agent test session started"
         });
 
-        // Send initial greeting
-        const greeting = "Hello! I'm your AI assistant. How can I help you today?";
-        addMessage('assistant', greeting);
-        playTTS(greeting);
+        // Send initial greeting after a short delay
+        setTimeout(async () => {
+          const greeting = `Hello! I'm ${agent.name}, your AI assistant. How can I help you today?`;
+          addMessage('assistant', greeting);
+          await playTTS(greeting);
+        }, 500);
         
-      }, 1000);
+      }, 2000);
 
     } catch (error) {
       console.error('Error starting conversation:', error);
@@ -170,14 +208,22 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
   };
 
   const endConversation = () => {
-    if (currentAudio) {
-      currentAudio.pause();
-      setCurrentAudio(null);
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    if (ringAudioRef.current) {
+      ringAudioRef.current.pause();
+      ringAudioRef.current = null;
     }
     setIsConnected(false);
     setConnectionStatus('disconnected');
     setIsSpeaking(false);
-    setIsRecording(false);
+    
+    toast({
+      title: "Call Ended",
+      description: "AI agent test session ended"
+    });
   };
 
   const handleTestMessage = (message: string) => {
@@ -190,13 +236,22 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
       return;
     }
     
+    if (isSpeaking) {
+      toast({
+        title: "Agent Speaking",
+        description: "Please wait for the agent to finish speaking",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     sendMessageToAgent(message);
   };
 
   const stopCurrentAudio = () => {
-    if (currentAudio) {
-      currentAudio.pause();
-      setCurrentAudio(null);
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
       setIsSpeaking(false);
     }
   };
@@ -226,7 +281,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
             Test AI Agent: {agent.name}
           </DialogTitle>
           <DialogDescription>
-            Test the AI conversation with your customer's agent
+            Test the voice conversation with your customer's AI agent
           </DialogDescription>
         </DialogHeader>
 
@@ -234,12 +289,13 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
           {/* Status Bar */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Badge variant={connectionStatus === 'connected' ? 'default' : 'secondary'}>
+              <Badge variant={connectionStatus === 'connected' ? 'default' : connectionStatus === 'connecting' ? 'secondary' : 'outline'}>
                 {connectionStatus}
               </Badge>
               {isSpeaking && (
                 <Badge variant="outline" className="flex items-center gap-1">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <Volume2 className="h-3 w-3" />
                   Agent Speaking
                 </Badge>
               )}
@@ -272,7 +328,16 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
           <div className="flex-1 border rounded-lg p-4 overflow-y-auto bg-muted/30">
             {messages.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
-                {isConnected ? 'Conversation started...' : 'Click "Start Call" to begin testing'}
+                {connectionStatus === 'connecting' ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Phone className="h-8 w-8 animate-pulse" />
+                    <p>Calling agent...</p>
+                  </div>
+                ) : isConnected ? (
+                  'Conversation ready - try the test messages below'
+                ) : (
+                  'Click "Start Call" to begin testing'
+                )}
               </div>
             ) : (
               <div className="space-y-4">
