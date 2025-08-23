@@ -244,6 +244,20 @@ ${consolidatedContent}`;
         .delete()
         .eq('tenant_id', tenantId);
 
+      const to24h = (t?: string) => {
+        if (!t) return null as any;
+        const m = t.trim().match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+        if (!m) return t as any; // let Postgres attempt to parse if already compatible
+        let [, hh, mm, ap] = m;
+        let h = parseInt(hh, 10);
+        if (ap) {
+          const up = ap.toUpperCase();
+          if (up === 'PM' && h !== 12) h += 12;
+          if (up === 'AM' && h === 12) h = 0;
+        }
+        return `${String(h).padStart(2, '0')}:${mm}:00` as any;
+      };
+
       const hoursToInsert = consolidatedData.businessHours
         .filter((hour) => !hour.is_closed) // Only insert open days
         .map((hour) => {
@@ -255,8 +269,8 @@ ${consolidatedContent}`;
           return {
             tenant_id: tenantId,
             dow: dayMap[hour.day.toLowerCase()] ?? 1,
-            open_time: hour.open_time,
-            close_time: hour.close_time,
+            open_time: to24h(hour.open_time || ''),
+            close_time: to24h(hour.close_time || ''),
             is_closed: false
           };
         });
@@ -270,6 +284,66 @@ ${consolidatedContent}`;
       } else {
         console.log(`Successfully saved ${hoursToInsert.length} business hours`);
       }
+    }
+
+    // Derive and save Quick Answers for FAQ-style responses
+    try {
+      // Clear existing quick answers
+      await supabase.from('business_quick_answers').delete().eq('tenant_id', tenantId);
+
+      const hoursSummary = (consolidatedData.businessHours || [])
+        .map(h => `${h.day}: ${h.is_closed ? 'Closed' : `${h.open_time} - ${h.close_time}`}`)
+        .join('\n');
+
+      const topServices = (consolidatedData.services || [])
+        .slice(0, 8)
+        .map(s => `${s.name}${s.price ? ` - ${s.price}` : ''}`)
+        .join('\n');
+
+      const addresses = (consolidatedData.businessAddresses || []).join('\n');
+
+      const qaRows = [
+        hoursSummary && {
+          tenant_id: tenantId,
+          question_type: 'hours',
+          question_pattern: '(hour|open|close|time)',
+          answer: `Our business hours are as follows:\n${hoursSummary}`,
+          confidence: 0.95
+        },
+        topServices && {
+          tenant_id: tenantId,
+          question_type: 'services',
+          question_pattern: '(service|offer|treatment|menu)',
+          answer: `We offer the following services:\n${topServices}`,
+          confidence: 0.9
+        },
+        addresses && {
+          tenant_id: tenantId,
+          question_type: 'location',
+          question_pattern: '(address|location|where.*located|directions)',
+          answer: `Our locations:\n${addresses}`,
+          confidence: 0.9
+        },
+        (consolidatedData.services || []).some(s => s.price) && {
+          tenant_id: tenantId,
+          question_type: 'pricing',
+          question_pattern: '(price|cost|how\s*much)',
+          answer: `Starting prices for popular services:\n${(consolidatedData.services || [])
+            .filter(s => s.price)
+            .slice(0, 6)
+            .map(s => `${s.name}: ${s.price}`)
+            .join('\n')}\nPrices vary by provider and service details.`,
+          confidence: 0.85
+        }
+      ].filter(Boolean) as any[];
+
+      if (qaRows.length) {
+        const { error: qaError } = await supabase.from('business_quick_answers').insert(qaRows);
+        if (qaError) console.error('Error saving quick answers:', qaError);
+        else console.log(`Saved ${qaRows.length} quick answers`);
+      }
+    } catch (qaSaveError) {
+      console.error('Quick answers generation failed:', qaSaveError);
     }
 
     return new Response(JSON.stringify({
