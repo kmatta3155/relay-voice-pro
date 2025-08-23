@@ -13,6 +13,7 @@ import { Loader2, Bot, Play, Settings, Eye, Phone, Globe } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 // import { useNavigate } from 'react-router-dom'; // Removed - causing Router context error
 import AdminAgentTester from './AdminAgentTester';
+import CustomerExperienceSimulator from './CustomerExperienceSimulator';
 import PhoneNumberPanel from './PhoneNumberPanel';
 
 interface CustomerData {
@@ -38,6 +39,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   const [showAgentTester, setShowAgentTester] = useState(false);
+  const [showSimulator, setShowSimulator] = useState(false);
 
   const loadCustomerData = useCallback(async () => {
     try {
@@ -175,7 +177,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
       });
       return;
     }
-    setShowAgentTester(true);
+    setShowSimulator(true);
   };
 
   const handleViewAsCustomer = async () => {
@@ -391,7 +393,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
                       className="flex items-center gap-2"
                     >
                       <Play className="h-4 w-4" />
-                      Test Agent
+                      Run Customer Simulation
                     </Button>
 
                     <Dialog>
@@ -568,12 +570,12 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
         </TabsContent>
       </Tabs>
 
-      {/* Agent Tester Modal */}
-      {customerData?.agent && (
-        <AdminAgentTester
-          open={showAgentTester}
-          onOpenChange={setShowAgentTester}
-          agent={customerData.agent}
+      {/* Customer Experience Simulator */}
+      {showSimulator && (
+        <CustomerExperienceSimulator
+          open={showSimulator}
+          onOpenChange={setShowSimulator}
+          agent={agent}
           tenantId={tenantId}
         />
       )}
