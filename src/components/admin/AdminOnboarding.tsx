@@ -23,6 +23,12 @@ interface ExtractionResult {
     close_time?: string;
     is_closed: boolean;
   }>;
+  business_info?: {
+    name?: string;
+    addresses?: string[];
+    phone?: string;
+    email?: string;
+  };
   pages_fetched: number;
   used_firecrawl: boolean;
   extraction_method: string;
@@ -165,6 +171,25 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
       setNewTenantId(tenantId);
       console.log('Created tenant:', tenantId);
 
+      // Save business data to this tenant
+      if (extractionResult) {
+        const { error: consolidateError } = await supabase.functions.invoke('consolidate-business-data', {
+          body: {
+            tenantId: tenantId,
+            dataSources: [{
+              type: 'website' as const,
+              content: JSON.stringify(extractionResult),
+              metadata: { url: websiteUrl }
+            }]
+          }
+        });
+
+        if (consolidateError) {
+          console.error('Error consolidating business data:', consolidateError);
+          // Continue anyway, as tenant is created
+        }
+      }
+
       // Train the AI agent for this tenant
       const { data: agentData, error: agentError } = await supabase.functions.invoke('train-agent', {
         body: {
@@ -175,20 +200,23 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
         }
       });
 
-      if (agentError) throw agentError;
+      if (agentError) {
+        console.error('Agent training error:', agentError);
+        // Continue to completion even if agent training fails
+      }
 
       setCurrentStep(4);
-      console.log('Agent training completed:', agentData);
+      console.log('Process completed:', { tenantData, agentData });
 
       toast({
         title: "Success",
-        description: "Customer onboarded and AI agent trained successfully!",
+        description: "Customer onboarded successfully!",
       });
     } catch (error) {
-      console.error('Error saving configuration:', error);
+      console.error('Error in onboarding process:', error);
       toast({
         title: "Error",
-        description: "Failed to save configuration and train agent",
+        description: error instanceof Error ? error.message : 'Failed to complete onboarding',
         variant: "destructive"
       });
       setCurrentStep(2); // Go back to review step

@@ -244,20 +244,22 @@ ${consolidatedContent}`;
         .delete()
         .eq('tenant_id', tenantId);
 
-      const hoursToInsert = consolidatedData.businessHours.map((hour) => {
-        const dayMap: { [key: string]: number } = {
-          'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4,
-          'friday': 5, 'saturday': 6, 'sunday': 0
-        };
+      const hoursToInsert = consolidatedData.businessHours
+        .filter((hour) => !hour.is_closed) // Only insert open days
+        .map((hour) => {
+          const dayMap: { [key: string]: number } = {
+            'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4,
+            'friday': 5, 'saturday': 6, 'sunday': 0
+          };
 
-        return {
-          tenant_id: tenantId,
-          dow: dayMap[hour.day.toLowerCase()] ?? 1,
-          open_time: hour.is_closed ? null : hour.open_time,
-          close_time: hour.is_closed ? null : hour.close_time,
-          is_closed: hour.is_closed || false
-        };
-      });
+          return {
+            tenant_id: tenantId,
+            dow: dayMap[hour.day.toLowerCase()] ?? 1,
+            open_time: hour.open_time,
+            close_time: hour.close_time,
+            is_closed: false
+          };
+        });
 
       const { error: hoursError } = await supabase
         .from('business_hours')
