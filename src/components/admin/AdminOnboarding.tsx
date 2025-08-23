@@ -155,19 +155,24 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
       setCurrentStep(3);
       console.log('Saving configuration:', extractionResult);
       
+      // Ensure authenticated user and pass userId to edge function
+      const { data: ures } = await supabase.auth.getUser();
+      const uid = ures?.user?.id;
+      if (!uid) throw new Error('User not authenticated');
+      
       // Create the tenant first
       const { data: tenantData, error: tenantError } = await supabase.functions.invoke('customer-create', {
         body: {
           name: businessName,
-          business_type: businessType,
+          userId: uid,
           website_url: websiteUrl
         }
       });
 
       if (tenantError) throw tenantError;
-      if (!tenantData?.tenant_id) throw new Error('Failed to create tenant');
+      if (!tenantData?.tenantId) throw new Error('Failed to create tenant');
 
-      const tenantId = tenantData.tenant_id;
+      const tenantId = tenantData.tenantId;
       setNewTenantId(tenantId);
       console.log('Created tenant:', tenantId);
 

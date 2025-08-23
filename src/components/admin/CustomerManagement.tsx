@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Building2, Users, Settings, Search, Plus } from 'lucide-react';
-import AdminOnboarding from './AdminOnboarding';
+
 import CustomerManagementDashboard from './CustomerManagementDashboard';
 
 export function CustomerManagement() {
@@ -13,7 +13,7 @@ export function CustomerManagement() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,9 +55,6 @@ export function CustomerManagement() {
     customer.slug.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (showOnboarding) {
-    return <AdminOnboarding onBack={() => setShowOnboarding(false)} />;
-  }
 
   if (selectedCustomer) {
     return (
@@ -76,7 +73,7 @@ export function CustomerManagement() {
           <h1 className="text-3xl font-bold">Customer Management</h1>
           <p className="text-muted-foreground">Manage all your customers and their AI agents</p>
         </div>
-        <Button onClick={() => setShowOnboarding(true)} className="flex items-center gap-2">
+        <Button onClick={() => (window.location.href = '/admin/onboarding')} className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
           Add New Customer
         </Button>
@@ -109,7 +106,7 @@ export function CustomerManagement() {
               {searchTerm ? 'No customers match your search.' : 'Get started by adding your first customer.'}
             </p>
             {!searchTerm && (
-              <Button onClick={() => setShowOnboarding(true)}>
+              <Button onClick={() => (window.location.href = '/admin/onboarding')}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add First Customer
               </Button>
