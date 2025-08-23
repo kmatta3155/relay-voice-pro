@@ -207,7 +207,8 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
           tenant_id: tenantId,
           agent_name: 'Receptionist',
           voice_provider: 'elevenlabs',
-          voice_id: '9BWtsMINqrJLrRacOk9x'
+          voice_id: '9BWtsMINqrJLrRacOk9x',
+          business_type: businessType || 'salon'
         }
       });
 
@@ -311,12 +312,20 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
               </div>
               <div>
                 <Label htmlFor="businessType">Business Type</Label>
-                <Input
+                <select
                   id="businessType"
-                  placeholder="Salon, Restaurant, Clinic, etc."
                   value={businessType}
                   onChange={(e) => setBusinessType(e.target.value)}
-                />
+                  className="w-full h-10 px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                  <option value="">Select business type</option>
+                  <option value="salon">Beauty Salon / Spa</option>
+                  <option value="restaurant">Restaurant / Cafe</option>
+                  <option value="medical">Medical Office</option>
+                  <option value="dental">Dental Office</option>
+                  <option value="spa">Day Spa / Wellness</option>
+                  <option value="automotive">Auto Service / Repair</option>
+                </select>
               </div>
             </div>
 
