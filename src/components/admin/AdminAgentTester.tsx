@@ -150,31 +150,6 @@ Answer professionally about hours, pricing, services, availability, and booking 
     }
   };
 
-  // Ingest business website into knowledge base
-  const ingestBusinessKnowledge = useCallback(async () => {
-    try {
-      setIsIngesting(true);
-      const { data, error } = await supabase
-        .from('agent_settings')
-        .select('website_url')
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
-      if (error) throw error;
-      const url = data?.website_url?.trim();
-      if (!url) {
-        toast({ title: 'Add Website URL', description: 'Set your website in Agent Settings first.', variant: 'destructive' });
-        return;
-      }
-      toast({ title: 'Ingesting Website', description: `Crawling ${url}. This can take up to a minute.` });
-      await ingestWebsite(tenantId, url, { includeBookingProviders: true });
-      toast({ title: 'Ingestion Complete', description: 'Business data added to the knowledge base.' });
-    } catch (e: any) {
-      console.error('Ingestion error:', e);
-      toast({ title: 'Ingestion Error', description: e?.message || 'Failed to ingest website', variant: 'destructive' });
-    } finally {
-      setIsIngesting(false);
-    }
-  }, [tenantId, toast]);
 
   // Knowledge testing function
   const testKnowledge = useCallback(async (question: string) => {
@@ -404,16 +379,6 @@ Answer professionally about hours, pricing, services, availability, and booking 
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={ingestBusinessKnowledge}
-                disabled={isIngesting}
-                aria-label="Ingest website for knowledge"
-              >
-                {isIngesting ? 'Ingesting…' : 'Ingest Website'}
               </Button>
             </form>
 
