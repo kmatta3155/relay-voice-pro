@@ -15,10 +15,11 @@ export class RealtimeChat {
     this.remoteAudioEl.autoplay = true;
   }
 
-  async init(options?: { instructions?: string; voice?: 'alloy'|'ash'|'ballad'|'coral'|'echo'|'sage'|'shimmer'|'verse' }) {
+  async init(options?: { tenantId?: string; instructions?: string; voice?: 'alloy'|'ash'|'ballad'|'coral'|'echo'|'sage'|'shimmer'|'verse' }) {
     // 1) Get ephemeral token from Edge Function
     const { data, error } = await supabase.functions.invoke('realtime-session', {
       body: {
+        tenant_id: options?.tenantId,
         instructions: options?.instructions,
         voice: options?.voice || 'alloy'
       }

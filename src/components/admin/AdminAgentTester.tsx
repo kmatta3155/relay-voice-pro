@@ -98,8 +98,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
 
       await chat.init({
         voice: 'alloy',
-        instructions: `You are ${agent.name || 'an AI receptionist'} for tenant ${tenantId}. 
-Answer professionally about hours, pricing, services, availability, and booking steps. Always be concise and helpful.`
+        tenantId
       });
 
       setIsConnected(true);

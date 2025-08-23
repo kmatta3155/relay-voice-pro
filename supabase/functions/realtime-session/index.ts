@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +20,32 @@ serve(async (req) => {
     }
 
     const requestBody = await req.json().catch(() => ({}));
-    const { instructions, voice = "alloy" } = requestBody;
+    const { tenant_id, instructions, voice = "alloy" } = requestBody;
+
+    // Build domain + tenant-specific instructions
+    let finalInstructions: string = instructions || "You are a helpful AI assistant.";
+
+    try {
+      if (tenant_id) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        if (!supabaseUrl || !supabaseServiceKey) throw new Error('Supabase env vars missing');
+        const sb = createClient(supabaseUrl, supabaseServiceKey);
+
+        const { data: agent, error: agentErr } = await sb
+          .from('ai_agents')
+          .select('name, system_prompt, overrides')
+          .eq('tenant_id', tenant_id)
+          .maybeSingle();
+
+        if (agentErr) console.error('Fetch agent error:', agentErr);
+        if (agent?.system_prompt) {
+          finalInstructions = `${agent.system_prompt}\n\nCONVERSATION RULES:\n- Never reply with "not enough information"; ask concise follow-ups instead.\n- Infer likely intent from salon/industry context when details are missing.\n- Be friendly, proactive, and offer next steps (book, estimate, consult).\n- If unsure on specifics (e.g., exact price), give typical ranges and offer to confirm.\n- Prefer business info from this tenant (services, hours, quick answers).`;
+        }
+      }
+    } catch (e) {
+      console.warn('Agent prompt lookup failed, using fallback instructions:', e);
+    }
 
     // Request an ephemeral token from OpenAI
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
@@ -31,7 +57,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "gpt-4o-realtime-preview-2024-12-17",
         voice,
-        instructions: instructions || "You are a helpful AI assistant."
+        instructions: finalInstructions
       }),
     });
 
