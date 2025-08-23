@@ -166,10 +166,117 @@ export default function CustomerExperienceSimulator({ open, onOpenChange, agent,
   const [simulationResults, setSimulationResults] = useState<SimulationResult[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [customerServices, setCustomerServices] = useState<any[]>([]);
+  const [businessHours, setBusinessHours] = useState<any[]>([]);
+  const [customScenarios, setCustomScenarios] = useState<SimulationScenario[]>([]);
   
   const chatRef = useRef<RealtimeChat | null>(null);
   const startTimeRef = useRef<number>(0);
 
+  // Load customer-specific data to generate relevant scenarios
+  useEffect(() => {
+    const loadCustomerData = async () => {
+      try {
+        // Load services
+        const { data: services } = await supabase
+          .from('services')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('active', true);
+
+        // Load business hours
+        const { data: hours } = await supabase
+          .from('business_hours')
+          .select('*')
+          .eq('tenant_id', tenantId);
+
+        setCustomerServices(services || []);
+        setBusinessHours(hours || []);
+
+        // Generate custom scenarios based on actual services
+        if (services && services.length > 0) {
+          const generatedScenarios = generateCustomScenarios(services, hours || []);
+          setCustomScenarios(generatedScenarios);
+        }
+      } catch (error) {
+        console.error('Error loading customer data:', error);
+      }
+    };
+
+    if (tenantId && open) {
+      loadCustomerData();
+    }
+  }, [tenantId, open]);
+
+  // Generate scenarios based on actual customer services
+  const generateCustomScenarios = (services: any[], hours: any[]): SimulationScenario[] => {
+    const scenarios: SimulationScenario[] = [];
+
+    // Service-specific booking scenarios
+    services.slice(0, 3).forEach((service, index) => {
+      scenarios.push({
+        id: `service-booking-${service.id}`,
+        title: `${service.name} - Booking Inquiry`,
+        description: `Customer interested in booking ${service.name}`,
+        customerProfile: `New customer interested in ${service.name.toLowerCase()}`,
+        expectedOutcome: `Explain ${service.name}, pricing, and book appointment`,
+        questions: [
+          `Hi, I'm interested in your ${service.name}. Can you tell me more about it?`,
+          `How much does ${service.name} cost?`,
+          service.duration_minutes ? `How long does ${service.name} take?` : `What's the process for ${service.name}?`,
+          `Do I need to prepare anything beforehand?`,
+          `Can I book an appointment for next week?`
+        ],
+        category: 'services',
+        difficulty: index === 0 ? 'easy' : index === 1 ? 'medium' : 'hard'
+      });
+    });
+
+    // Pricing comparison scenario with actual services
+    if (services.length > 1) {
+      scenarios.push({
+        id: 'actual-pricing-comparison',
+        title: 'Service Price Comparison',
+        description: 'Customer comparing different service options',
+        customerProfile: 'Budget-conscious customer weighing options',
+        expectedOutcome: 'Help customer understand value and make informed choice',
+        questions: [
+          `What's the difference between ${services[0]?.name} and ${services[1]?.name}?`,
+          `Which service would you recommend for my budget?`,
+          `Do you offer any package deals?`,
+          `What's your most popular service?`,
+          `Can I combine multiple services in one visit?`
+        ],
+        category: 'pricing',
+        difficulty: 'medium'
+      });
+    }
+
+    // Business hours scenario with actual hours
+    if (hours.length > 0) {
+      const openDays = hours.filter(h => !h.is_closed);
+      const closedDays = hours.filter(h => h.is_closed);
+      
+      scenarios.push({
+        id: 'actual-hours-inquiry',
+        title: 'Business Hours & Availability',
+        description: 'Customer asking about specific operating hours',
+        customerProfile: 'Working professional with limited availability',
+        expectedOutcome: 'Provide accurate hours and find suitable appointment time',
+        questions: [
+          `What are your business hours?`,
+          openDays.length > 0 ? `Are you open on ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][openDays[0].dow]}?` : 'When are you open?',
+          closedDays.length > 0 ? `Are you closed on ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][closedDays[0].dow]}?` : 'Do you have any days you\'re closed?',
+          `Do you take appointments outside of normal hours?`,
+          `What's the latest appointment I can book?`
+        ],
+        category: 'hours',
+        difficulty: 'easy'
+      });
+    }
+
+    return scenarios;
+  };
   const addMessage = useCallback((role: 'user' | 'assistant' | 'system', content: string, metadata?: Message['metadata']) => {
     const msg: Message = {
       id: `${Date.now()}-${Math.random()}`,
@@ -358,49 +465,102 @@ export default function CustomerExperienceSimulator({ open, onOpenChange, agent,
           </TabsList>
 
           <TabsContent value="scenarios" className="flex-1 overflow-y-auto">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Customer Journey Scenarios</h3>
-                <Badge variant="outline">{SIMULATION_SCENARIOS.length} scenarios available</Badge>
-              </div>
+            <div className="space-y-6">
+              {/* Customer-Specific Scenarios */}
+              {customScenarios.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">🎯 Customer-Specific Scenarios</h3>
+                    <Badge variant="default">{customScenarios.length} scenarios based on actual services</Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {customScenarios.map((scenario) => (
+                      <Card key={scenario.id} className="hover:shadow-md transition-shadow border-primary/20">
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base text-primary">{scenario.title}</CardTitle>
+                            <div className="flex gap-2">
+                              <Badge variant={scenario.difficulty === 'easy' ? 'default' : scenario.difficulty === 'medium' ? 'secondary' : 'destructive'}>
+                                {scenario.difficulty}
+                              </Badge>
+                              <Badge variant="outline">{scenario.category}</Badge>
+                            </div>
+                          </div>
+                          <CardDescription>{scenario.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            <div>
+                              <Label className="text-xs font-medium text-muted-foreground">Customer Profile</Label>
+                              <p className="text-sm">{scenario.customerProfile}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs font-medium text-muted-foreground">Questions ({scenario.questions.length})</Label>
+                              <p className="text-sm text-muted-foreground">{scenario.questions[0]}...</p>
+                            </div>
+                            <Button 
+                              onClick={() => startSimulation(scenario)}
+                              disabled={isRunning}
+                              className="w-full"
+                            >
+                              <Play className="h-4 w-4 mr-2" />
+                              Run Simulation
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {SIMULATION_SCENARIOS.map((scenario) => (
-                  <Card key={scenario.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">{scenario.title}</CardTitle>
-                        <div className="flex gap-2">
-                          <Badge variant={scenario.difficulty === 'easy' ? 'default' : scenario.difficulty === 'medium' ? 'secondary' : 'destructive'}>
-                            {scenario.difficulty}
-                          </Badge>
-                          <Badge variant="outline">{scenario.category}</Badge>
+              {/* Generic Scenarios */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">📋 Generic Customer Journey Scenarios</h3>
+                  <Badge variant="outline">{SIMULATION_SCENARIOS.length} general scenarios</Badge>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {SIMULATION_SCENARIOS.map((scenario) => (
+                    <Card key={scenario.id} className="hover:shadow-md transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">{scenario.title}</CardTitle>
+                          <div className="flex gap-2">
+                            <Badge variant={scenario.difficulty === 'easy' ? 'default' : scenario.difficulty === 'medium' ? 'secondary' : 'destructive'}>
+                              {scenario.difficulty}
+                            </Badge>
+                            <Badge variant="outline">{scenario.category}</Badge>
+                          </div>
                         </div>
-                      </div>
-                      <CardDescription>{scenario.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div>
-                          <Label className="text-xs font-medium text-muted-foreground">Customer Profile</Label>
-                          <p className="text-sm">{scenario.customerProfile}</p>
+                        <CardDescription>{scenario.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div>
+                            <Label className="text-xs font-medium text-muted-foreground">Customer Profile</Label>
+                            <p className="text-sm">{scenario.customerProfile}</p>
+                          </div>
+                          <div>
+                            <Label className="text-xs font-medium text-muted-foreground">Questions ({scenario.questions.length})</Label>
+                            <p className="text-sm text-muted-foreground">{scenario.questions[0]}...</p>
+                          </div>
+                          <Button 
+                            onClick={() => startSimulation(scenario)}
+                            disabled={isRunning}
+                            className="w-full"
+                            variant="outline"
+                          >
+                            <Play className="h-4 w-4 mr-2" />
+                            Run Simulation
+                          </Button>
                         </div>
-                        <div>
-                          <Label className="text-xs font-medium text-muted-foreground">Questions ({scenario.questions.length})</Label>
-                          <p className="text-sm text-muted-foreground">{scenario.questions[0]}...</p>
-                        </div>
-                        <Button 
-                          onClick={() => startSimulation(scenario)}
-                          disabled={isRunning}
-                          className="w-full"
-                        >
-                          <Play className="h-4 w-4 mr-2" />
-                          Run Simulation
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
             </div>
           </TabsContent>
