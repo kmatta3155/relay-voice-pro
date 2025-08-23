@@ -11,3 +11,18 @@ verify_jwt = false
 
 [functions.crawl-ingest]
 verify_jwt = false
+
+[functions.twilio-router]
+verify_jwt = false
+
+[functions.twilio-voice-stream]
+verify_jwt = false
+
+[functions.twilio-sms-incoming]
+verify_jwt = false
+
+[functions.twilio-status]
+verify_jwt = false
+
+[functions.twilio-voicemail]
+verify_jwt = false
