@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_runtimes: {
+        Row: {
+          agent_id: string
+          created_at: string
+          external_agent_id: string | null
+          id: string
+          provider: string
+          settings: Json
+          status: string
+          tenant_id: string
+          updated_at: string
+          ws_url: string | null
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          external_agent_id?: string | null
+          id?: string
+          provider: string
+          settings?: Json
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          ws_url?: string | null
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          external_agent_id?: string | null
+          id?: string
+          provider?: string
+          settings?: Json
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          ws_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_runtimes_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_settings: {
         Row: {
           after_hours_voicemail: boolean | null
@@ -60,6 +107,104 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      agent_training_jobs: {
+        Row: {
+          agent_id: string
+          created_at: string
+          created_by: string | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          params: Json
+          started_at: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          params?: Json
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          params?: Json
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_training_jobs_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_agents: {
+        Row: {
+          created_at: string
+          id: string
+          model: string
+          name: string
+          overrides: Json
+          status: string
+          system_prompt: string
+          tenant_id: string
+          tools: Json
+          trained_at: string | null
+          updated_at: string
+          version: number
+          voice_id: string | null
+          voice_provider: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model?: string
+          name?: string
+          overrides?: Json
+          status?: string
+          system_prompt?: string
+          tenant_id: string
+          tools?: Json
+          trained_at?: string | null
+          updated_at?: string
+          version?: number
+          voice_id?: string | null
+          voice_provider?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model?: string
+          name?: string
+          overrides?: Json
+          status?: string
+          system_prompt?: string
+          tenant_id?: string
+          tools?: Json
+          trained_at?: string | null
+          updated_at?: string
+          version?: number
+          voice_id?: string | null
+          voice_provider?: string | null
+        }
+        Relationships: []
       }
       appointments: {
         Row: {

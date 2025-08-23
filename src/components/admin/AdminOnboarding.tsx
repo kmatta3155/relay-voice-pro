@@ -1,17 +1,15 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { Globe, Loader2, Check, AlertCircle, Settings, Clock, Bot } from 'lucide-react';
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { AlertCircle, CheckCircle2, Globe, Clock, DollarSign, Settings } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-
+// Data types and interfaces remain the same
 interface ExtractionResult {
   services: Array<{
     name: string;
@@ -37,10 +35,14 @@ interface CrawlOptions {
   excludePatterns: string[];
 }
 
-const AdminOnboarding = () => {
-  const [step, setStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [websiteUrl, setWebsiteUrl] = useState('https://tinavorasalon.com');
+interface AdminOnboardingProps {
+  onBack: () => void;
+}
+
+export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [businessType, setBusinessType] = useState('');
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
@@ -50,118 +52,148 @@ const AdminOnboarding = () => {
     includePatterns: [],
     excludePatterns: ['*/blog/*', '*/news/*', '*/privacy*', '*/terms*']
   });
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const { toast } = useToast();
+  const [newTenantId, setNewTenantId] = useState<string | null>(null);
 
   const analyzeWebsite = async (deepCrawl = false) => {
-    if (!websiteUrl) {
+    if (!websiteUrl || !businessName) {
       toast({
         title: "Error",
-        description: "Please enter a website URL",
+        description: "Please enter both website URL and business name",
         variant: "destructive",
       });
       return;
     }
 
-    setIsLoading(true);
-    setExtractionResult(null);
-
-    const options = deepCrawl ? {
-      ...crawlOptions,
-      maxPages: crawlOptions.maxPages * 2,
-      maxDepth: crawlOptions.maxDepth + 1
-    } : crawlOptions;
+    setLoading(true);
 
     try {
-      console.log('Starting AI analysis with options:', options);
+      console.log('Starting website analysis...');
       
-      const { data, error } = await supabase.functions.invoke('crawl-ingest', {
+      const result = await supabase.functions.invoke('crawl-ingest', {
         body: {
           url: websiteUrl,
-          tenant_id: 'demo', // Using demo tenant for admin onboarding
-          crawlOptions: options
+          tenant_id: 'demo', // Demo tenant for analysis
+          crawlOptions: crawlOptions
         }
       });
 
-      if (error) {
-        console.error('Edge function error:', error);
-        throw new Error(error.message || 'Failed to analyze website');
+      console.log('Edge function result:', result);
+
+      if (result.error) {
+        console.error('Website analysis error:', result.error);
+        throw new Error('Edge Function returned a non-2xx status code');
       }
 
-      console.log('Analysis result:', data);
-      setExtractionResult(data);
-      
-      if (data.services?.length > 0 || data.hours?.length > 0) {
-        toast({
-          title: "Analysis Complete",
-          description: `Found ${data.services?.length || 0} services and ${data.hours?.length || 0} business hours entries`,
-        });
-        setStep(2);
-      } else {
-        toast({
-          title: "Limited Results",
-          description: "Try using the 'Deeper Crawl' option or check if the website has service information.",
-          variant: "destructive",
-        });
+      if (!result.data) {
+        throw new Error('No data returned from analysis');
       }
+
+      console.log('Website analysis result:', result.data);
+      setExtractionResult(result.data);
+      setCurrentStep(2);
+
+      toast({
+        title: "Analysis Complete",
+        description: `Found ${result.data.services?.length || 0} services and business information`,
+      });
+
     } catch (error) {
       console.error('Website analysis failed:', error);
       toast({
         title: "Analysis Failed",
-        description: error.message || 'Failed to analyze website',
+        description: error instanceof Error ? error.message : 'Failed to analyze website',
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const validateSavedData = async () => {
-    try {
-      const [servicesResult, hoursResult] = await Promise.all([
-        supabase.from('services').select('*').eq('tenant_id', 'demo'),
-        supabase.from('business_hours').select('*').eq('tenant_id', 'demo').order('dow')
-      ]);
+    if (!newTenantId) {
+      toast({
+        title: "No Data",
+        description: "No tenant created yet",
+        variant: "destructive"
+      });
+      return;
+    }
 
-      if (servicesResult.error || hoursResult.error) {
-        throw new Error('Failed to fetch saved data');
-      }
+    try {
+      const [agentResult, servicesResult, hoursResult] = await Promise.all([
+        supabase.from('ai_agents').select('*').eq('tenant_id', newTenantId).maybeSingle(),
+        supabase.from('services').select('*').eq('tenant_id', newTenantId),
+        supabase.from('business_hours').select('*').eq('tenant_id', newTenantId).order('dow')
+      ]);
 
       toast({
         title: "Data Validation",
-        description: `Found ${servicesResult.data?.length || 0} saved services and ${hoursResult.data?.length || 0} saved hours in database`,
+        description: `AI Agent: ${agentResult.data ? 'Created' : 'Not found'}, Services: ${servicesResult.data?.length || 0}, Hours: ${hoursResult.data?.length || 0}`,
       });
 
-      console.log('Saved services:', servicesResult.data);
-      console.log('Saved hours:', hoursResult.data);
+      console.log('Validation results:', { agentResult, servicesResult, hoursResult });
     } catch (error) {
       console.error('Validation failed:', error);
       toast({
         title: "Validation Failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Validation failed',
         variant: "destructive",
       });
     }
   };
 
   const saveConfiguration = async () => {
-    setIsLoading(true);
     try {
-      // Configuration is already saved by the crawl-ingest function
-      toast({
-        title: "Configuration Saved",
-        description: "Business information has been extracted and saved successfully!",
+      setLoading(true);
+      setCurrentStep(3);
+      console.log('Saving configuration:', extractionResult);
+      
+      // Create the tenant first
+      const { data: tenantData, error: tenantError } = await supabase.functions.invoke('customer-create', {
+        body: {
+          name: businessName,
+          business_type: businessType,
+          website_url: websiteUrl
+        }
       });
-      setStep(3);
+
+      if (tenantError) throw tenantError;
+      if (!tenantData?.tenant_id) throw new Error('Failed to create tenant');
+
+      const tenantId = tenantData.tenant_id;
+      setNewTenantId(tenantId);
+      console.log('Created tenant:', tenantId);
+
+      // Train the AI agent for this tenant
+      const { data: agentData, error: agentError } = await supabase.functions.invoke('train-agent', {
+        body: {
+          tenant_id: tenantId,
+          agent_name: 'Receptionist',
+          voice_provider: 'elevenlabs',
+          voice_id: '9BWtsMINqrJLrRacOk9x'
+        }
+      });
+
+      if (agentError) throw agentError;
+
+      setCurrentStep(4);
+      console.log('Agent training completed:', agentData);
+
+      toast({
+        title: "Success",
+        description: "Customer onboarded and AI agent trained successfully!",
+      });
     } catch (error) {
-      console.error('Save failed:', error);
+      console.error('Error saving configuration:', error);
       toast({
-        title: "Save Failed",
-        description: error.message,
-        variant: "destructive",
+        title: "Error",
+        description: "Failed to save configuration and train agent",
+        variant: "destructive"
       });
+      setCurrentStep(2); // Go back to review step
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -176,24 +208,47 @@ const AdminOnboarding = () => {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Customer Onboarding</h1>
-        <p className="text-muted-foreground">
-          Automatically extract business information from customer websites
-        </p>
-      </div>
-
-      <div className="mb-6">
-        <Progress value={(step / 3) * 100} className="w-full" />
-        <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-          <span className={step >= 1 ? "font-medium" : ""}>AI Analysis</span>
-          <span className={step >= 2 ? "font-medium" : ""}>Review & Edit</span>
-          <span className={step >= 3 ? "font-medium" : ""}>Save Configuration</span>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Customer Onboarding</h1>
+          <p className="text-muted-foreground">Set up a new customer with AI agent</p>
         </div>
+        <Button onClick={onBack} variant="outline">Back</Button>
       </div>
 
-      {step === 1 && (
+      {/* Progress Indicator */}
+      <div className="flex items-center justify-between mb-8">
+        {[1, 2, 3, 4].map((step) => (
+          <div
+            key={step}
+            className={`flex items-center ${
+              step < 4 ? 'flex-1' : ''
+            }`}
+          >
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                currentStep >= step
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {step}
+            </div>
+            {step < 4 && (
+              <div
+                className={`flex-1 h-0.5 ml-4 mr-4 ${
+                  currentStep > step ? 'bg-primary' : 'bg-muted'
+                }`}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Step 1: Website Analysis */}
+      {currentStep === 1 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -201,12 +256,33 @@ const AdminOnboarding = () => {
               Website Analysis
             </CardTitle>
             <CardDescription>
-              Enter the customer's website URL to automatically extract business information
+              Enter customer details to begin onboarding
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="websiteUrl">Website URL</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="businessName">Business Name *</Label>
+                <Input
+                  id="businessName"
+                  placeholder="Acme Beauty Salon"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="businessType">Business Type</Label>
+                <Input
+                  id="businessType"
+                  placeholder="Salon, Restaurant, Clinic, etc."
+                  value={businessType}
+                  onChange={(e) => setBusinessType(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="websiteUrl">Website URL *</Label>
               <Input
                 id="websiteUrl"
                 placeholder="https://example.com"
@@ -215,87 +291,28 @@ const AdminOnboarding = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Advanced Options
-              </Button>
-            </div>
-
-            {showAdvanced && (
-              <Card className="p-4 bg-muted/50">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="maxPages">Max Pages</Label>
-                    <Input
-                      id="maxPages"
-                      type="number"
-                      min="1"
-                      max="20"
-                      value={crawlOptions.maxPages}
-                      onChange={(e) => setCrawlOptions(prev => ({
-                        ...prev,
-                        maxPages: parseInt(e.target.value) || 5
-                      }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="maxDepth">Max Depth</Label>
-                    <Input
-                      id="maxDepth"
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={crawlOptions.maxDepth}
-                      onChange={(e) => setCrawlOptions(prev => ({
-                        ...prev,
-                        maxDepth: parseInt(e.target.value) || 2
-                      }))}
-                    />
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            <div className="flex gap-3">
-              <Button 
-                onClick={() => analyzeWebsite(false)}
-                disabled={isLoading}
-                className="flex-1"
-              >
-                {isLoading ? "Analyzing..." : "Start AI Analysis"}
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => analyzeWebsite(true)}
-                disabled={isLoading}
-              >
-                Deeper Crawl
-              </Button>
-            </div>
+            <Button 
+              onClick={() => analyzeWebsite(false)}
+              disabled={loading || !websiteUrl || !businessName}
+              className="w-full"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Analyzing Website...
+                </>
+              ) : (
+                'Analyze Website & Extract Data'
+              )}
+            </Button>
 
             {extractionResult && (
               <Card className="mt-6">
                 <CardHeader>
-                  <CardTitle className="text-lg">Analysis Results</CardTitle>
-                  <div className="flex gap-2 flex-wrap">
-                    <Badge variant={extractionResult.used_firecrawl ? "default" : "secondary"}>
-                      {extractionResult.used_firecrawl ? "Firecrawl" : "Heuristic"} crawling
-                    </Badge>
-                    <Badge variant="outline">
-                      {extractionResult.pages_fetched} pages fetched
-                    </Badge>
-                    <Badge variant="outline">
-                      Method: {extractionResult.extraction_method}
-                    </Badge>
-                  </div>
+                  <CardTitle>Analysis Results</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="text-center p-4 bg-muted/50 rounded-lg">
                       <div className="text-2xl font-bold">{extractionResult.services?.length || 0}</div>
                       <div className="text-sm text-muted-foreground">Services Found</div>
@@ -305,15 +322,6 @@ const AdminOnboarding = () => {
                       <div className="text-sm text-muted-foreground">Hours Entries</div>
                     </div>
                   </div>
-                  
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={validateSavedData}
-                    className="w-full"
-                  >
-                    Validate Saved Data
-                  </Button>
                 </CardContent>
               </Card>
             )}
@@ -321,142 +329,127 @@ const AdminOnboarding = () => {
         </Card>
       )}
 
-      {step === 2 && extractionResult && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                Extracted Information
-              </CardTitle>
-              <CardDescription>
-                Review and edit the automatically extracted business information
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Services Section */}
-              <div>
-                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Services ({extractionResult.services?.length || 0})
-                </h3>
-                {extractionResult.services?.length > 0 ? (
-                  <div className="space-y-3">
-                    {extractionResult.services.map((service, index) => (
-                      <Card key={index} className="p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h4 className="font-medium">{service.name}</h4>
-                            {service.description && (
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {service.description}
-                              </p>
-                            )}
-                            <div className="flex gap-3 mt-2">
-                              {service.price && (
-                                <Badge variant="secondary">{service.price}</Badge>
-                              )}
-                              {service.duration_minutes && (
-                                <Badge variant="outline">
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  {formatDuration(service.duration_minutes)}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                    No services were automatically extracted
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              {/* Business Hours Section */}
-              <div>
-                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Business Hours ({extractionResult.hours?.length || 0})
-                </h3>
-                {extractionResult.hours?.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {extractionResult.hours.map((hour, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                        <span className="font-medium">{hour.day}</span>
-                        <span className="text-muted-foreground">
-                          {hour.is_closed 
-                            ? "Closed" 
-                            : `${hour.open_time || 'N/A'} - ${hour.close_time || 'N/A'}`
-                          }
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                    No business hours were automatically extracted
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button onClick={() => setStep(1)} variant="outline">
-                  Back to Analysis
-                </Button>
-                <Button 
-                  onClick={saveConfiguration}
-                  disabled={isLoading}
-                  className="flex-1"
-                >
-                  {isLoading ? "Saving..." : "Save Configuration"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {step === 3 && (
+      {/* Step 2: Review Data */}
+      {currentStep === 2 && extractionResult && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-              Configuration Complete
-            </CardTitle>
+            <CardTitle>Review Extracted Data</CardTitle>
             <CardDescription>
-              Business information has been successfully extracted and saved
+              Review the business information before creating the customer
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-center py-8">
-              <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Onboarding Complete!</h3>
-              <p className="text-muted-foreground">
-                The customer's business information has been automatically extracted and configured.
-              </p>
+          <CardContent className="space-y-6">
+            {/* Services */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Services ({extractionResult.services?.length || 0})</h3>
+              {extractionResult.services?.length > 0 ? (
+                <div className="space-y-2">
+                  {extractionResult.services.map((service, index) => (
+                    <div key={index} className="p-3 border rounded-lg">
+                      <h4 className="font-medium">{service.name}</h4>
+                      {service.description && (
+                        <p className="text-sm text-muted-foreground">{service.description}</p>
+                      )}
+                      <div className="flex gap-2 mt-2">
+                        {service.price && <span className="text-xs bg-primary/10 px-2 py-1 rounded">{service.price}</span>}
+                        {service.duration_minutes && (
+                          <span className="text-xs bg-secondary px-2 py-1 rounded">
+                            {formatDuration(service.duration_minutes)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No services found</p>
+              )}
             </div>
-            
-            <div className="flex gap-3">
+
+            {/* Business Hours */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Business Hours ({extractionResult.hours?.length || 0})</h3>
+              {extractionResult.hours?.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {extractionResult.hours.map((hour, index) => (
+                    <div key={index} className="flex justify-between p-2 bg-muted/50 rounded">
+                      <span className="font-medium">{hour.day}</span>
+                      <span className="text-muted-foreground">
+                        {hour.is_closed ? 'Closed' : `${hour.open_time} - ${hour.close_time}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No hours found</p>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button onClick={() => setCurrentStep(1)} variant="outline">
+                Back to Analysis
+              </Button>
               <Button 
-                onClick={() => {
-                  setStep(1);
-                  setExtractionResult(null);
-                  setWebsiteUrl('');
-                }}
-                variant="outline"
+                onClick={saveConfiguration}
+                disabled={loading}
                 className="flex-1"
               >
-                Process Another Website
+                {loading ? 'Creating Customer...' : 'Create Customer & Train AI Agent'}
               </Button>
-              <Button onClick={validateSavedData} variant="outline">
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 3: Agent Training */}
+      {currentStep === 3 && (
+        <Card>
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+              <Bot className="h-6 w-6 text-blue-600" />
+            </div>
+            <CardTitle className="text-2xl">Training AI Agent</CardTitle>
+            <CardDescription>
+              Creating and training the AI receptionist for this customer...
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <div className="flex items-center justify-center space-x-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Training in progress...</span>
+            </div>
+            <p className="text-muted-foreground">
+              This may take a few moments while we configure the AI agent with the business information.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 4: Complete */}
+      {currentStep === 4 && (
+        <Card>
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+              <Check className="h-6 w-6 text-green-600" />
+            </div>
+            <CardTitle className="text-2xl">Onboarding Complete!</CardTitle>
+            <CardDescription>
+              {businessName} has been successfully onboarded with their AI receptionist.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              The AI agent has been trained with the business information and is ready to assist customers.
+            </p>
+            <div className="flex justify-center gap-4">
+              <Button onClick={() => window.location.reload()}>
+                Process Another Customer
+              </Button>
+              <Button variant="outline" onClick={validateSavedData}>
                 Validate Data
+              </Button>
+              <Button variant="outline" onClick={onBack}>
+                Back to Dashboard
               </Button>
             </div>
           </CardContent>
@@ -464,6 +457,4 @@ const AdminOnboarding = () => {
       )}
     </div>
   );
-};
-
-export default AdminOnboarding;
+}
