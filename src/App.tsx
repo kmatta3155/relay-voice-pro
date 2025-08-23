@@ -201,7 +201,11 @@ function DashboardShell(){
             </AdminRoute>
           } 
         />
-        <Route path="/admin" element={<Navigate to="/admin/onboarding" replace />} />
+        <Route path="/admin" element={
+          <AdminRoute>
+            <Admin />
+          </AdminRoute>
+        } />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

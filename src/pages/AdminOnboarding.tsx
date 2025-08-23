@@ -372,7 +372,11 @@ const analyzeWebsite = async (deepCrawl = false) => {
       setStep(3);
       // Auto-complete after success - stay on admin page for management
       setTimeout(() => { 
-        if (onBack) onBack(); 
+        if (onBack) {
+          onBack(); 
+        } else {
+          window.location.href = '/admin';
+        }
       }, 1500);
     } catch (error) {
       console.error('Error in onboarding process:', error);

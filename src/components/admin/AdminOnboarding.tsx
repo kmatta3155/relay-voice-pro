@@ -169,8 +169,14 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
         }
       });
 
-      if (tenantError) throw tenantError;
-      if (!tenantData?.tenantId) throw new Error('Failed to create tenant');
+      if (tenantError) {
+        console.error('Customer creation error:', tenantError);
+        throw new Error(`Failed to create customer: ${tenantError.message || 'Unknown error'}`);
+      }
+      if (!tenantData?.tenantId) {
+        console.error('No tenant ID returned:', tenantData);
+        throw new Error('Failed to create tenant - no ID returned');
+      }
 
       const tenantId = tenantData.tenantId;
       setNewTenantId(tenantId);
