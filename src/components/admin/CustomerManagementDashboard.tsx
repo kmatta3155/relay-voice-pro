@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Bot, Play, Settings, Eye, Phone, Globe } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom'; // Removed - causing Router context error
 import AdminAgentTester from './AdminAgentTester';
 import PhoneNumberPanel from './PhoneNumberPanel';
 
@@ -30,7 +30,7 @@ interface CustomerManagementDashboardProps {
 
 export default function CustomerManagementDashboard({ tenantId, onBack }: CustomerManagementDashboardProps) {
   const { toast } = useToast();
-  const navigate = useNavigate();
+  // const navigate = useNavigate(); // Removed - causing Router context error
   const [customerData, setCustomerData] = useState<CustomerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
@@ -188,8 +188,8 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
         .update({ active_tenant_id: tenantId })
         .eq('id', user.user.id);
 
-      // Navigate to customer overview
-      navigate('/overview');
+      // Use window.location to navigate instead of useNavigate
+      window.location.href = '/overview';
       
       toast({
         title: "Viewing as Customer",
