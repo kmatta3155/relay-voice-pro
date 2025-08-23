@@ -4,8 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Bot, Mic, Phone, PhoneOff, User, Volume2 } from 'lucide-react';
+import { Bot, Mic, Phone, PhoneOff, User, Volume2, Search, Send } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { RealtimeChat } from '@/utils/RealtimeAudio';
+import { supabase } from '@/integrations/supabase/client';
+import { getGroundingContext } from '@/lib/receptionist-rag';
 
 interface AdminAgentTesterProps {
   open: boolean;
@@ -19,7 +22,14 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  type?: 'transcription' | 'agent_response' | 'system';
+  type?: 'transcription' | 'agent_response' | 'system' | 'knowledge_test';
+}
+
+interface KnowledgeResult {
+  question: string;
+  answer: string;
+  timestamp: Date;
+  success: boolean;
 }
 
 export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }: AdminAgentTesterProps) {
@@ -28,6 +38,11 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  
+  // Knowledge testing state
+  const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeResult[]>([]);
+  const [knowledgeQuestion, setKnowledgeQuestion] = useState('');
+  const [isTestingKnowledge, setIsTestingKnowledge] = useState(false);
 
   const chatRef = useRef<RealtimeChat | null>(null);
   const transcriptRef = useRef<string>('');
@@ -132,6 +147,83 @@ Answer professionally about hours, pricing, services, availability, and booking 
       toast({ title: 'Send Error', description: e?.message || 'Failed to send message', variant: 'destructive' });
     }
   };
+
+  // Knowledge testing function
+  const testKnowledge = useCallback(async (question: string) => {
+    if (!question.trim()) {
+      toast({ title: 'Empty Question', description: 'Please enter a question to test', variant: 'destructive' });
+      return;
+    }
+
+    setIsTestingKnowledge(true);
+    console.log(`🔍 Testing knowledge for: "${question}"`);
+
+    try {
+      // Use the existing RAG system to get grounding context
+      const groundingContext = await getGroundingContext(tenantId, question, 6);
+      
+      console.log('📚 Knowledge search result:', { 
+        question, 
+        contextLength: groundingContext?.length || 0,
+        hasContext: !!groundingContext
+      });
+
+      const result: KnowledgeResult = {
+        question,
+        answer: groundingContext || 'No relevant knowledge found in the business data.',
+        timestamp: new Date(),
+        success: !!groundingContext && groundingContext.length > 0
+      };
+
+      setKnowledgeResults(prev => [result, ...prev]);
+      
+      // Add to message history as well
+      addMessage('user', question, 'knowledge_test');
+      addMessage('assistant', `📚 Knowledge Base Result:\n\n${result.answer}`, 'knowledge_test');
+
+      if (result.success) {
+        toast({ 
+          title: 'Knowledge Found', 
+          description: `Found relevant business information for: "${question.slice(0, 50)}..."` 
+        });
+      } else {
+        toast({ 
+          title: 'No Knowledge Found', 
+          description: 'No relevant business data found for this question',
+          variant: 'destructive' 
+        });
+      }
+
+    } catch (error: any) {
+      console.error('❌ Knowledge test error:', error);
+      
+      const errorResult: KnowledgeResult = {
+        question,
+        answer: `Error testing knowledge: ${error.message || 'Unknown error'}`,
+        timestamp: new Date(),
+        success: false
+      };
+
+      setKnowledgeResults(prev => [errorResult, ...prev]);
+      addMessage('assistant', `❌ Knowledge Test Error: ${error.message}`, 'system');
+      
+      toast({ 
+        title: 'Knowledge Test Error', 
+        description: error.message || 'Failed to test knowledge base',
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsTestingKnowledge(false);
+    }
+  }, [tenantId, addMessage, toast]);
+
+  const handleKnowledgeSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    if (knowledgeQuestion.trim()) {
+      testKnowledge(knowledgeQuestion.trim());
+      setKnowledgeQuestion('');
+    }
+  }, [knowledgeQuestion, testKnowledge]);
 
   useEffect(() => () => { chatRef.current?.disconnect(); }, []);
 
@@ -242,6 +334,58 @@ Answer professionally about hours, pricing, services, availability, and booking 
               </div>
             </div>
           )}
+
+          {/* Knowledge Base Testing Section */}
+          <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+            <p className="text-sm font-medium flex items-center gap-2 text-blue-900 dark:text-blue-100">
+              <Search className="h-4 w-4" /> Test Business Knowledge Base
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              Test if the AI agent can find information from your business data by asking any question.
+            </p>
+            
+            <form onSubmit={handleKnowledgeSubmit} className="flex gap-2">
+              <Input
+                value={knowledgeQuestion}
+                onChange={(e) => setKnowledgeQuestion(e.target.value)}
+                placeholder="Ask any question about your business..."
+                className="flex-1"
+                disabled={isTestingKnowledge}
+              />
+              <Button 
+                type="submit" 
+                disabled={isTestingKnowledge || !knowledgeQuestion.trim()}
+                size="sm"
+              >
+                {isTestingKnowledge ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </form>
+
+            {knowledgeResults.length > 0 && (
+              <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
+                <p className="text-xs font-medium text-blue-800 dark:text-blue-200">Recent Knowledge Tests:</p>
+                {knowledgeResults.slice(0, 3).map((result, i) => (
+                  <div key={i} className="p-2 bg-white/50 dark:bg-gray-800/50 rounded text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium truncate flex-1">{result.question}</span>
+                      <Badge variant={result.success ? "default" : "destructive"} className="text-xs ml-2">
+                        {result.success ? "✓" : "✗"}
+                      </Badge>
+                    </div>
+                    {result.success && (
+                      <p className="mt-1 text-muted-foreground truncate">
+                        {result.answer.slice(0, 100)}...
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
