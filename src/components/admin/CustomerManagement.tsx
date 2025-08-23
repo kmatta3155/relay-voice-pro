@@ -50,10 +50,12 @@ export function CustomerManagement() {
     }
   };
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.slug.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const q = searchTerm.toLowerCase().trim();
+  const filteredCustomers = customers.filter((customer) => {
+    const name = (customer?.name ?? '').toLowerCase();
+    const slug = (customer?.slug ?? '').toLowerCase();
+    return q === '' || name.includes(q) || slug.includes(q);
+  });
 
 
   if (selectedCustomer) {
@@ -132,9 +134,9 @@ export function CustomerManagement() {
                 <div className="space-y-3">
                   <div className="flex items-center text-sm text-muted-foreground">
                     <Users className="h-4 w-4 mr-2" />
-                    Created: {new Date(customer.created_at).toLocaleDateString()}
+                    Created: {customer.created_at ? new Date(customer.created_at).toLocaleDateString() : '—'}
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
