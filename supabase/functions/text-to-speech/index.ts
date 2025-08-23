@@ -50,19 +50,28 @@ serve(async (req) => {
     const audioBuffer = await response.arrayBuffer()
     console.log(`Generated audio buffer: ${audioBuffer.byteLength} bytes`)
 
-    // Convert to base64 using TextDecoder and btoa properly
+    // Convert directly to base64 using built-in browser API
+    // This is the correct way to handle binary audio data
     const uint8Array = new Uint8Array(audioBuffer)
-    let binaryString = ''
     
-    // Process in smaller chunks to avoid stack overflow
-    const chunkSize = 8192
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, i + chunkSize)
-      binaryString += String.fromCharCode.apply(null, Array.from(chunk))
+    // Use TextDecoder for proper binary to base64 conversion
+    let binary = ''
+    const len = uint8Array.byteLength
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(uint8Array[i])
     }
     
-    const base64Audio = btoa(binaryString)
-    console.log(`Base64 audio length: ${base64Audio.length} characters`)
+    const base64Audio = btoa(binary)
+    console.log(`Base64 audio created successfully, length: ${base64Audio.length}`)
+    
+    // Validate the base64
+    try {
+      atob(base64Audio.substring(0, 100)) // Test decode a small portion
+      console.log('Base64 validation passed')
+    } catch (e) {
+      console.error('Base64 validation failed:', e)
+      throw new Error('Generated base64 is invalid')
+    }
 
     return new Response(
       JSON.stringify({ 

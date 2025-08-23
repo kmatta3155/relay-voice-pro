@@ -87,11 +87,21 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
         ));
       }
 
+      console.log('TTS Request:', { text: text.slice(0, 50), voice_id: 'alloy' });
+
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { 
           text: text.slice(0, 500), // Limit text length for better performance
           voice_id: 'alloy'
         }
+      });
+
+      console.log('TTS Response received:', { 
+        hasData: !!data, 
+        hasError: !!error, 
+        dataKeys: data ? Object.keys(data) : null,
+        audioContentLength: data?.audioContent?.length,
+        error: error 
       });
 
       if (error) {
