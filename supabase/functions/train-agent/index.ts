@@ -86,12 +86,18 @@ serve(async (req) => {
     let agentId: string;
 
     if (existingAgent) {
-      // Update existing agent
+      // Update existing agent - first get current version
+      const { data: currentAgent } = await supabase
+        .from('ai_agents')
+        .select('version')
+        .eq('id', existingAgent.id)
+        .single();
+
       const { data: updatedAgent, error: updateError } = await supabase
         .from('ai_agents')
         .update({
           ...agentData,
-          version: existingAgent.version + 1,
+          version: (currentAgent?.version || 1) + 1,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingAgent.id)

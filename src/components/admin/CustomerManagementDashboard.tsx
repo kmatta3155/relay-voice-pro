@@ -9,7 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Bot, Play, Settings } from 'lucide-react';
+import { Loader2, Bot, Play, Settings, Eye, Phone } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import AdminAgentTester from './AdminAgentTester';
+import PhoneNumberPanel from './PhoneNumberPanel';
 
 interface CustomerData {
   tenant: any;
@@ -26,10 +29,12 @@ interface CustomerManagementDashboardProps {
 
 export default function CustomerManagementDashboard({ tenantId, onBack }: CustomerManagementDashboardProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [customerData, setCustomerData] = useState<CustomerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [showAgentTester, setShowAgentTester] = useState(false);
 
   useEffect(() => {
     loadCustomerData();
@@ -104,11 +109,43 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
   };
 
   const handleTestAgent = () => {
-    // TODO: Implement agent testing functionality
-    toast({
-      title: "Test Agent",
-      description: "Agent testing functionality coming soon"
-    });
+    if (!customerData?.agent) {
+      toast({
+        title: "No Agent",
+        description: "Please train an AI agent first",
+        variant: "destructive"
+      });
+      return;
+    }
+    setShowAgentTester(true);
+  };
+
+  const handleViewAsCustomer = async () => {
+    try {
+      // Set this tenant as active for the admin user
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) return;
+
+      await supabase
+        .from('profiles')
+        .update({ active_tenant_id: tenantId })
+        .eq('id', user.user.id);
+
+      // Navigate to customer overview
+      navigate('/overview');
+      
+      toast({
+        title: "Viewing as Customer",
+        description: `You're now viewing as ${customerData?.tenant.name}`,
+      });
+    } catch (error) {
+      console.error('Error switching to customer view:', error);
+      toast({
+        title: "Error",
+        description: "Failed to switch to customer view",
+        variant: "destructive"
+      });
+    }
   };
 
   if (loading) {
@@ -138,15 +175,22 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
           <h1 className="text-3xl font-bold">{tenant.name}</h1>
           <p className="text-muted-foreground">Customer Management Dashboard</p>
         </div>
-        <Button onClick={onBack} variant="outline">
-          Back to Customers
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleViewAsCustomer} variant="outline" className="flex items-center gap-2">
+            <Eye className="h-4 w-4" />
+            View as Customer
+          </Button>
+          <Button onClick={onBack} variant="outline">
+            Back to Customers
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="agent">AI Agent</TabsTrigger>
+          <TabsTrigger value="phone">Phone Number</TabsTrigger>
           <TabsTrigger value="business">Business Info</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -317,6 +361,10 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
           </Card>
         </TabsContent>
 
+        <TabsContent value="phone" className="space-y-6">
+          <PhoneNumberPanel tenantId={tenantId} />
+        </TabsContent>
+
         <TabsContent value="business" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
@@ -423,6 +471,16 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Agent Tester Modal */}
+      {customerData?.agent && (
+        <AdminAgentTester
+          open={showAgentTester}
+          onOpenChange={setShowAgentTester}
+          agent={customerData.agent}
+          tenantId={tenantId}
+        />
+      )}
     </div>
   );
 }

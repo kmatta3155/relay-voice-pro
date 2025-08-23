@@ -22,6 +22,7 @@ import KnowledgePage from "@/pages/KnowledgePage";
 import KnowledgeShowcase from "@/components/demo/KnowledgeShowcase";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLink from "@/components/admin/AdminLink";
+import AdminNavBar from "@/components/admin/AdminNavBar";
 import { CustomerManagement } from "@/components/admin/CustomerManagement";
 const queryClient = new QueryClient();
 
@@ -58,6 +59,24 @@ function AuthGate({ children }: { children: any }) {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [tenants, setTenants] = useState<any[]>([]);
+  const [isInCustomerView, setIsInCustomerView] = useState(false);
+  const [customerName, setCustomerName] = useState<string>('');
+
+  const checkAdminViewStatus = async (currentProfile: any) => {
+    if (currentProfile?.is_site_admin && currentProfile?.active_tenant_id) {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('name')
+        .eq('id', currentProfile.active_tenant_id)
+        .single();
+      
+      setIsInCustomerView(true);
+      setCustomerName(tenant?.name || '');
+    } else {
+      setIsInCustomerView(false);
+      setCustomerName('');
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -75,6 +94,9 @@ function AuthGate({ children }: { children: any }) {
       const ts = await ensureDemoTenant(); setTenants(ts);
       // Do NOT auto-select a tenant for site admins to keep them in site-admin mode
       if (!p?.is_site_admin && !p?.active_tenant_id && ts[0]) await setActiveTenant(ts[0].id);
+      
+      // Check admin view status
+      await checkAdminViewStatus(p);
     })();
   }, [session]);
 
@@ -86,6 +108,7 @@ function AuthGate({ children }: { children: any }) {
   
   return (
     <div className="min-h-screen">
+      {isInCustomerView && <AdminNavBar customerName={customerName} />}
       {!isDashboard && <TopBar profile={profile} tenants={tenants} onSwitch={async(id:string)=>{ await setActiveTenant(id); location.reload(); }} onSignOut={async()=>{ await signOut(); location.reload(); }} />}
       {children}
     </div>
@@ -180,35 +203,42 @@ function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants
 function DashboardShell(){
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/demo" element={<Demo />} />
-        <Route path="/demo/knowledge" element={<KnowledgeShowcase />} />
-        <Route 
-          path="/knowledge" 
-          element={
-            <AuthGate>
-              <KnowledgePage />
-            </AuthGate>
-          } 
-        />
-        <Route path="/accept-invite" element={<AcceptInvite />} />
-        <Route 
-          path="/admin/onboarding" 
-          element={
+      <AuthGate>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/demo" element={<Demo />} />
+          <Route path="/demo/knowledge" element={<KnowledgeShowcase />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
+          
+          {/* Customer Dashboard Routes */}
+          <Route path="/overview" element={<Dashboard />} />
+          <Route path="/leads" element={<Dashboard />} />
+          <Route path="/appointments" element={<Dashboard />} />
+          <Route path="/messages" element={<Dashboard />} />
+          <Route path="/calls" element={<Dashboard />} />
+          <Route path="/analytics" element={<Dashboard />} />
+          <Route path="/settings" element={<Dashboard />} />
+          
+          {/* Admin Routes */}
+          <Route 
+            path="/admin/onboarding" 
+            element={
+              <AdminRoute>
+                <AdminOnboarding />
+              </AdminRoute>
+            } 
+          />
+          <Route path="/admin" element={
             <AdminRoute>
-              <AdminOnboarding />
+              <Admin />
             </AdminRoute>
-          } 
-        />
-        <Route path="/admin" element={
-          <AdminRoute>
-            <Admin />
-          </AdminRoute>
-        } />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+          } />
+          
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AuthGate>
     </BrowserRouter>
   );
 }
@@ -381,7 +411,10 @@ export default function VoiceRelayProApp() {
     const pathname = location.pathname;
     
     // Check for regular path routes first
-    if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite') return 'routes';
+    if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite' || 
+        pathname.startsWith('/overview') || pathname.startsWith('/leads') || pathname.startsWith('/appointments') ||
+        pathname.startsWith('/messages') || pathname.startsWith('/calls') || pathname.startsWith('/analytics') ||
+        pathname.startsWith('/settings') || pathname.startsWith('/knowledge')) return 'routes';
     
     // Force auth mode if tokens are in the hash anywhere (double-hash safe)
     if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) return "auth";
@@ -394,7 +427,10 @@ export default function VoiceRelayProApp() {
       const pathname = location.pathname;
       
       // Check for regular path routes first
-      if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite') {
+      if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite' ||
+          pathname.startsWith('/overview') || pathname.startsWith('/leads') || pathname.startsWith('/appointments') ||
+          pathname.startsWith('/messages') || pathname.startsWith('/calls') || pathname.startsWith('/analytics') ||
+          pathname.startsWith('/settings') || pathname.startsWith('/knowledge')) {
         setMode('routes'); return;
       }
       
