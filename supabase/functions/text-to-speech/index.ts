@@ -45,11 +45,19 @@ serve(async (req) => {
       throw new Error(error.error?.message || 'Failed to generate speech')
     }
 
-    // Convert audio buffer to base64
+    // Convert audio buffer to base64 (chunked to prevent stack overflow)
     const arrayBuffer = await response.arrayBuffer()
-    const base64Audio = btoa(
-      String.fromCharCode(...new Uint8Array(arrayBuffer))
-    )
+    const uint8Array = new Uint8Array(arrayBuffer)
+    
+    // Convert to base64 in chunks to prevent stack overflow
+    let base64Audio = ''
+    const chunkSize = 32768 // 32KB chunks
+    
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize)
+      const binaryString = Array.from(chunk, byte => String.fromCharCode(byte)).join('')
+      base64Audio += btoa(binaryString)
+    }
 
     console.log(`Generated audio: ${arrayBuffer.byteLength} bytes`)
 
