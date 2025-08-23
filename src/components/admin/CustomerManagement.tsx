@@ -17,6 +17,14 @@ export function CustomerManagement() {
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
 
   useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tid = params.get('tenantId');
+      if (tid) setSelectedCustomer(tid);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
     loadCustomers();
   }, []);
 

@@ -105,6 +105,7 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps = {}) {
   const [validationStatus, setValidationStatus] = useState("");
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [createdTenantId, setCreatedTenantId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -348,6 +349,7 @@ const analyzeWebsite = async (deepCrawl = false) => {
 
       const newTenantId = tenantData.tenantId;
       console.log('Created tenant:', newTenantId);
+      setCreatedTenantId(newTenantId);
 
       // Save business data to this tenant
       if (extractionResult) {
@@ -820,15 +822,12 @@ const analyzeWebsite = async (deepCrawl = false) => {
                 </Button>
                 <Button 
                   onClick={() => {
-                    if (onBack) {
-                      onBack();
-                    } else {
-                      window.location.href = '/admin';
-                    }
+                    const target = createdTenantId ? `/admin?tenantId=${createdTenantId}` : '/admin';
+                    window.location.href = target;
                   }}
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Customer Management
+                  Continue to Customer Setup
                 </Button>
               </div>
 
