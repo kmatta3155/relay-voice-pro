@@ -1,9 +1,16 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+// Initialize Supabase client
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+)
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -27,12 +34,6 @@ serve(async (req) => {
     
     if (!tenantId && to) {
       // Look up tenant by phone number
-      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.38.4')
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      )
-      
       const { data } = await supabase
         .from('agent_settings')
         .select('tenant_id')
@@ -56,12 +57,6 @@ serve(async (req) => {
     }
 
     // Check if AI agent is in live mode
-    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.38.4')
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-
     const { data: agentData, error: agentError } = await supabase
       .from('ai_agents')
       .select('mode, status')
