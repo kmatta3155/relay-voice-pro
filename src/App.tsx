@@ -108,7 +108,6 @@ function AuthGate({ children }: { children: any }) {
   
   return (
     <div className="min-h-screen">
-      {isInCustomerView && <AdminNavBar customerName={customerName} />}
       {!isDashboard && <TopBar profile={profile} tenants={tenants} onSwitch={async(id:string)=>{ await setActiveTenant(id); location.reload(); }} onSignOut={async()=>{ await signOut(); location.reload(); }} />}
       {children}
     </div>
@@ -201,9 +200,42 @@ function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants
 
 
 function DashboardShell(){
+  const [isInCustomerView, setIsInCustomerView] = useState(false);
+  const [customerName, setCustomerName] = useState<string>('');
+
+  useEffect(() => {
+    const checkAdminViewStatus = async () => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_site_admin, active_tenant_id')
+        .eq('id', user.user.id)
+        .single();
+
+      if (profile?.is_site_admin && profile?.active_tenant_id) {
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('name')
+          .eq('id', profile.active_tenant_id)
+          .single();
+        
+        setIsInCustomerView(true);
+        setCustomerName(tenant?.name || '');
+      } else {
+        setIsInCustomerView(false);
+        setCustomerName('');
+      }
+    };
+
+    checkAdminViewStatus();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthGate>
+        {isInCustomerView && <AdminNavBar customerName={customerName} />}
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/demo" element={<Demo />} />
