@@ -705,6 +705,27 @@ serve(async (req) => {
     // Save to database
     await saveToDatabase(finalTenantId, uniqueServices, uniqueHours);
 
+    // Create knowledge chunks for RAG search by calling ingest-enhanced
+    console.log('Creating knowledge chunks for RAG search...');
+    try {
+      const ingestResponse = await supabase.functions.invoke('ingest-enhanced', {
+        body: {
+          tenant_id: finalTenantId,
+          site_url: url,
+          content: content.substring(0, 50000), // Limit content size for embedding
+          title: `Business Data from ${url}`
+        }
+      });
+      
+      if (ingestResponse.error) {
+        console.error('Failed to create knowledge chunks:', ingestResponse.error);
+      } else {
+        console.log('Successfully created knowledge chunks for RAG search');
+      }
+    } catch (ingestError) {
+      console.error('Error calling ingest-enhanced:', ingestError);
+    }
+
     const result: ExtractionResult = {
       services: uniqueServices,
       hours: uniqueHours,
