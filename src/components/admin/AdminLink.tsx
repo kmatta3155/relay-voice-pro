@@ -8,7 +8,7 @@ export default function AdminLink({ className = "" }: { className?: string }) {
 
   return (
     <a
-      href="/admin/onboarding"
+      href="/#admin"
       className={className || "text-sm text-zinc-700 hover:text-violet-700"}
     >
       Admin
