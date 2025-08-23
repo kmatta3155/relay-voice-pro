@@ -382,14 +382,7 @@ const analyzeWebsite = async (deepCrawl = false) => {
       console.log('Process completed:', { tenantData, agentData });
       toast({ title: "Success", description: "Customer onboarded successfully!" });
       setStep(3);
-      // Auto-complete after success - stay on admin page for management
-      setTimeout(() => { 
-        if (onBack) {
-          onBack(); 
-        } else {
-          window.location.href = '/admin';
-        }
-      }, 1500);
+      // Let user control when to go back - no auto-redirect
     } catch (error) {
       console.error('Error in onboarding process:', error);
       toast({
@@ -815,14 +808,27 @@ const analyzeWebsite = async (deepCrawl = false) => {
                   onClick={() => setStep(1)} 
                   variant="outline"
                 >
-                  Process Another Source
+                  Process Another Customer
                 </Button>
                 <Button 
                   onClick={validateSavedData} 
                   disabled={!!validationStatus}
+                  variant="secondary"
                 >
                   {validationStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                   Validate Data
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (onBack) {
+                      onBack();
+                    } else {
+                      window.location.href = '/admin';
+                    }
+                  }}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Admin Dashboard
                 </Button>
               </div>
 
