@@ -7,7 +7,8 @@ const corsHeaders = {
 
 type Cmd =
   | { action: "search"; country?: string; areaCode?: string }
-  | { action: "purchase"; phoneNumber: string; tenantId: string; projectBase: string };
+  | { action: "purchase"; phoneNumber: string; tenantId: string; projectBase?: string }
+  | { action: "configure"; phoneNumber: string; tenantId: string };
 
 const twilioFetch = async (path: string, method = "GET", body?: URLSearchParams) => {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID")!;
@@ -76,7 +77,7 @@ serve(async (req) => {
       console.log(`Purchased phone number: ${bought.phone_number} with SID: ${bought.sid}`);
 
       // Configure webhooks - point to Supabase Functions
-      const base = body.projectBase.replace(/\/$/, "");
+      const base = (body.projectBase || Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
       const sid = bought.sid;
       const setHooks = new URLSearchParams({
         VoiceUrl: `${base}/functions/v1/twilio-router?tenant_id=${body.tenantId}`,
@@ -97,6 +98,41 @@ serve(async (req) => {
         sid, 
         phoneNumber: bought.phone_number 
       }), { 
+        headers: { ...corsHeaders, "content-type": "application/json" }
+      });
+    }
+
+    if (body.action === "configure") {
+      const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
+      // Find the IncomingPhoneNumber SID for the provided number
+      const list = await twilioFetch(
+        `/Accounts/${Deno.env.get("TWILIO_ACCOUNT_SID")}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(body.phoneNumber)}`
+      );
+
+      const incoming = (list.incoming_phone_numbers && list.incoming_phone_numbers[0]) || null;
+      if (!incoming) {
+        return new Response(JSON.stringify({ ok: false, error: "Phone number not found in Twilio account" }), {
+          status: 404,
+          headers: { ...corsHeaders, "content-type": "application/json" }
+        });
+      }
+
+      const sid = incoming.sid;
+      const setHooks = new URLSearchParams({
+        VoiceUrl: `${base}/functions/v1/twilio-router?tenant_id=${body.tenantId}`,
+        StatusCallback: `${base}/functions/v1/twilio-status?tenant_id=${body.tenantId}`,
+        SmsUrl: `${base}/functions/v1/twilio-sms-incoming?tenant_id=${body.tenantId}`,
+      });
+
+      await twilioFetch(
+        `/Accounts/${Deno.env.get("TWILIO_ACCOUNT_SID")}/IncomingPhoneNumbers/${sid}.json`,
+        "POST",
+        setHooks
+      );
+
+      console.log(`Configured webhooks for existing number: ${incoming.phone_number}`);
+
+      return new Response(JSON.stringify({ ok: true, sid, phoneNumber: incoming.phone_number }), {
         headers: { ...corsHeaders, "content-type": "application/json" }
       });
     }

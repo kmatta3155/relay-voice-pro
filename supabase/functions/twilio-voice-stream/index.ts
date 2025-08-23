@@ -87,18 +87,6 @@ serve(async (req) => {
             tools: [
               {
                 type: 'function',
-                name: 'transfer_to_human',
-                description: 'Transfer the call to a human representative',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    reason: { type: 'string' }
-                  },
-                  required: ['reason']
-                }
-              },
-              {
-                type: 'function',
                 name: 'schedule_appointment',
                 description: 'Schedule an appointment for the caller',
                 parameters: {

@@ -27,6 +27,8 @@ export default function PhoneNumberPanel({ tenantId }: PhoneNumberPanelProps) {
   const [availableNumbers, setAvailableNumbers] = useState<PhoneNumber[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [purchaseLoading, setPurchaseLoading] = useState<string>('');
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [existingNumber, setExistingNumber] = useState('');
   const [searchParams, setSearchParams] = useState({
     country: 'US',
     areaCode: ''
@@ -118,6 +120,39 @@ export default function PhoneNumberPanel({ tenantId }: PhoneNumberPanelProps) {
     }
   };
 
+  const handleConnectExisting = async () => {
+    if (!existingNumber) return;
+    try {
+      setConnectLoading(true);
+      const { error } = await supabase.functions.invoke('number-provision', {
+        body: {
+          action: 'configure',
+          phoneNumber: existingNumber,
+          tenantId
+        }
+      });
+      if (error) throw error;
+
+      const { error: upsertErr } = await supabase
+        .from('agent_settings')
+        .upsert({
+          tenant_id: tenantId,
+          twilio_number: existingNumber,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'tenant_id' });
+      if (upsertErr) throw upsertErr;
+
+      setCurrentNumber(existingNumber);
+      setExistingNumber('');
+      toast({ title: 'Connected', description: 'Webhooks configured and number saved.' });
+    } catch (e) {
+      console.error('Error connecting existing number:', e);
+      toast({ title: 'Configuration Error', description: 'Failed to configure webhooks for this number', variant: 'destructive' });
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -141,6 +176,28 @@ export default function PhoneNumberPanel({ tenantId }: PhoneNumberPanelProps) {
             ) : (
               <Badge variant="outline">No number assigned</Badge>
             )}
+          </div>
+        </div>
+
+        {/* Connect Existing Number */}
+        <div className="space-y-2">
+          <Label>Connect Existing Twilio Number</Label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g., +14155550123"
+              value={existingNumber}
+              onChange={(e) => setExistingNumber(e.target.value)}
+            />
+            <Button onClick={handleConnectExisting} disabled={connectLoading || !existingNumber}>
+              {connectLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>Connect & Configure Webhooks</>
+              )}
+            </Button>
           </div>
         </div>
 
