@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Bot, Play, Settings, Eye, Phone } from 'lucide-react';
+import { Loader2, Bot, Play, Settings, Eye, Phone, Globe } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
 import AdminAgentTester from './AdminAgentTester';
 import PhoneNumberPanel from './PhoneNumberPanel';
@@ -34,6 +35,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   const [showAgentTester, setShowAgentTester] = useState(false);
 
@@ -113,6 +115,53 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
       });
     } finally {
       setTraining(false);
+    }
+  };
+
+  const handleExtractBusinessData = async () => {
+    if (!websiteUrl || !customerData) return;
+
+    setExtracting(true);
+    try {
+      // First, run crawl-ingest to extract data
+      const { error: crawlError } = await supabase.functions.invoke('crawl-ingest', {
+        body: {
+          tenant_id: tenantId,
+          url: websiteUrl
+        }
+      });
+
+      if (crawlError) throw crawlError;
+
+      // Then consolidate the business data
+      const { error: consolidateError } = await supabase.functions.invoke('consolidate-business-data', {
+        body: {
+          tenant_id: tenantId
+        }
+      });
+
+      if (consolidateError) throw consolidateError;
+
+      // Finally, retrain the agent
+      await handleTrainAgent();
+
+      toast({
+        title: "Success",
+        description: "Business data extracted and agent retrained successfully"
+      });
+
+      // Refresh the data
+      await loadCustomerData();
+    } catch (error) {
+      console.error('Error extracting business data:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to extract business data',
+        variant: "destructive"
+      });
+    } finally {
+      setExtracting(false);
+      setWebsiteUrl('');
     }
   };
 
@@ -341,6 +390,42 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
                       <Play className="h-4 w-4" />
                       Test Agent
                     </Button>
+
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="flex items-center gap-2">
+                          <Globe className="h-4 w-4" />
+                          Extract Business Data
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Extract Business Data</DialogTitle>
+                          <DialogDescription>
+                            Enter a website URL to extract and update business information for this customer
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="website">Website URL</Label>
+                            <Input
+                              id="website"
+                              value={websiteUrl}
+                              onChange={(e) => setWebsiteUrl(e.target.value)}
+                              placeholder="https://example.com"
+                              type="url"
+                            />
+                          </div>
+                          <Button 
+                            onClick={handleExtractBusinessData}
+                            disabled={extracting || !websiteUrl}
+                            className="w-full"
+                          >
+                            {extracting ? 'Extracting...' : 'Extract & Retrain Agent'}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </div>
               ) : (

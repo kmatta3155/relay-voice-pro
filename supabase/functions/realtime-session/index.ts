@@ -18,7 +18,8 @@ serve(async (req) => {
       throw new Error('OPENAI_API_KEY is not set');
     }
 
-    const { instructions, voice = "alloy" } = await req.json();
+    const requestBody = await req.json().catch(() => ({}));
+    const { instructions, voice = "alloy" } = requestBody;
 
     // Request an ephemeral token from OpenAI
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
