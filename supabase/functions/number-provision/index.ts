@@ -75,13 +75,13 @@ serve(async (req) => {
 
       console.log(`Purchased phone number: ${bought.phone_number} with SID: ${bought.sid}`);
 
-      // Configure webhooks
+      // Configure webhooks - point to Supabase Functions
       const base = body.projectBase.replace(/\/$/, "");
       const sid = bought.sid;
       const setHooks = new URLSearchParams({
-        VoiceUrl: `${base}/twilio-router`,
-        StatusCallback: `${base}/twilio-status`,
-        SmsUrl: `${base}/twilio-sms-incoming`,
+        VoiceUrl: `${base}/functions/v1/twilio-router?tenant_id=${body.tenantId}`,
+        StatusCallback: `${base}/functions/v1/twilio-status?tenant_id=${body.tenantId}`,
+        SmsUrl: `${base}/functions/v1/twilio-sms-incoming?tenant_id=${body.tenantId}`,
       });
       
       await twilioFetch(
