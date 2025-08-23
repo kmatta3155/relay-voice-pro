@@ -74,8 +74,8 @@ serve(async (req) => {
             modalities: ['text', 'audio'],
             instructions: agent.system_prompt || 'You are a helpful AI receptionist.',
             voice: 'alloy',
-            input_audio_format: 'mulaw',
-            output_audio_format: 'mulaw',
+            input_audio_format: 'pcm16',
+            output_audio_format: 'pcm16',
             input_audio_transcription: {
               model: 'whisper-1'
             },
@@ -104,7 +104,6 @@ serve(async (req) => {
               }
             ],
             tool_choice: 'auto',
-            temperature: 0.8,
             max_response_output_tokens: 'inf'
           }
         }
@@ -129,12 +128,14 @@ serve(async (req) => {
             break
 
           case 'response.audio.delta':
-            // Send audio back to Twilio
-            if (socket.readyState === WebSocket.OPEN) {
+            // Convert PCM16 to mulaw and send back to Twilio
+            if (socket.readyState === WebSocket.OPEN && streamSid) {
+              const mulawAudio = convertPCM16ToMulaw(data.delta)
               socket.send(JSON.stringify({
                 event: 'media',
+                streamSid: streamSid,
                 media: {
-                  payload: data.delta
+                  payload: mulawAudio
                 }
               }))
             }
@@ -258,6 +259,58 @@ serve(async (req) => {
     return await response.arrayBuffer()
   }
 
+  // Audio conversion functions
+  const convertMulawToPCM16 = (mulawBase64: string): string => {
+    // Decode base64 to get mulaw bytes
+    const mulawBytes = Uint8Array.from(atob(mulawBase64), c => c.charCodeAt(0))
+    
+    // Convert mulaw to PCM16 (simplified conversion)
+    const pcm16Data = new Int16Array(mulawBytes.length)
+    for (let i = 0; i < mulawBytes.length; i++) {
+      // Simplified mulaw to linear conversion
+      let sample = mulawBytes[i]
+      sample = ~sample
+      let mantissa = (sample & 0x0F) << 3
+      let exponent = (sample & 0x70) >> 4
+      if (exponent > 0) mantissa += 0x84
+      let linear = mantissa << (exponent + 3)
+      if (sample & 0x80) linear = -linear
+      pcm16Data[i] = Math.max(-32768, Math.min(32767, linear))
+    }
+    
+    // Convert to base64
+    const bytes = new Uint8Array(pcm16Data.buffer)
+    return btoa(String.fromCharCode(...bytes))
+  }
+
+  const convertPCM16ToMulaw = (pcm16Base64: string): string => {
+    // Decode base64 to get PCM16 bytes
+    const pcm16Bytes = Uint8Array.from(atob(pcm16Base64), c => c.charCodeAt(0))
+    const pcm16Data = new Int16Array(pcm16Bytes.buffer)
+    
+    // Convert PCM16 to mulaw
+    const mulawData = new Uint8Array(pcm16Data.length)
+    for (let i = 0; i < pcm16Data.length; i++) {
+      let sample = pcm16Data[i]
+      const sign = sample < 0 ? 0x80 : 0x00
+      if (sample < 0) sample = -sample
+      
+      sample += 0x84
+      let exponent = 7
+      for (let exp = 0; exp < 8; exp++) {
+        if (sample <= (0x84 << exp)) {
+          exponent = exp
+          break
+        }
+      }
+      
+      const mantissa = (sample >> (exponent + 3)) & 0x0F
+      mulawData[i] = ~(sign | (exponent << 4) | mantissa)
+    }
+    
+    return btoa(String.fromCharCode(...mulawData))
+  }
+
   socket.onopen = () => {
     console.log('Twilio stream connected')
     connectToOpenAI()
@@ -274,14 +327,16 @@ serve(async (req) => {
 
         case 'start':
           console.log('Call started:', message.start)
+          streamSid = message.start.streamSid
           break
 
         case 'media':
-          // Forward audio to OpenAI
+          // Convert mulaw to PCM16 and forward to OpenAI
           if (openAISocket && openAISocket.readyState === WebSocket.OPEN && conversationActive) {
+            const pcm16Audio = convertMulawToPCM16(message.media.payload)
             openAISocket.send(JSON.stringify({
               type: 'input_audio_buffer.append',
-              audio: message.media.payload
+              audio: pcm16Audio
             }))
           }
           break
