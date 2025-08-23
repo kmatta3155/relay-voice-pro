@@ -328,9 +328,9 @@ const analyzeWebsite = async (deepCrawl = false) => {
       });
 
       if (tenantError) throw tenantError;
-      if (!tenantData?.tenant_id) throw new Error('Failed to create tenant');
+      if (!tenantData?.tenantId) throw new Error('Failed to create tenant');
 
-      const newTenantId = tenantData.tenant_id;
+      const newTenantId = tenantData.tenantId;
       console.log('Created tenant:', newTenantId);
 
       // Save business data to this tenant
