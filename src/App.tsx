@@ -199,7 +199,7 @@ function TopBar({ profile, tenants, onSwitch, onSignOut }:{ profile:any; tenants
 }
 
 
-function DashboardShell(){
+function AdminViewChecker({ children }: { children: any }) {
   const [isInCustomerView, setIsInCustomerView] = useState(false);
   const [customerName, setCustomerName] = useState<string>('');
   const location = useLocation();
@@ -233,43 +233,53 @@ function DashboardShell(){
   }, [location.pathname]);
 
   return (
+    <>
+      {isInCustomerView && <AdminNavBar customerName={customerName} />}
+      {children}
+    </>
+  );
+}
+
+function DashboardShell(){
+  return (
     <BrowserRouter>
       <AuthGate>
-        {isInCustomerView && <AdminNavBar customerName={customerName} />}
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/demo" element={<Demo />} />
-          <Route path="/demo/knowledge" element={<KnowledgeShowcase />} />
-          <Route path="/knowledge" element={<KnowledgePage />} />
-          <Route path="/accept-invite" element={<AcceptInvite />} />
-          
-          {/* Customer Dashboard Routes */}
-          <Route path="/overview" element={<Dashboard />} />
-          <Route path="/leads" element={<Dashboard />} />
-          <Route path="/appointments" element={<Dashboard />} />
-          <Route path="/messages" element={<Dashboard />} />
-          <Route path="/calls" element={<Dashboard />} />
-          <Route path="/analytics" element={<Dashboard />} />
-          <Route path="/settings" element={<Dashboard />} />
-          
-          {/* Admin Routes */}
-          <Route 
-            path="/admin/onboarding" 
-            element={
+        <AdminViewChecker>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/demo" element={<Demo />} />
+            <Route path="/demo/knowledge" element={<KnowledgeShowcase />} />
+            <Route path="/knowledge" element={<KnowledgePage />} />
+            <Route path="/accept-invite" element={<AcceptInvite />} />
+            
+            {/* Customer Dashboard Routes */}
+            <Route path="/overview" element={<Dashboard />} />
+            <Route path="/leads" element={<Dashboard />} />
+            <Route path="/appointments" element={<Dashboard />} />
+            <Route path="/messages" element={<Dashboard />} />
+            <Route path="/calls" element={<Dashboard />} />
+            <Route path="/analytics" element={<Dashboard />} />
+            <Route path="/settings" element={<Dashboard />} />
+            
+            {/* Admin Routes */}
+            <Route 
+              path="/admin/onboarding" 
+              element={
+                <AdminRoute>
+                  <AdminOnboarding />
+                </AdminRoute>
+              } 
+            />
+            <Route path="/admin" element={
               <AdminRoute>
-                <AdminOnboarding />
+                <Admin />
               </AdminRoute>
-            } 
-          />
-          <Route path="/admin" element={
-            <AdminRoute>
-              <Admin />
-            </AdminRoute>
-          } />
-          
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            } />
+            
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AdminViewChecker>
       </AuthGate>
     </BrowserRouter>
   );
