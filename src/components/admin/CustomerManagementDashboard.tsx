@@ -53,7 +53,14 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
         supabase.from('business_quick_answers').select('*').eq('tenant_id', tenantId)
       ]);
 
-      if (tenantRes.error) throw tenantRes.error;
+      if (tenantRes.error) {
+        console.error('Tenant loading error:', tenantRes.error);
+        throw tenantRes.error;
+      }
+
+      if (!tenantRes.data) {
+        throw new Error('Customer not found');
+      }
 
       setCustomerData({
         tenant: tenantRes.data,

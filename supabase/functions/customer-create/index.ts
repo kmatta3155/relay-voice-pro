@@ -68,12 +68,21 @@ serve(async (req) => {
     const tenantId = tenant.id as string;
     console.log(`Created tenant with ID: ${tenantId}`);
 
-    // Add user as owner
-    await sb.from("tenant_users").insert({ 
-      tenant_id: tenantId, 
-      user_id: body.userId, 
-      role: "owner" 
-    });
+    // Add user as owner (try both table names for compatibility)
+    try {
+      await sb.from("memberships").insert({ 
+        tenant_id: tenantId, 
+        user_id: body.userId, 
+        role: "OWNER" 
+      });
+    } catch (membershipError) {
+      console.log('Memberships table insert failed, trying tenant_users:', membershipError);
+      await sb.from("tenant_users").insert({ 
+        tenant_id: tenantId, 
+        user_id: body.userId, 
+        role: "owner" 
+      });
+    }
 
     // Set active tenant
     await sb.from("profiles").update({ 

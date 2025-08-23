@@ -79,7 +79,7 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
       const result = await supabase.functions.invoke('crawl-ingest', {
         body: {
           url: websiteUrl,
-          tenant_id: 'demo', // Demo tenant for analysis
+          tenant_id: 'demo', // Use demo tenant for analysis during admin onboarding
           crawlOptions: crawlOptions
         }
       });

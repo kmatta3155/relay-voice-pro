@@ -113,12 +113,21 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps = {}) {
         const { data: ures } = await supabase.auth.getUser();
         const uid = ures?.user?.id;
         if (!uid) return;
+        
+        // Check if user is site admin - they don't need an active tenant for customer creation
         const { data: p } = await supabase
           .from("profiles")
-          .select("active_tenant_id")
+          .select("active_tenant_id, is_site_admin")
           .eq("id", uid)
           .maybeSingle();
-        setTenantId(p?.active_tenant_id || null);
+        
+        // Only set tenant for non-admin users
+        if (!p?.is_site_admin) {
+          setTenantId(p?.active_tenant_id || null);
+        } else {
+          // For site admins, we'll create the tenant during the process
+          setTenantId('admin-creating-customer');
+        }
       } catch {}
     })();
   }, []);
@@ -131,14 +140,18 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps = {}) {
 
 setIsLoading(true);
 try {
-  if (!tenantId) {
+  // For admin users creating customers, we skip the tenant check since they create new tenants
+  const isAdminMode = tenantId === 'admin-creating-customer';
+  
+  if (!isAdminMode && !tenantId) {
     toast({ title: "Error", description: "No active workspace selected", variant: "destructive" });
     return;
   }
+  
   const result = await supabase.functions.invoke('consolidate-business-data', {
     body: {
       dataSources: dataSources,
-      tenantId: tenantId
+      tenantId: isAdminMode ? 'demo' : tenantId // Use demo tenant for analysis during admin customer creation
     }
   });
 
@@ -167,18 +180,17 @@ const analyzeWebsite = async (deepCrawl = false) => {
     toast({ title: "Error", description: "Please enter a website URL", variant: "destructive" });
     return;
   }
-  if (!tenantId) {
-    toast({ title: "Error", description: "No active workspace selected", variant: "destructive" });
-    return;
-  }
 
-  console.log('Starting website analysis with:', { url: websiteUrl, tenantId, deepCrawl });
+  const isAdminMode = tenantId === 'admin-creating-customer';
+  const analysisMode = isAdminMode ? 'demo' : tenantId;
+
+  console.log('Starting website analysis with:', { url: websiteUrl, analysisMode, deepCrawl });
   setIsLoading(true);
   try {
     const result = await supabase.functions.invoke('crawl-ingest', {
       body: {
         url: websiteUrl,
-        tenant_id: tenantId,
+        tenant_id: analysisMode, // Use demo tenant for admin analysis
         options: {
           ...crawlOptions,
           maxPages: deepCrawl ? crawlOptions.maxPages * 2 : crawlOptions.maxPages
