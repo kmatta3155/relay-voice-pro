@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { RealtimeChat } from '@/utils/RealtimeAudio';
 import { supabase } from '@/integrations/supabase/client';
 import { getGroundingContext } from '@/lib/receptionist-rag';
+import { ingestWebsite, logUnanswered } from '@/lib/rag';
 
 interface AdminAgentTesterProps {
   open: boolean;
@@ -43,6 +44,7 @@ export default function AdminAgentTester({ open, onOpenChange, agent, tenantId }
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeResult[]>([]);
   const [knowledgeQuestion, setKnowledgeQuestion] = useState('');
   const [isTestingKnowledge, setIsTestingKnowledge] = useState(false);
+  const [isIngesting, setIsIngesting] = useState(false);
 
   const chatRef = useRef<RealtimeChat | null>(null);
   const transcriptRef = useRef<string>('');
@@ -148,6 +150,32 @@ Answer professionally about hours, pricing, services, availability, and booking 
     }
   };
 
+  // Ingest business website into knowledge base
+  const ingestBusinessKnowledge = useCallback(async () => {
+    try {
+      setIsIngesting(true);
+      const { data, error } = await supabase
+        .from('agent_settings')
+        .select('website_url')
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+      if (error) throw error;
+      const url = data?.website_url?.trim();
+      if (!url) {
+        toast({ title: 'Add Website URL', description: 'Set your website in Agent Settings first.', variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Ingesting Website', description: `Crawling ${url}. This can take up to a minute.` });
+      await ingestWebsite(tenantId, url, { includeBookingProviders: true });
+      toast({ title: 'Ingestion Complete', description: 'Business data added to the knowledge base.' });
+    } catch (e: any) {
+      console.error('Ingestion error:', e);
+      toast({ title: 'Ingestion Error', description: e?.message || 'Failed to ingest website', variant: 'destructive' });
+    } finally {
+      setIsIngesting(false);
+    }
+  }, [tenantId, toast]);
+
   // Knowledge testing function
   const testKnowledge = useCallback(async (question: string) => {
     if (!question.trim()) {
@@ -168,11 +196,13 @@ Answer professionally about hours, pricing, services, availability, and booking 
         hasContext: !!groundingContext
       });
 
+      const success = !!groundingContext && groundingContext.trim().length > 0;
+
       const result: KnowledgeResult = {
         question,
         answer: groundingContext || 'No relevant knowledge found in the business data.',
         timestamp: new Date(),
-        success: !!groundingContext && groundingContext.length > 0
+        success
       };
 
       setKnowledgeResults(prev => [result, ...prev]);
@@ -181,12 +211,23 @@ Answer professionally about hours, pricing, services, availability, and booking 
       addMessage('user', question, 'knowledge_test');
       addMessage('assistant', `📚 Knowledge Base Result:\n\n${result.answer}`, 'knowledge_test');
 
-      if (result.success) {
+      // Ask the live agent to answer using the retrieved knowledge (if connected)
+      if (isConnected && chatRef.current) {
+        try {
+          const prompt = `Use the business knowledge below to answer the question accurately. If the knowledge is insufficient, say you don't have enough information.\n\nQuestion: ${question}\n\nBusiness Knowledge:\n${groundingContext || '(none)'}\n\nAnswer:`;
+          await chatRef.current.sendMessage(prompt);
+        } catch (sendErr: any) {
+          console.warn('Agent send error (knowledge):', sendErr);
+        }
+      }
+
+      if (success) {
         toast({ 
           title: 'Knowledge Found', 
           description: `Found relevant business information for: "${question.slice(0, 50)}..."` 
         });
       } else {
+        try { await logUnanswered(tenantId, question); } catch (_) {}
         toast({ 
           title: 'No Knowledge Found', 
           description: 'No relevant business data found for this question',
@@ -215,7 +256,7 @@ Answer professionally about hours, pricing, services, availability, and booking 
     } finally {
       setIsTestingKnowledge(false);
     }
-  }, [tenantId, addMessage, toast]);
+  }, [tenantId, addMessage, toast, isConnected]);
 
   const handleKnowledgeSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -356,12 +397,23 @@ Answer professionally about hours, pricing, services, availability, and booking 
                 type="submit" 
                 disabled={isTestingKnowledge || !knowledgeQuestion.trim()}
                 size="sm"
+                aria-label="Submit knowledge question"
               >
                 {isTestingKnowledge ? (
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={ingestBusinessKnowledge}
+                disabled={isIngesting}
+                aria-label="Ingest website for knowledge"
+              >
+                {isIngesting ? 'Ingesting…' : 'Ingest Website'}
               </Button>
             </form>
 
