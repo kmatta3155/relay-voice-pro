@@ -55,40 +55,47 @@ serve(async (req) => {
       })
     }
 
-    // Get agent settings and business hours
+    // Check if AI agent is in live mode
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.38.4')
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const [settingsRes, hoursRes] = await Promise.all([
-      supabase
-        .from('agent_settings')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .single(),
-      supabase
-        .from('business_hours')
-        .select('*')
-        .eq('tenant_id', tenantId)
-    ])
+    const { data: agentData, error: agentError } = await supabase
+      .from('ai_agents')
+      .select('mode, status')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'ready')
+      .single()
 
-    const settings = settingsRes.data
-    const businessHours = hoursRes.data || []
+    if (agentError || !agentData) {
+      console.log('No ready agent found or agent error:', agentError)
+      // If no agent in live mode, just hang up politely
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Thank you for calling. We're currently unavailable. Please try again later.</Say>
+  <Hangup />
+</Response>`
+      
+      return new Response(twiml, {
+        headers: { 'Content-Type': 'text/xml' }
+      })
+    }
 
-    // Check if we're in business hours
-    const now = new Date()
-    const currentDay = now.getDay()
-    const currentTime = now.toTimeString().slice(0, 5) // HH:MM format
-    
-    const todayHours = businessHours.find(h => h.dow === currentDay)
-    const isBusinessHours = todayHours && 
-      !todayHours.is_closed && 
-      currentTime >= todayHours.open_time && 
-      currentTime <= todayHours.close_time
-
-    console.log('Business hours check:', { currentDay, currentTime, isBusinessHours, todayHours })
+    // Only proceed if agent is in live mode
+    if (agentData.mode !== 'live') {
+      console.log('Agent is in simulation mode, not handling live calls')
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Thank you for calling. We're currently unavailable. Please try again later.</Say>
+  <Hangup />
+</Response>`
+      
+      return new Response(twiml, {
+        headers: { 'Content-Type': 'text/xml' }
+      })
+    }
 
     // Log the call
     await supabase
@@ -101,48 +108,16 @@ serve(async (req) => {
         outcome: 'incoming'
       })
 
-    // Generate appropriate TwiML response
-    let twiml: string
-
-    if (!isBusinessHours && settings?.after_hours_voicemail) {
-      // After hours - voicemail
-      const greeting = settings?.greeting || "Thank you for calling. We're currently closed."
-      twiml = `<?xml version="1.0" encoding="UTF-8"?>
+    // Connect to AI receptionist (agent is ready and in live mode)
+    const streamUrl = `wss://${Deno.env.get('SUPABASE_URL')?.replace('https://', '')}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+    
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">${greeting} Please leave a message after the tone.</Say>
-  <Record 
-    action="${Deno.env.get('SUPABASE_URL')}/functions/v1/twilio-voicemail?tenant_id=${tenantId}&call_sid=${callSid}"
-    method="POST"
-    maxLength="120"
-    finishOnKey="#"
-    playBeep="true"
-  />
-  <Say voice="alice">Thank you for your message. Goodbye.</Say>
-  <Hangup />
-</Response>`
-    } else if (settings?.forward_number && !isBusinessHours) {
-      // Forward to human number
-      twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Dial timeout="30" callerId="${to}">
-    <Number>${settings.forward_number}</Number>
-  </Dial>
-  <Say voice="alice">Sorry, no one is available to take your call. Please try again later.</Say>
-  <Hangup />
-</Response>`
-    } else {
-      // Connect to AI receptionist
-      const greeting = settings?.greeting || "Hello! You've reached our AI receptionist. How can I help you today?"
-      const streamUrl = `wss://${Deno.env.get('SUPABASE_URL')?.replace('https://', '')}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
-      
-      twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">${greeting}</Say>
+  <Say voice="alice">Hello! Thank you for calling. Please hold while I connect you.</Say>
   <Connect>
     <Stream url="${streamUrl}" />
   </Connect>
 </Response>`
-    }
 
     console.log('Generated TwiML:', twiml)
 

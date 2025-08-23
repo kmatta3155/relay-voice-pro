@@ -180,6 +180,32 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
     setShowSimulator(true);
   };
 
+  const handleToggleMode = async (newMode: string) => {
+    try {
+      const { error } = await supabase
+        .from('ai_agents')
+        .update({ mode: newMode })
+        .eq('tenant_id', tenantId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Mode Updated",
+        description: `Agent mode changed to ${newMode}`,
+      });
+
+      // Reload customer data to get updated agent info
+      await loadCustomerData();
+    } catch (error) {
+      console.error('Error updating agent mode:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update agent mode",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleViewAsCustomer = async () => {
     try {
       // Set this tenant as active for the admin user
@@ -356,7 +382,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <Label>Voice Provider</Label>
                       <Input value={agent.voice_provider || 'None'} readOnly />
@@ -364,6 +390,22 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
                     <div>
                       <Label>Voice ID</Label>
                       <Input value={agent.voice_id || 'None'} readOnly />
+                    </div>
+                    <div>
+                      <Label>Mode</Label>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={agent.mode === 'live' ? 'default' : 'secondary'}>
+                          {agent.mode}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleToggleMode(agent.mode === 'live' ? 'simulation' : 'live')}
+                          className="text-xs px-2 py-1"
+                        >
+                          Switch to {agent.mode === 'live' ? 'Simulation' : 'Live'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
 

@@ -35,6 +35,8 @@ serve(async (req) => {
     .from('ai_agents')
     .select('*')
     .eq('tenant_id', tenantId)
+    .eq('mode', 'live')
+    .eq('status', 'ready')
     .single()
 
   const { data: settings } = await supabase
@@ -43,9 +45,9 @@ serve(async (req) => {
     .eq('tenant_id', tenantId)
     .single()
 
-  if (!agent || agent.status !== 'ready') {
-    console.error('No trained agent found for tenant:', tenantId)
-    socket.close(1000, 'No trained agent available')
+  if (!agent) {
+    console.error('No ready agent in live mode found for tenant:', tenantId)
+    socket.close(1000, 'No agent available in live mode')
     return response
   }
 
