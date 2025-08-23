@@ -313,15 +313,59 @@ const analyzeWebsite = async (deepCrawl = false) => {
 
     setIsLoading(true);
     try {
-      // Here you would save the consolidated data to your backend
-      // For now, we'll just show a success message
-      toast({ title: "Success", description: "Business profile saved successfully!" });
+      // Create a new tenant/customer first
+      const { data: tenantData, error: tenantError } = await supabase.functions.invoke('customer-create', {
+        body: {
+          name: extractionResult.consolidatedData.businessName,
+          business_type: 'Business',
+          website_url: websiteUrl
+        }
+      });
+
+      if (tenantError) throw tenantError;
+      if (!tenantData?.tenant_id) throw new Error('Failed to create tenant');
+
+      const newTenantId = tenantData.tenant_id;
+      console.log('Created tenant:', newTenantId);
+
+      // Save business data to this tenant
+      if (extractionResult) {
+        const { error: consolidateError } = await supabase.functions.invoke('consolidate-business-data', {
+          body: {
+            tenantId: newTenantId,
+            dataSources: dataSources
+          }
+        });
+
+        if (consolidateError) {
+          console.error('Error consolidating business data:', consolidateError);
+          // Continue anyway, as tenant is created
+        }
+      }
+
+      // Train the AI agent for this tenant
+      const { data: agentData, error: agentError } = await supabase.functions.invoke('train-agent', {
+        body: {
+          tenant_id: newTenantId,
+          agent_name: 'Receptionist',
+          voice_provider: 'elevenlabs',
+          voice_id: '9BWtsMINqrJLrRacOk9x'
+        }
+      });
+
+      if (agentError) {
+        console.error('Agent training error:', agentError);
+        // Continue to completion even if agent training fails
+      }
+
+      console.log('Process completed:', { tenantData, agentData });
+      toast({ title: "Success", description: "Customer onboarded successfully!" });
       setStep(3);
     } catch (error) {
-      console.error('Save error:', error);
+      console.error('Error in onboarding process:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Save failed",
+        description: error instanceof Error ? error.message : "Failed to complete onboarding",
         variant: "destructive"
       });
     } finally {
