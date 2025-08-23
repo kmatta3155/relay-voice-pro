@@ -138,17 +138,6 @@ export default function Admin() {
         </Card>
       </div>
 
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader><CardTitle>Customer Onboarding</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Create and configure new customers with our guided onboarding system.
-            </p>
-            <Link to="/admin-onboarding">
-              <Button className="w-full">Create New Customer</Button>
-            </Link>
-          </CardContent>
-        </Card>
 
       <Card className="rounded-2xl shadow-sm">
         <CardHeader><CardTitle>Actions</CardTitle></CardHeader>

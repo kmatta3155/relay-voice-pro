@@ -85,7 +85,11 @@ interface DataSource {
   metadata?: any;
 }
 
-export default function AdminOnboarding() {
+interface AdminOnboardingProps {
+  onBack?: () => void;
+}
+
+export default function AdminOnboarding({ onBack }: AdminOnboardingProps = {}) {
   const [step, setStep] = useState(1);
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -364,10 +368,12 @@ const analyzeWebsite = async (deepCrawl = false) => {
       }
 
       console.log('Process completed:', { tenantData, agentData });
-      toast({ title: "Success", description: "Customer onboarded successfully! Redirecting to dashboard..." });
+      toast({ title: "Success", description: "Customer onboarded successfully!" });
       setStep(3);
-      // Redirect to dashboard so the new active tenant is applied across the app
-      setTimeout(() => { window.location.href = '/#app'; }, 1200);
+      // Auto-complete after success - stay on admin page for management
+      setTimeout(() => { 
+        if (onBack) onBack(); 
+      }, 1500);
     } catch (error) {
       console.error('Error in onboarding process:', error);
       toast({
