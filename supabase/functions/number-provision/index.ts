@@ -8,7 +8,7 @@ const corsHeaders = {
 type Cmd =
   | { action: "search"; country?: string; areaCode?: string }
   | { action: "purchase"; phoneNumber: string; tenantId: string; projectBase?: string }
-  | { action: "configure"; phoneNumber: string; tenantId: string };
+  | { action: "configure"; phoneNumber: string; tenantId: string; projectBase?: string };
 
 const twilioFetch = async (path: string, method = "GET", body?: URLSearchParams) => {
   const sid = Deno.env.get("TWILIO_ACCOUNT_SID")!;
@@ -103,10 +103,20 @@ serve(async (req) => {
     }
 
     if (body.action === "configure") {
-      const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
+      const base = ((body.projectBase || Deno.env.get("SUPABASE_URL") || "") as string).replace(/\/$/, "");
+      // Normalize to E.164 so Twilio lookup is robust
+      const normalize = (num: string) => {
+        if (!num) return num;
+        if (num.startsWith("+")) return num;
+        const digits = num.replace(/\D/g, "");
+        if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+        if (digits.length === 10) return `+1${digits}`;
+        return `+${digits}`;
+      };
+      const targetNumber = normalize(body.phoneNumber);
       // Find the IncomingPhoneNumber SID for the provided number
       const list = await twilioFetch(
-        `/Accounts/${Deno.env.get("TWILIO_ACCOUNT_SID")}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(body.phoneNumber)}`
+        `/Accounts/${Deno.env.get("TWILIO_ACCOUNT_SID")}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(targetNumber)}`
       );
 
       const incoming = (list.incoming_phone_numbers && list.incoming_phone_numbers[0]) || null;

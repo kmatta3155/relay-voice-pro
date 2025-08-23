@@ -34,6 +34,18 @@ export default function PhoneNumberPanel({ tenantId }: PhoneNumberPanelProps) {
     areaCode: ''
   });
 
+  // Normalize to E.164 before sending to backend (basic US handling)
+  const normalizeE164 = (input: string, country = 'US') => {
+    if (!input) return input;
+    const trimmed = input.trim();
+    if (trimmed.startsWith('+')) return trimmed;
+    const digits = trimmed.replace(/\D/g, '');
+    if (country === 'US' || country === 'CA') {
+      if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+      if (digits.length === 10) return `+1${digits}`;
+    }
+    return `+${digits}`;
+  };
   useEffect(() => {
     loadCurrentNumber();
   }, [tenantId]);
@@ -124,30 +136,33 @@ export default function PhoneNumberPanel({ tenantId }: PhoneNumberPanelProps) {
     if (!existingNumber) return;
     try {
       setConnectLoading(true);
-      const { error } = await supabase.functions.invoke('number-provision', {
+      const normalized = normalizeE164(existingNumber, searchParams.country);
+      const { data, error } = await supabase.functions.invoke('number-provision', {
         body: {
           action: 'configure',
-          phoneNumber: existingNumber,
-          tenantId
+          phoneNumber: normalized,
+          tenantId,
+          projectBase: 'https://gnqqktmslswgjtvxfvdo.supabase.co'
         }
       });
       if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'Edge function did not confirm configuration');
 
       const { error: upsertErr } = await supabase
         .from('agent_settings')
         .upsert({
           tenant_id: tenantId,
-          twilio_number: existingNumber,
+          twilio_number: normalized,
           updated_at: new Date().toISOString()
         }, { onConflict: 'tenant_id' });
       if (upsertErr) throw upsertErr;
 
-      setCurrentNumber(existingNumber);
+      setCurrentNumber(normalized);
       setExistingNumber('');
       toast({ title: 'Connected', description: 'Webhooks configured and number saved.' });
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error connecting existing number:', e);
-      toast({ title: 'Configuration Error', description: 'Failed to configure webhooks for this number', variant: 'destructive' });
+      toast({ title: 'Configuration Error', description: e?.message || 'Failed to configure webhooks for this number', variant: 'destructive' });
     } finally {
       setConnectLoading(false);
     }
