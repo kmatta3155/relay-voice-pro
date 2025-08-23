@@ -313,10 +313,15 @@ const analyzeWebsite = async (deepCrawl = false) => {
 
     setIsLoading(true);
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       // Create a new tenant/customer first
       const { data: tenantData, error: tenantError } = await supabase.functions.invoke('customer-create', {
         body: {
           name: extractionResult.consolidatedData.businessName,
+          userId: user.id,
           business_type: 'Business',
           website_url: websiteUrl
         }
