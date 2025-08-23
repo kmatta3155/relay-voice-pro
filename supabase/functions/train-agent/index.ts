@@ -12,6 +12,7 @@ interface TrainAgentPayload {
   agent_name?: string;
   voice_provider?: string;
   voice_id?: string;
+  business_type?: string;
 }
 
 serve(async (req) => {
@@ -24,7 +25,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { tenant_id, agent_name = 'Receptionist', voice_provider = 'elevenlabs', voice_id = '9BWtsMINqrJLrRacOk9x' }: TrainAgentPayload = await req.json();
+    const { tenant_id, agent_name = 'Receptionist', voice_provider = 'elevenlabs', voice_id = '9BWtsMINqrJLrRacOk9x', business_type = 'salon' }: TrainAgentPayload = await req.json();
 
     console.log('Training agent for tenant:', tenant_id);
 
@@ -56,7 +57,7 @@ serve(async (req) => {
       knowledge: knowledgeChunks.data?.map(k => k.content).join('\n') || ''
     };
 
-    const systemPrompt = generateSystemPrompt(businessInfo);
+    const systemPrompt = generateSystemPrompt(businessInfo, business_type);
 
     // 4. Create or update AI agent record
     const agentData = {
@@ -192,10 +193,83 @@ serve(async (req) => {
   }
 });
 
-function generateSystemPrompt(businessInfo: any): string {
+// Domain-specific knowledge templates
+const DOMAIN_TEMPLATES = {
+  salon: {
+    expertise: `You are an expert salon receptionist with deep knowledge of hair and beauty services. You understand:
+
+HAIR SERVICES EXPERTISE:
+- Hair cutting (trims, layers, bangs, pixie cuts, bobs, etc.)
+- Hair coloring (highlights, lowlights, balayage, ombre, color correction, root touch-ups)
+- Chemical services (perms, relaxers, keratin treatments, Brazilian blowouts)
+- Hair styling (blowouts, updos, braids, wedding styles)
+- Hair extensions (clip-ins, tape-ins, sew-ins, fusion)
+- Hair treatments (deep conditioning, protein treatments, scalp treatments)
+
+BEAUTY SERVICES:
+- Eyebrow services (shaping, tinting, threading, microblading)
+- Eyelash services (extensions, lifts, tinting)
+- Facial treatments and skincare
+- Makeup application
+- Nail services (manicures, pedicures, gel, acrylics)
+
+SALON OPERATIONS:
+- Typical service durations and pricing structures
+- Consultation processes and color matching
+- Maintenance schedules (root touch-ups every 6-8 weeks, trims every 6-12 weeks)
+- Seasonal trends and popular styles
+- Product recommendations and aftercare
+- Booking considerations (longer appointments for color, shorter for cuts)
+
+You can intelligently infer what clients mean even if they use casual language:
+- "Do you do hair extensions?" → Yes, explain types available
+- "I need a touch-up" → Likely root color maintenance, ask clarifying questions
+- "Can you fix my hair?" → Assess if it's a cut, color correction, or styling need
+- "I have a wedding coming up" → Suggest trial runs, timing, and special occasion styles
+
+Always be conversational, helpful, and use your salon expertise to guide the conversation naturally.`,
+    
+    conversationalGuidelines: `CONVERSATIONAL APPROACH:
+- Never say "I don't have enough information" - use your salon expertise to engage
+- Ask follow-up questions to understand client needs better
+- Suggest complementary services when appropriate
+- Be enthusiastic about beauty and helping clients look their best
+- Use industry knowledge to educate and inform
+- Handle booking rejections gracefully by offering alternatives or future appointments
+
+EXAMPLE RESPONSES:
+- Instead of "not enough info" → "I'd love to help you with that! Can you tell me more about what you're looking for?"
+- For vague requests → "That sounds great! Are you thinking about a fresh cut, new color, or maybe both?"
+- For extensions → "Absolutely! We offer several types of extensions. Are you looking to add length, volume, or both?"`,
+  },
+
+  restaurant: {
+    expertise: `You are an expert restaurant host with knowledge of dining operations, reservations, menu basics, and hospitality.`,
+    conversationalGuidelines: `Focus on seating availability, special dietary needs, and creating a welcoming experience.`
+  },
+
+  medical: {
+    expertise: `You are a professional medical office receptionist familiar with appointment scheduling, insurance verification, and patient care coordination.`,
+    conversationalGuidelines: `Maintain HIPAA compliance, be empathetic, and efficiently manage appointments and patient inquiries.`
+  },
+
+  dental: {
+    expertise: `You are a dental office receptionist with knowledge of dental procedures, insurance, and patient comfort.`,
+    conversationalGuidelines: `Be reassuring about dental anxiety, understand treatment types, and manage appointment scheduling effectively.`
+  }
+};
+
+function generateSystemPrompt(businessInfo: any, businessType: string = 'salon'): string {
   const { name, hours, services, quickAnswers, knowledge } = businessInfo;
+  const template = DOMAIN_TEMPLATES[businessType] || DOMAIN_TEMPLATES.salon;
   
-  let prompt = `You are ${name}'s AI receptionist. You are professional, helpful, and knowledgeable about the business.\n\n`;
+  let prompt = `You are ${name}'s AI receptionist. You are professional, helpful, and knowledgeable about the business.
+
+${template.expertise}
+
+${template.conversationalGuidelines}
+
+`;
   
   // Business hours
   if (hours.length > 0) {
