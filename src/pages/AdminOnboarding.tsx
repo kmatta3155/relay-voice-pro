@@ -797,9 +797,9 @@ const analyzeWebsite = async (deepCrawl = false) => {
             <div className="space-y-6 text-center">
               <div className="space-y-4">
                 <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
-                <h2 className="text-2xl font-bold">Setup Complete!</h2>
+                <h2 className="text-2xl font-bold">Customer Onboarded Successfully!</h2>
                 <p className="text-muted-foreground">
-                  Your business profile has been successfully created and saved.
+                  Customer has been successfully added to your SaaS platform and is ready to use the service.
                 </p>
               </div>
 
@@ -808,7 +808,7 @@ const analyzeWebsite = async (deepCrawl = false) => {
                   onClick={() => setStep(1)} 
                   variant="outline"
                 >
-                  Process Another Customer
+                  Add Another Customer
                 </Button>
                 <Button 
                   onClick={validateSavedData} 
@@ -828,7 +828,7 @@ const analyzeWebsite = async (deepCrawl = false) => {
                   }}
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Admin Dashboard
+                  Back to Customer Management
                 </Button>
               </div>
 
