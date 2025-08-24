@@ -80,7 +80,7 @@ serve(async (req) => {
       console.error('=== NO TENANT FOUND ===');
       console.error('Phone number searched:', to);
       console.error('Returning fallback TwiML');
-      // Return fallback TwiML
+      // Return proper fallback TwiML with Response root
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Thank you for calling. This number is not currently configured. Goodbye.</Say>
