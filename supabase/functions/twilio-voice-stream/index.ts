@@ -291,31 +291,33 @@ serve(async (req) => {
           const agentId = Deno.env.get('ELEVENLABS_AGENT_ID') || '4dv4ZFiVvCcdXFqlpVzY'
           console.log('🎵 Connecting to ElevenLabs agent:', agentId)
           
-          // Use the proper ElevenLabs WebSocket URL with API key
-          elevenLabsWs = new WebSocket(`wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}`, {
-            headers: {
-              'xi-api-key': elevenLabsKey
-            }
-          })
+          // Correct ElevenLabs WebSocket URL with API key as query parameter
+          const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}&xi-api-key=${elevenLabsKey}`
+          elevenLabsWs = new WebSocket(wsUrl)
 
           elevenLabsWs.onopen = () => {
             console.log('✅ ElevenLabs WebSocket connected successfully')
             
-            // Send conversation initiation with proper format
+            // Send conversation initiation message immediately
             const initMessage = {
               conversation_config_override: {
                 agent: {
                   prompt: {
-                    prompt: `You are a helpful receptionist for ${businessName}. Answer calls professionally and keep responses brief.`
+                    prompt: `You are a helpful receptionist for ${businessName}. Answer calls professionally and keep responses brief and natural.`
                   },
                   first_message: `Hello! Thank you for calling ${businessName}. How can I help you today?`,
                   language: 'en'
+                },
+                conversation_config: {
+                  turn_detection: {
+                    type: 'server_vad'
+                  }
                 }
               }
             }
             
             elevenLabsWs!.send(JSON.stringify(initMessage))
-            console.log('📤 Sent conversation config to ElevenLabs:', JSON.stringify(initMessage))
+            console.log('📤 Sent conversation config to ElevenLabs')
           }
 
           elevenLabsWs.onmessage = async (message) => {
@@ -337,6 +339,10 @@ serve(async (req) => {
                   console.log('📝 User transcript:', data.user_transcription_event.user_transcript)
                 } else if (data.type === 'agent_response') {
                   console.log('🤖 Agent response:', data.agent_response_event.agent_response)
+                } else if (data.type === 'conversation_initiation_metadata') {
+                  console.log('🎯 Conversation initiated successfully')
+                } else {
+                  console.log('📋 Other ElevenLabs event:', JSON.stringify(data))
                 }
               }
             } catch (error) {
@@ -348,8 +354,8 @@ serve(async (req) => {
             console.error('❌ ElevenLabs WebSocket error:', error)
           }
 
-          elevenLabsWs.onclose = () => {
-            console.log('🔌 ElevenLabs WebSocket closed')
+          elevenLabsWs.onclose = (event) => {
+            console.log('🔌 ElevenLabs WebSocket closed:', event.code, event.reason)
           }
 
         } catch (error) {
