@@ -38,10 +38,11 @@ serve(async (req) => {
 
   try {
     console.log('Upgrading to WebSocket...')
-    const requestedProtocol = req.headers.get("sec-websocket-protocol")?.split(",").map(p => p.trim())[0]
-    console.log('Requested subprotocol from client:', requestedProtocol)
+    const requestedProtocols = req.headers.get("sec-websocket-protocol")?.split(",").map(p => p.trim()) || []
+    const chosenProtocol = requestedProtocols.includes('audio') ? 'audio' : (requestedProtocols[0] || undefined)
+    console.log('Requested subprotocols from client:', requestedProtocols, 'Chosen:', chosenProtocol)
     const { socket, response } = Deno.upgradeWebSocket(req, {
-      protocol: 'audio',
+      protocol: chosenProtocol,
     })
 
     socket.onopen = () => {
