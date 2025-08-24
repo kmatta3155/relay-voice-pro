@@ -26,13 +26,16 @@ serve(async (req) => {
   console.log('📞 Processing voice call request')
 
   try {
+    console.log('🚀 FUNCTION DEPLOYED AND RUNNING - Version 2.0')
+    
     // TEMPORARY TEST - Return immediate TwiML to verify function is working
     const testTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Function is working. This is a test response.</Say>
+  <Say>New function version is working. Test successful.</Say>
   <Hangup/>
 </Response>`
     
+    console.log('📤 Returning test TwiML response')
     return new Response(testTwiml, { headers: { 'Content-Type': 'text/xml' } })
     
     // Rest of the function commented out for testing
