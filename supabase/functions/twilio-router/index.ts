@@ -112,11 +112,11 @@ serve(async (req) => {
     // Use wss:// protocol and functions subdomain for WebSocket streams
     const streamUrl = `wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
     
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Connecting you to your AI receptionist.</Say>
   <Connect>
-    <Stream url="${streamUrl}" />
+    <Stream url="${streamUrl}" statusCallback="https://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-status?tenant_id=${tenantId}" statusCallbackMethod="POST" statusCallbackEvent="start end" />
   </Connect>
 </Response>`
 
