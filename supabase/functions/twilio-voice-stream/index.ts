@@ -421,27 +421,43 @@ function convertWavToMulawChunks(wavBytes: Uint8Array): Uint8Array[] {
   return chunks
 }
 
-function mulawToPcm(mulaw: number): number {
-  mulaw = ~mulaw
-  const sign = (mulaw & 0x80) ? -1 : 1
-  const exponent = (mulaw >> 4) & 0x07
-  const mantissa = mulaw & 0x0F
-  let sample = mantissa << (exponent + 3)
-  if (exponent > 0) sample += (1 << (exponent + 7))
-  return sign * (sample - 132)
+function mulawToPcm(mu: number): number {
+  // Standard μ-law decode
+  mu = (~mu) & 0xff
+  const sign = mu & 0x80
+  const exponent = (mu >> 4) & 0x07
+  const mantissa = mu & 0x0f
+  // Reconstruct sample with bias (0x84)
+  const sample = ((mantissa << 3) + 0x84) << (exponent + 3)
+  // Return signed linear PCM sample
+  return sign ? (0x84 - sample) : (sample - 0x84)
 }
 
-function pcmToMulaw(pcm: number): number {
+function pcmToMulaw(sample: number): number {
+  // Standard μ-law encode (G.711 μ-law)
   const BIAS = 0x84
   const CLIP = 32635
+
   let sign = 0
-  if (pcm < 0) { sign = 0x80; pcm = -pcm }
-  pcm += BIAS
-  if (pcm > CLIP) pcm = CLIP
+  if (sample < 0) { sign = 0x80; sample = -sample }
+  if (sample > CLIP) sample = CLIP
+
+  sample = sample + BIAS
+
+  // Determine exponent by locating the position of the highest set bit
   let exponent = 7
-  for (let expLut = 0x4000; (pcm & ~expLut) === 0 && exponent > 0; expLut >>= 1) exponent--
-  const mantissa = (pcm >> (exponent + 3)) & 0x0F
-  return (~(sign | (exponent << 4) | mantissa)) & 0xFF
+  let expMask = 0x4000
+  while ((sample & expMask) === 0 && exponent > 0) {
+    exponent--
+    expMask >>= 1
+  }
+
+  // Mantissa derived from the segment (exponent)
+  const mantissaShift = (exponent === 0) ? 4 : (exponent + 3)
+  const mantissa = (sample >> mantissaShift) & 0x0f
+
+  const ulaw = (~(sign | (exponent << 4) | mantissa)) & 0xff
+  return ulaw
 }
 
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
