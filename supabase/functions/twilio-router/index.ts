@@ -149,19 +149,17 @@ serve(async (req) => {
       })
 
     // Derive stream URL
-    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+    const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
     console.log('Stream URL:', streamUrl);
 
-    // Build the TwiML response to connect the media stream
+    // Build a simple TwiML response first to test basic functionality
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Connecting you to your AI receptionist.</Say>
-  <Connect>
-    <Stream url="${streamUrl}" />
-  </Connect>
+  <Say>Hello! This is your AI receptionist test. The connection is working. Goodbye!</Say>
+  <Hangup/>
 </Response>`
 
-    console.log('=== STREAM TwiML ===');
+    console.log('=== SIMPLE TEST TwiML ===');
     console.log('TwiML length:', twiml.length);
     console.log('TwiML content:', twiml);
     console.log('=== END DEBUG ===');

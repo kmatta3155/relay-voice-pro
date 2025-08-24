@@ -27,7 +27,7 @@ serve(async (req) => {
       console.log('Incoming call:', { callSid, from, to, tenantId })
 
       // Derive stream URL
-      const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+      const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
 
       // Build the TwiML response
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
