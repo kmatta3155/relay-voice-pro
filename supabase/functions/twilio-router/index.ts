@@ -67,6 +67,8 @@ serve(async (req) => {
         .maybeSingle()
       
       console.log('Agent settings lookup result:', { data, error });
+      console.log('Raw query result data:', JSON.stringify(data));
+      console.log('Query error details:', JSON.stringify(error));
       
       if (error) {
         console.error('Error looking up tenant by phone number:', error)
@@ -74,6 +76,7 @@ serve(async (req) => {
       
       tenantId = data?.tenant_id
       console.log('Found tenant_id:', tenantId);
+      console.log('Tenant lookup successful:', !!tenantId);
     }
 
     if (!tenantId) {
