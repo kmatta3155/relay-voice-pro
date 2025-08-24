@@ -51,11 +51,15 @@ serve(async (req) => {
     
     if (!tenantId && to) {
       // Look up tenant by phone number
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('agent_settings')
         .select('tenant_id')
         .eq('twilio_number', to)
-        .single()
+        .maybeSingle()
+      
+      if (error) {
+        console.error('Error looking up tenant by phone number:', error)
+      }
       
       tenantId = data?.tenant_id
     }
@@ -79,7 +83,7 @@ serve(async (req) => {
       .select('mode, status')
       .eq('tenant_id', tenantId)
       .eq('status', 'ready')
-      .single()
+      .maybeSingle()
 
     if (agentError || !agentData) {
       console.log('No ready agent found or agent error:', agentError)
