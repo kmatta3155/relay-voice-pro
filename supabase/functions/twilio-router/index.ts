@@ -86,12 +86,11 @@ serve(async (req) => {
       console.error('=== NO TENANT FOUND ===');
       console.error('Phone number searched:', to);
       console.error('Returning fallback TwiML');
-      // Return proper fallback TwiML with Response root
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Thank you for calling. This number is not currently configured. Goodbye.</Say>
   <Hangup/>
-</Response>`
+</Response>`;
       console.log('Fallback TwiML:', twiml);
       return new Response(twiml, {
         headers: { 'Content-Type': 'text/xml' }
@@ -118,7 +117,7 @@ serve(async (req) => {
 <Response>
   <Say>Thank you for calling. We're currently unavailable. Please try again later.</Say>
   <Hangup/>
-</Response>`
+</Response>`;
       
       return new Response(twiml, {
         headers: { 'Content-Type': 'text/xml' }
@@ -134,7 +133,7 @@ serve(async (req) => {
 <Response>
   <Say>Thank you for calling. We're currently unavailable. Please try again later.</Say>
   <Hangup/>
-</Response>`
+</Response>`;
       
       return new Response(twiml, {
         headers: { 'Content-Type': 'text/xml' }
@@ -186,7 +185,7 @@ serve(async (req) => {
 <Response>
   <Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say>
   <Hangup/>
-</Response>`
+</Response>`;
 
     return new Response(errorTwiml, {
       headers: { 'Content-Type': 'text/xml' }
