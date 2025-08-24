@@ -328,10 +328,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     const mediaMessage = {
       event: 'media',
       streamSid: streamSid,
-      media: {
-        contentType: 'audio/x-mulaw;rate=8000',
-        payload
-      }
+      media: { payload }
     }
     socket.send(JSON.stringify(mediaMessage))
     if (idx % 10 === 0) {
