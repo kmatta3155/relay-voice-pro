@@ -20,11 +20,23 @@ serve(async (req) => {
   try {
     console.log('Incoming Twilio call webhook');
     
-    // Parse form data from Twilio
-    const formData = await req.formData()
-    const callSid = formData.get('CallSid')
-    const from = formData.get('From')
-    const to = formData.get('To')
+    // Parse Twilio params from POST form or GET query
+    const contentType = req.headers.get('content-type') || ''
+    let callSid: string | null = null
+    let from: string | null = null
+    let to: string | null = null
+
+    if (req.method === 'POST' && contentType.includes('application/x-www-form-urlencoded')) {
+      const formData = await req.formData()
+      callSid = (formData.get('CallSid') as string) || null
+      from = (formData.get('From') as string) || null
+      to = (formData.get('To') as string) || null
+    } else {
+      const urlParams = new URL(req.url).searchParams
+      callSid = urlParams.get('CallSid')
+      from = urlParams.get('From')
+      to = urlParams.get('To')
+    }
     
     console.log('Call details:', { callSid, from, to })
 
