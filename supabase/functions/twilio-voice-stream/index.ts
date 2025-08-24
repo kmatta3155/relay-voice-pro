@@ -39,7 +39,8 @@ serve(async (req) => {
   try {
     console.log('Upgrading to WebSocket...')
     const requestedProtocols = req.headers.get("sec-websocket-protocol")?.split(",").map(p => p.trim()) || []
-    const chosenProtocol = requestedProtocols.includes('audio') ? 'audio' : (requestedProtocols[0] || undefined)
+    // Echo back exactly what Twilio requested (first subprotocol) per RFC6455
+    const chosenProtocol = requestedProtocols.length > 0 ? requestedProtocols[0] : undefined
     console.log('Requested subprotocols from client:', requestedProtocols, 'Chosen:', chosenProtocol)
     const { socket, response } = Deno.upgradeWebSocket(req, {
       protocol: chosenProtocol,
