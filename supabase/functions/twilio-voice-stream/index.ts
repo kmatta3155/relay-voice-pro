@@ -237,17 +237,13 @@ serve(async (req) => {
           
           streamSid = data.start?.streamSid
           
-          // Send TwiML event to confirm the outbound audio path
-          const twimlResponse = {
-            event: 'start',
-            start: {
-              streamSid: streamSid
-            },
-            sequenceNumber: '1'
+          // Send TwiML confirmation to ensure bidirectional signalling works
+          const confirm = {
+            event: 'twiml',
+            twiml: 'Connected to your AI receptionist test.'
           }
-          
-          socket.send(JSON.stringify(twimlResponse))
-          console.log('🎤 Sent start confirmation to Twilio')
+          socket.send(JSON.stringify(confirm))
+          console.log('🎤 Sent TwiML confirmation to Twilio')
           
           // Send initial greeting
           if (tenantId) {

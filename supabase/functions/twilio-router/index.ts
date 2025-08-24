@@ -152,7 +152,7 @@ serve(async (req) => {
     const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
     console.log('Stream URL:', streamUrl);
 
-    // Build streaming TwiML that connects the call to the WebSocket stream
+    // Build proper streaming TwiML that connects the call to the WebSocket stream
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Connecting you to your AI receptionist.</Say>
@@ -166,7 +166,7 @@ serve(async (req) => {
     console.log('TwiML content:', twiml);
     console.log('=== END DEBUG ===');
 
-    // Return the TwiML
+    // Return the streaming TwiML
     return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } })
 
   } catch (error) {
