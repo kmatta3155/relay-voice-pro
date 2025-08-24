@@ -345,8 +345,12 @@ function pcmToMulaw(pcm: number): number {
 
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
   console.log(`📡 Preparing to send ${chunks.length} μ-law chunks to Twilio`)
-  let idx = 0
-  for (const chunk of chunks) {
+  
+  // Add a small delay before starting to ensure clean audio
+  await new Promise(resolve => setTimeout(resolve, 100))
+  
+  for (let idx = 0; idx < chunks.length; idx++) {
+    const chunk = chunks[idx]
     const payload = btoa(String.fromCharCode(...chunk))
     const mediaMessage = {
       event: 'media',
@@ -354,13 +358,17 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       media: { payload }
     }
     socket.send(JSON.stringify(mediaMessage))
-    if (idx % 10 === 0) {
+    
+    if (idx % 20 === 0) {
       console.log(`➡️ Sent chunk ${idx + 1}/${chunks.length} (size=${chunk.length} bytes)`) 
     }
-    idx++
-    // Pace to ~20ms per 160-sample chunk at 8kHz
+    
+    // Proper pacing: 20ms per 160-sample chunk at 8kHz (matches real-time)
     await new Promise(resolve => setTimeout(resolve, 20))
   }
+  
+  // Add a small gap after finishing to separate audio segments
+  await new Promise(resolve => setTimeout(resolve, 50))
   console.log('✅ Finished sending audio to Twilio')
 }
 
@@ -399,6 +407,7 @@ serve(async (req) => {
 
     let streamSid = ''
     const audioBuffer = new AudioBuffer()
+    let isPlayingAudio = false // Track audio playback state
 
     socket.onopen = () => {
       console.log('✅ WebSocket opened successfully!')
@@ -426,8 +435,9 @@ serve(async (req) => {
           console.log('✅ Stream ready, awaiting caller audio')
           
           // Send a test greeting to confirm the pipeline works
-          if (streamSid && tenantId) {
+          if (streamSid && tenantId && !isPlayingAudio) {
             console.log('🧪 Sending test greeting on stream start...')
+            isPlayingAudio = true
             try {
               const testGreeting = "Hello! I can hear you. How can I help you today?"
               const greetingAudio = await generateTTSAudio(testGreeting)
@@ -437,6 +447,8 @@ serve(async (req) => {
               }
             } catch (error) {
               console.error('❌ Failed to send test greeting:', error)
+            } finally {
+              isPlayingAudio = false
             }
           }
         }
@@ -454,9 +466,10 @@ serve(async (req) => {
             console.log('🎤 Audio chunk received, buffer size:', audioBuffer.size())
             console.log('🔍 Audio chunk size:', audioData.length, 'bytes')
             
-            // Process accumulated audio when we have enough
-            if (audioBuffer.shouldProcess()) {
+            // Process accumulated audio when we have enough (and not already playing)
+            if (audioBuffer.shouldProcess() && !isPlayingAudio) {
               console.log('🔄 Processing accumulated audio...')
+              isPlayingAudio = true
               const combinedAudio = audioBuffer.getAndClear()
               
               // Process audio through AI pipeline
@@ -493,6 +506,8 @@ serve(async (req) => {
                 if (errorAudio.length > 0) {
                   await sendAudioToTwilio(errorAudio, streamSid, socket)
                 }
+              } finally {
+                isPlayingAudio = false
               }
             }
           }
