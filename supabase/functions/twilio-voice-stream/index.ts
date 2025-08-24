@@ -206,23 +206,36 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
       throw new Error(`ElevenLabs TTS API failed: ${errorText}`)
     }
 
-    const ulawBytes = new Uint8Array(await response.arrayBuffer())
-    console.log('✅ Received μ-law audio, size:', ulawBytes.length)
+    const arrayBuffer = await response.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuffer)
+    const contentType = response.headers.get('content-type') || ''
+    console.log('📦 ElevenLabs content-type:', contentType)
 
-    // Split into 20ms frames (160 bytes @ 8kHz μ-law), pad last frame with silence (0xFF)
-    const chunks: Uint8Array[] = []
-    for (let i = 0; i < ulawBytes.length; i += 160) {
-      const end = Math.min(i + 160, ulawBytes.length)
-      if (end - i === 160) {
-        chunks.push(ulawBytes.subarray(i, end))
-      } else {
-        const padded = new Uint8Array(160)
-        padded.fill(0xFF) // μ-law silence
-        padded.set(ulawBytes.subarray(i, end), 0)
-        chunks.push(padded)
+    // Peek signature
+    const sig = String.fromCharCode(bytes[0] || 0, bytes[1] || 0, bytes[2] || 0, bytes[3] || 0)
+    console.log('🔎 First 4 bytes signature:', sig)
+
+    let chunks: Uint8Array[] = []
+
+    if (sig === 'RIFF' || contentType.includes('wav')) {
+      console.log('🎛 Detected WAV container from ElevenLabs, converting to μ-law...')
+      chunks = convertWavToMulawChunks(bytes)
+    } else {
+      console.log('🎛 Detected raw μ-law, chunking into 20ms frames...')
+      for (let i = 0; i < bytes.length; i += 160) {
+        const end = Math.min(i + 160, bytes.length)
+        if (end - i === 160) {
+          chunks.push(bytes.subarray(i, end))
+        } else {
+          const padded = new Uint8Array(160)
+          padded.fill(0xFF) // μ-law silence
+          padded.set(bytes.subarray(i, end), 0)
+          chunks.push(padded)
+        }
       }
     }
-    console.log('📦 Chunked raw μ-law into', chunks.length, 'frames')
+
+    console.log('✅ Prepared', chunks.length, 'frames for Twilio')
     return chunks
   } catch (error) {
     console.error('❌ Error with ElevenLabs TTS:', error)
