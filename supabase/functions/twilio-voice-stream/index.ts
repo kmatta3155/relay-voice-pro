@@ -15,17 +15,12 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  // Extract parameters from URL
+  // Extract parameters from URL (optional)
   const url = new URL(req.url)
   const tenantId = url.searchParams.get('tenant_id')
   const callSid = url.searchParams.get('call_sid')
 
-  console.log('Parameters:', { tenantId, callSid })
-
-  if (!tenantId || !callSid) {
-    console.log('Missing required parameters')
-    return new Response("Missing tenant_id or call_sid", { status: 400 })
-  }
+  console.log('Parameters (may be missing pre-upgrade):', { tenantId, callSid })
 
   // Check if this is a WebSocket upgrade request
   const upgradeHeader = req.headers.get("upgrade")
