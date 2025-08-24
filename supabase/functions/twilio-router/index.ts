@@ -154,15 +154,17 @@ serve(async (req) => {
       })
 
     // Derive stream URL using functions/v1 path
-    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&amp;call_sid=${callSid}`
+    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
     console.log('Stream URL:', streamUrl);
 
     // Build proper streaming TwiML that connects the call to the WebSocket stream
+    // XML-encode the URL to escape ampersands
+    const xmlEncodedUrl = streamUrl.replace(/&/g, '&amp;')
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Connecting you to your AI receptionist.</Say>
   <Connect>
-    <Stream url="${streamUrl}" />
+    <Stream url="${xmlEncodedUrl}" />
   </Connect>
 </Response>`
 
