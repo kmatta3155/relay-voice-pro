@@ -26,7 +26,7 @@ serve(async (req) => {
 <Response>
   <Say voice="alice">Hello! You've reached our AI receptionist. Please hold while we connect you.</Say>
   <Connect>
-    <Stream url="wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}" />
+    <Stream url="wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}" />
   </Connect>
 </Response>`
 
