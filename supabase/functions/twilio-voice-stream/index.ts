@@ -354,6 +354,8 @@ serve(async (req) => {
           console.error('❌ ELEVENLABS_API_KEY not found - cannot connect to ElevenLabs')
           return
         }
+        // Send immediate μ-law greeting while agent connects (no agent first_message to avoid overlap)
+        await sendImmediateGreeting(streamSid, socket, businessName)
 
         console.log('🔗 Getting signed URL from ElevenLabs...')
         try {
@@ -389,7 +391,6 @@ serve(async (req) => {
                   prompt: {
                     prompt: `You are a helpful receptionist for ${businessName}. Answer calls professionally and keep responses brief and natural.`
                   },
-                  first_message: `Hello! Thank you for calling ${businessName}. How can I help you today?`,
                   language: 'en'
                 },
                 conversation_config: {
@@ -401,15 +402,7 @@ serve(async (req) => {
             }
             
             elevenLabsWs!.send(JSON.stringify(initMessage))
-            console.log('📤 Sent conversation config to ElevenLabs (init)')
-
-            // Explicitly trigger greeting to ensure first audio is produced
-            const greetMessage = {
-              type: 'user_message',
-              text: `Please greet the caller for ${businessName} politely and ask how you can help.`
-            }
-            elevenLabsWs!.send(JSON.stringify(greetMessage))
-            console.log('📤 Sent explicit greet trigger to ElevenLabs')
+            console.log('📤 Sent conversation config to ElevenLabs (init, no first_message)')
           }
 
           elevenLabsWs.onmessage = async (message) => {
