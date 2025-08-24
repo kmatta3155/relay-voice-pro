@@ -183,13 +183,12 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
       method: 'POST',
       headers: {
         'xi-api-key': `${elevenLabsKey}`,
-        'accept': 'audio/mulaw;rate=8000',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         text: text,
         model_id: 'eleven_turbo_v2_5',
-        output_format: 'ulaw_8000',
+        output_format: 'pcm_16000',
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.5,
@@ -208,34 +207,11 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
 
     const arrayBuffer = await response.arrayBuffer()
     const bytes = new Uint8Array(arrayBuffer)
-    const contentType = response.headers.get('content-type') || ''
-    console.log('📦 ElevenLabs content-type:', contentType)
+    console.log('✅ Received PCM16 from ElevenLabs, size:', bytes.length)
 
-    // Peek signature
-    const sig = String.fromCharCode(bytes[0] || 0, bytes[1] || 0, bytes[2] || 0, bytes[3] || 0)
-    console.log('🔎 First 4 bytes signature:', sig)
-
-    let chunks: Uint8Array[] = []
-
-    if (sig === 'RIFF' || contentType.includes('wav')) {
-      console.log('🎛 Detected WAV container from ElevenLabs, converting to μ-law...')
-      chunks = convertWavToMulawChunks(bytes)
-    } else {
-      console.log('🎛 Detected raw μ-law, chunking into 20ms frames...')
-      for (let i = 0; i < bytes.length; i += 160) {
-        const end = Math.min(i + 160, bytes.length)
-        if (end - i === 160) {
-          chunks.push(bytes.subarray(i, end))
-        } else {
-          const padded = new Uint8Array(160)
-          padded.fill(0xFF) // μ-law silence
-          padded.set(bytes.subarray(i, end), 0)
-          chunks.push(padded)
-        }
-      }
-    }
-
-    console.log('✅ Prepared', chunks.length, 'frames for Twilio')
+    // Convert PCM16 (16kHz) to μ-law (8kHz) chunks for Twilio
+    const chunks = convertPcm16ToMulawChunks(bytes)
+    console.log('🔄 Converted to', chunks.length, 'μ-law chunks for Twilio')
     return chunks
   } catch (error) {
     console.error('❌ Error with ElevenLabs TTS:', error)
@@ -244,6 +220,40 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
 }
 
 // Audio format conversion functions
+function convertPcm16ToMulawChunks(pcm16Data: Uint8Array): Uint8Array[] {
+  // Convert raw PCM16 16kHz to μ-law 8kHz for Twilio
+  const samples = new Int16Array(pcm16Data.buffer, pcm16Data.byteOffset, pcm16Data.byteLength / 2)
+  console.log(`🔄 Converting ${samples.length} PCM16 samples from 16kHz to 8kHz μ-law`)
+  
+  // Downsample from 16kHz to 8kHz (every other sample)
+  const downsampled = new Int16Array(Math.floor(samples.length / 2))
+  for (let i = 0; i < downsampled.length; i++) {
+    downsampled[i] = samples[i * 2]
+  }
+  
+  // Convert to μ-law
+  const mulaw = new Uint8Array(downsampled.length)
+  for (let i = 0; i < downsampled.length; i++) {
+    mulaw[i] = pcmToMulaw(downsampled[i])
+  }
+  
+  // Split into 20ms chunks (160 samples at 8kHz)
+  const chunks: Uint8Array[] = []
+  for (let i = 0; i < mulaw.length; i += 160) {
+    const end = Math.min(i + 160, mulaw.length)
+    if (end - i === 160) {
+      chunks.push(mulaw.subarray(i, end))
+    } else {
+      const padded = new Uint8Array(160)
+      padded.fill(0xFF) // μ-law silence
+      padded.set(mulaw.subarray(i, end), 0)
+      chunks.push(padded)
+    }
+  }
+  
+  console.log(`✅ Created ${chunks.length} μ-law chunks`)
+  return chunks
+}
 function createWavFromMulaw(mulawData: Uint8Array): Uint8Array {
   // Convert μ-law to 16-bit PCM
   const pcmData = new Int16Array(mulawData.length)
