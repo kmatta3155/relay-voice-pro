@@ -160,9 +160,8 @@ serve(async (req) => {
     // Build proper streaming TwiML that connects the call to the WebSocket stream
     // XML-encode the URL to escape ampersands
     const xmlEncodedUrl = streamUrl.replace(/&/g, '&amp;')
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! You're connected to the AI receptionist. How can I help you today?</Say>
   <Connect>
     <Stream url="${xmlEncodedUrl}" />
   </Connect>

@@ -258,64 +258,112 @@ function createWavFromMulaw(mulawData: Uint8Array): Uint8Array {
 }
 
 function convertWavToMulawChunks(wavBytes: Uint8Array): Uint8Array[] {
-  // Parse WAV header to get sample rate
-  const dataView = new DataView(wavBytes.buffer)
-  const sampleRate = dataView.getUint32(24, true) // Sample rate at byte 24
-  const dataOffset = 44 // Standard WAV header size
-  
-  // Extract PCM data
-  const pcmStart = dataOffset
-  const pcmLength = wavBytes.length - pcmStart
-  const samples = new Int16Array(wavBytes.buffer, pcmStart, pcmLength / 2)
-  
-  console.log(`📊 Original audio: ${samples.length} samples at ${sampleRate}Hz`)
-  
-  // Resample to 8kHz if needed
-  let resampledSamples: Int16Array
-  if (sampleRate !== 8000) {
-    const ratio = sampleRate / 8000
-    const newLength = Math.floor(samples.length / ratio)
-    resampledSamples = new Int16Array(newLength)
-    
-    for (let i = 0; i < newLength; i++) {
-      const srcIndex = Math.floor(i * ratio)
-      resampledSamples[i] = samples[srcIndex]
-    }
-    console.log(`🔄 Resampled to 8kHz: ${resampledSamples.length} samples`)
-  } else {
-    resampledSamples = samples
-  }
-  
-  // Normalize audio levels - find max amplitude
-  let maxAmplitude = 0
-  for (let i = 0; i < resampledSamples.length; i++) {
-    maxAmplitude = Math.max(maxAmplitude, Math.abs(resampledSamples[i]))
-  }
-  
-  // Apply gain if audio is too quiet (but don't over-amplify)
-  const targetAmplitude = 16000 // Target ~50% of max 16-bit range
-  if (maxAmplitude > 0 && maxAmplitude < targetAmplitude) {
-    const gain = Math.min(2.0, targetAmplitude / maxAmplitude)
-    console.log(`🔊 Applying gain: ${gain.toFixed(2)}x (max was ${maxAmplitude})`)
-    for (let i = 0; i < resampledSamples.length; i++) {
-      resampledSamples[i] = Math.round(resampledSamples[i] * gain)
-    }
-  } else {
-    console.log(`📈 Audio levels OK: max amplitude ${maxAmplitude}`)
-  }
-  
-  // Convert to μ-law
-  const mulaw = new Uint8Array(resampledSamples.length)
-  for (let i = 0; i < resampledSamples.length; i++) {
-    mulaw[i] = pcmToMulaw(resampledSamples[i])
+  const view = new DataView(wavBytes.buffer, wavBytes.byteOffset, wavBytes.byteLength)
+
+  // Validate RIFF/WAVE
+  const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3))
+  const wave = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11))
+  if (riff !== 'RIFF' || wave !== 'WAVE') {
+    console.warn('⚠️ Not a RIFF/WAVE file; falling back to header=44')
   }
 
-  // Split into 20ms chunks (160 samples at 8kHz)
+  // Walk chunks to find 'fmt ' and 'data'
+  let offset = 12
+  let sampleRate = 8000
+  let bitsPerSample = 16
+  let numChannels = 1
+  let dataOffset = 44
+  let dataSize = wavBytes.length - dataOffset
+
+  while (offset + 8 <= wavBytes.length) {
+    const id = String.fromCharCode(
+      view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3)
+    )
+    const size = view.getUint32(offset + 4, true)
+    const next = offset + 8 + size
+
+    if (id === 'fmt ') {
+      const audioFormat = view.getUint16(offset + 8, true)
+      numChannels = view.getUint16(offset + 10, true)
+      sampleRate = view.getUint32(offset + 12, true)
+      bitsPerSample = view.getUint16(offset + 22, true)
+      if (audioFormat !== 1 || bitsPerSample !== 16) {
+        console.warn(`⚠️ Unsupported WAV format (format=${audioFormat}, bits=${bitsPerSample}). Proceeding best-effort.`)
+      }
+    } else if (id === 'data') {
+      dataOffset = offset + 8
+      dataSize = size
+      break
+    }
+
+    offset = next
+  }
+
+  const pcmStart = dataOffset
+  const pcmLength = Math.min(dataSize, wavBytes.length - pcmStart)
+  const samples = new Int16Array(wavBytes.buffer, wavBytes.byteOffset + pcmStart, Math.floor(pcmLength / 2))
+
+  console.log(`📊 WAV parsed: ${samples.length} samples | ${sampleRate}Hz | ${numChannels}ch | ${bitsPerSample}bit`)
+
+  // If stereo, downmix to mono by averaging
+  let monoSamples: Int16Array
+  if (numChannels === 2) {
+    const leftRight = new Int16Array(samples.buffer, samples.byteOffset, samples.length)
+    const out = new Int16Array(Math.floor(leftRight.length / 2))
+    for (let i = 0, j = 0; j < out.length; i += 2, j++) {
+      const l = leftRight[i]
+      const r = leftRight[i + 1]
+      out[j] = Math.round((l + r) / 2)
+    }
+    monoSamples = out
+  } else {
+    monoSamples = samples
+  }
+
+  // Resample to 8kHz with simple linear interpolation to reduce aliasing
+  let resampled: Int16Array
+  if (sampleRate !== 8000) {
+    const ratio = 8000 / sampleRate
+    const newLength = Math.floor(monoSamples.length * ratio)
+    resampled = new Int16Array(newLength)
+    let pos = 0
+    for (let i = 0; i < newLength; i++) {
+      const srcPos = i / ratio
+      const idx = Math.floor(srcPos)
+      const frac = srcPos - idx
+      const s0 = monoSamples[Math.min(idx, monoSamples.length - 1)]
+      const s1 = monoSamples[Math.min(idx + 1, monoSamples.length - 1)]
+      resampled[i] = Math.round(s0 + (s1 - s0) * frac)
+    }
+    console.log(`🔄 Resampled (linear) to 8kHz: ${resampled.length} samples`)
+  } else {
+    resampled = monoSamples
+  }
+
+  // Normalize audio levels - find max amplitude
+  let maxAmplitude = 0
+  for (let i = 0; i < resampled.length; i++) {
+    const v = Math.abs(resampled[i])
+    if (v > maxAmplitude) maxAmplitude = v
+  }
+
+  const target = 16000
+  if (maxAmplitude > 0 && maxAmplitude < target) {
+    const gain = Math.min(2.0, target / maxAmplitude)
+    console.log(`🔊 Applying gain: ${gain.toFixed(2)}x (max=${maxAmplitude})`)
+    for (let i = 0; i < resampled.length; i++) {
+      resampled[i] = Math.round(resampled[i] * gain)
+    }
+  }
+
+  // Convert to μ-law and split into 20ms chunks (160 samples at 8kHz)
+  const mulaw = new Uint8Array(resampled.length)
+  for (let i = 0; i < resampled.length; i++) mulaw[i] = pcmToMulaw(resampled[i])
+
   const chunks: Uint8Array[] = []
   for (let i = 0; i < mulaw.length; i += 160) {
     chunks.push(mulaw.subarray(i, Math.min(i + 160, mulaw.length)))
   }
-  
   console.log(`✅ Created ${chunks.length} μ-law chunks`)
   return chunks
 }
@@ -434,23 +482,8 @@ serve(async (req) => {
           console.log('▶️ Stream started. streamSid=', streamSid)
           console.log('✅ Stream ready, awaiting caller audio')
           
-          // Send a test greeting to confirm the pipeline works
-          if (streamSid && tenantId && !isPlayingAudio) {
-            console.log('🧪 Sending test greeting on stream start...')
-            isPlayingAudio = true
-            try {
-              const testGreeting = "Hello! I can hear you. How can I help you today?"
-              const greetingAudio = await generateTTSAudio(testGreeting)
-              if (greetingAudio.length > 0) {
-                await sendAudioToTwilio(greetingAudio, streamSid, socket)
-                console.log('✅ Test greeting sent successfully')
-              }
-            } catch (error) {
-              console.error('❌ Failed to send test greeting:', error)
-            } finally {
-              isPlayingAudio = false
-            }
-          }
+          // No auto-greeting; wait for caller speech to avoid overlap/echo
+          // Stream is ready for inbound audio.
         }
 
         if (evt === 'media') {
