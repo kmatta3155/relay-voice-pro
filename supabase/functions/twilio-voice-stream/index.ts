@@ -48,13 +48,6 @@ serve(async (req) => {
         if (evt === 'start') {
           streamSid = data.start?.streamSid || data.streamSid
           console.log('▶️ Stream started. streamSid=', streamSid)
-
-          // Send a simple mark event to acknowledge the stream is ready
-          socket.send(JSON.stringify({ 
-            event: 'mark', 
-            streamSid, 
-            mark: { name: 'stream_ready' } 
-          }))
           console.log('✅ Stream ready, awaiting caller input')
         }
 
