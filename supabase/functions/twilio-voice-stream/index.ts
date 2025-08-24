@@ -193,8 +193,7 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
           similarity_boost: 0.5,
           style: 0.0,
           use_speaker_boost: true
-        },
-        output_format: 'wav'
+        }
       }),
     })
 
