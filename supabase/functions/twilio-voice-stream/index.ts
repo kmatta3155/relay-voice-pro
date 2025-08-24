@@ -172,42 +172,45 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
   try {
     console.log('🔊 Generating TTS for text:', text.substring(0, 100) + '...')
     
-    // Check if OpenAI API key is available
-    const openaiKey = Deno.env.get('OPENAI_API_KEY')
-    if (!openaiKey) {
-      console.error('❌ OPENAI_API_KEY not found for TTS')
+    // Check if ElevenLabs API key is available
+    const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
+    if (!elevenLabsKey) {
+      console.error('❌ ELEVENLABS_API_KEY not found for TTS')
       return []
     }
 
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/9BWtsMINqrJLrRacOk9x', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openaiKey}`,
+        'Authorization': `Bearer ${elevenLabsKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'tts-1-hd', // Use HD model for better quality
-        input: text,
-        voice: 'alloy', // Consistent voice
-        response_format: 'wav',
-        speed: 1.0 // Normal speed for consistency
+        text: text,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.5,
+          style: 0.0,
+          use_speaker_boost: true
+        }
       }),
     })
 
-    console.log('📥 TTS response status:', response.status)
+    console.log('📥 ElevenLabs TTS response status:', response.status)
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('❌ TTS API failed:', response.status, errorText)
-      throw new Error(`TTS API failed: ${errorText}`)
+      console.error('❌ ElevenLabs TTS API failed:', response.status, errorText)
+      throw new Error(`ElevenLabs TTS API failed: ${errorText}`)
     }
 
-    const wavBytes = new Uint8Array(await response.arrayBuffer())
-    console.log('🔄 Converting WAV to μ-law chunks, WAV size:', wavBytes.length)
-    const chunks = convertWavToMulawChunks(wavBytes)
+    const audioBytes = new Uint8Array(await response.arrayBuffer())
+    console.log('🔄 Converting ElevenLabs audio to μ-law chunks, audio size:', audioBytes.length)
+    const chunks = convertWavToMulawChunks(audioBytes)
     console.log('✅ Generated', chunks.length, 'audio chunks for Twilio')
     return chunks
   } catch (error) {
-    console.error('❌ Error with TTS:', error)
+    console.error('❌ Error with ElevenLabs TTS:', error)
     return []
   }
 }
