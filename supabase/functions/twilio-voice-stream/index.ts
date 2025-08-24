@@ -44,8 +44,18 @@ class AudioBuffer {
 // Audio processing functions
 async function processAudioWithWhisper(audioData: Uint8Array): Promise<string> {
   try {
+    console.log('👂 Processing audio with Whisper, data size:', audioData.length)
+    
+    // Check if OpenAI API key is available
+    const openaiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openaiKey) {
+      console.error('❌ OPENAI_API_KEY not found for Whisper')
+      return ''
+    }
+
     // Convert μ-law to WAV format for Whisper
     const wavData = createWavFromMulaw(audioData)
+    console.log('🔄 Converted to WAV, size:', wavData.length)
     
     const formData = new FormData()
     const blob = new Blob([wavData], { type: 'audio/wav' })
@@ -53,19 +63,24 @@ async function processAudioWithWhisper(audioData: Uint8Array): Promise<string> {
     formData.append('model', 'whisper-1')
     formData.append('language', 'en')
 
+    console.log('📤 Sending to Whisper API...')
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Authorization': `Bearer ${openaiKey}`,
       },
       body: formData,
     })
 
+    console.log('📥 Whisper response status:', response.status)
     if (!response.ok) {
-      throw new Error(`Whisper API failed: ${await response.text()}`)
+      const errorText = await response.text()
+      console.error('❌ Whisper API failed:', response.status, errorText)
+      throw new Error(`Whisper API failed: ${errorText}`)
     }
 
     const result = await response.json()
+    console.log('✅ Whisper result:', result)
     return result.text || ''
   } catch (error) {
     console.error('❌ Error with Whisper:', error)
@@ -75,15 +90,27 @@ async function processAudioWithWhisper(audioData: Uint8Array): Promise<string> {
 
 async function getAIResponse(text: string, tenantId: string): Promise<string> {
   try {
+    console.log('🤖 Getting AI response for tenant:', tenantId)
+    
+    // Check if OpenAI API key is available
+    const openaiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openaiKey) {
+      console.error('❌ OPENAI_API_KEY not found in environment')
+      return "I'm sorry, I'm not properly configured right now. Please try again later."
+    }
+
     // Get agent configuration
-    const { data: agent } = await supabase
+    console.log('📋 Fetching agent configuration...')
+    const { data: agent, error } = await supabase
       .from('ai_agents')
       .select('system_prompt, model')
       .eq('tenant_id', tenantId)
       .eq('status', 'ready')
       .single()
 
-    if (!agent) {
+    console.log('🔍 Agent query result:', { agent, error })
+    if (error || !agent) {
+      console.error('❌ No ready agent found for tenant:', tenantId, error)
       return "I'm sorry, I'm not available right now. Please try again later."
     }
 
@@ -117,10 +144,19 @@ async function getAIResponse(text: string, tenantId: string): Promise<string> {
 
 async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
   try {
+    console.log('🔊 Generating TTS for text:', text.substring(0, 100) + '...')
+    
+    // Check if OpenAI API key is available
+    const openaiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openaiKey) {
+      console.error('❌ OPENAI_API_KEY not found for TTS')
+      return []
+    }
+
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Authorization': `Bearer ${openaiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -131,12 +167,18 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
       }),
     })
 
+    console.log('📥 TTS response status:', response.status)
     if (!response.ok) {
-      throw new Error(`TTS API failed: ${await response.text()}`)
+      const errorText = await response.text()
+      console.error('❌ TTS API failed:', response.status, errorText)
+      throw new Error(`TTS API failed: ${errorText}`)
     }
 
     const wavBytes = new Uint8Array(await response.arrayBuffer())
-    return convertWavToMulawChunks(wavBytes)
+    console.log('🔄 Converting WAV to μ-law chunks, WAV size:', wavBytes.length)
+    const chunks = convertWavToMulawChunks(wavBytes)
+    console.log('✅ Generated', chunks.length, 'audio chunks for Twilio')
+    return chunks
   } catch (error) {
     console.error('❌ Error with TTS:', error)
     return []
@@ -269,6 +311,16 @@ serve(async (req) => {
   console.log('🎵 VOICE STREAM FUNCTION CALLED - NEW VERSION')
   console.log('Method:', req.method)
   console.log('URL:', req.url)
+  
+  // Validate environment on startup
+  const requiredEnvVars = ['OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']
+  const missingVars = requiredEnvVars.filter(varName => !Deno.env.get(varName))
+  if (missingVars.length > 0) {
+    console.error('❌ Missing required environment variables:', missingVars)
+  } else {
+    console.log('✅ All required environment variables present')
+  }
+  
   console.log('Headers:', JSON.stringify(Object.fromEntries(req.headers.entries()), null, 2))
 
   if (req.method === 'OPTIONS') {
