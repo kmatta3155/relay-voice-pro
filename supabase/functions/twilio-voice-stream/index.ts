@@ -100,7 +100,6 @@ async function getAIResponse(text: string, tenantId: string): Promise<string> {
           { role: 'user', content: text }
         ],
         max_completion_tokens: 150,
-        temperature: 0.7,
       }),
     })
 
@@ -312,6 +311,7 @@ serve(async (req) => {
             
             audioBuffer.addChunk(audioData)
             console.log('🎤 Audio chunk received, buffer size:', audioBuffer.chunks.length)
+            console.log('🔍 Audio chunk size:', audioData.length, 'bytes')
             
             // Process accumulated audio when we have enough
             if (audioBuffer.shouldProcess()) {
