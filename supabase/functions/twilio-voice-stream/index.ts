@@ -81,7 +81,7 @@ serve(async (req) => {
     let audioBuffer = [];
     let mediaStreamSid = null;
 
-    const enableAI = false; // Temporary: disable AI bridge to stabilize calls
+    const enableAI = true; // Re-enabled: voice stream works on functions/v1 path
     if (enableAI && agentConfig) {
       console.log('🤖 Initializing OpenAI Realtime API connection...');
       
