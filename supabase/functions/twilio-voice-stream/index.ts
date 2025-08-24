@@ -21,8 +21,8 @@ class AudioBuffer {
   }
   
   shouldProcess(): boolean {
-    // Process every 3 seconds or when we have enough data
-    return Date.now() - this.lastProcessTime > 3000 && this.chunks.length > 0
+    // Process every 1.5 seconds or when we have enough data
+    return Date.now() - this.lastProcessTime > 1500 && this.chunks.length > 0
   }
   
   getAndClear(): Uint8Array {
@@ -94,12 +94,12 @@ async function getAIResponse(text: string, tenantId: string): Promise<string> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: agent.model || 'gpt-5-mini-2025-08-07',
+        model: agent.model || 'gpt-4o',
         messages: [
           { role: 'system', content: agent.system_prompt || 'You are a helpful AI receptionist.' },
           { role: 'user', content: text }
         ],
-        max_completion_tokens: 150,
+        max_tokens: 150,
       }),
     })
 
@@ -189,18 +189,35 @@ function createWavFromMulaw(mulawData: Uint8Array): Uint8Array {
 }
 
 function convertWavToMulawChunks(wavBytes: Uint8Array): Uint8Array[] {
-  // Find data chunk and extract PCM
+  // Parse WAV header to get sample rate
   const dataView = new DataView(wavBytes.buffer)
-  let dataOffset = 44 // Standard WAV header size
+  const sampleRate = dataView.getUint32(24, true) // Sample rate at byte 24
+  const dataOffset = 44 // Standard WAV header size
   
-  // Convert to μ-law at 8kHz
+  // Extract PCM data
   const pcmStart = dataOffset
   const pcmLength = wavBytes.length - pcmStart
   const samples = new Int16Array(wavBytes.buffer, pcmStart, pcmLength / 2)
   
-  const mulaw = new Uint8Array(samples.length)
-  for (let i = 0; i < samples.length; i++) {
-    mulaw[i] = pcmToMulaw(samples[i])
+  // Resample to 8kHz if needed
+  let resampledSamples: Int16Array
+  if (sampleRate !== 8000) {
+    const ratio = sampleRate / 8000
+    const newLength = Math.floor(samples.length / ratio)
+    resampledSamples = new Int16Array(newLength)
+    
+    for (let i = 0; i < newLength; i++) {
+      const srcIndex = Math.floor(i * ratio)
+      resampledSamples[i] = samples[srcIndex]
+    }
+  } else {
+    resampledSamples = samples
+  }
+  
+  // Convert to μ-law
+  const mulaw = new Uint8Array(resampledSamples.length)
+  for (let i = 0; i < resampledSamples.length; i++) {
+    mulaw[i] = pcmToMulaw(resampledSamples[i])
   }
 
   // Split into 20ms chunks (160 samples at 8kHz)
