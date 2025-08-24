@@ -295,16 +295,27 @@ function pcmToMulaw(pcm: number): number {
 }
 
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
+  console.log(`📡 Preparing to send ${chunks.length} μ-law chunks to Twilio`)
+  let idx = 0
   for (const chunk of chunks) {
     const payload = btoa(String.fromCharCode(...chunk))
     const mediaMessage = {
       event: 'media',
       streamSid: streamSid,
-      media: { payload }
+      media: {
+        contentType: 'audio/x-mulaw;rate=8000',
+        payload
+      }
     }
     socket.send(JSON.stringify(mediaMessage))
-    await new Promise(resolve => setTimeout(resolve, 20)) // 20ms pacing
+    if (idx % 10 === 0) {
+      console.log(`➡️ Sent chunk ${idx + 1}/${chunks.length} (size=${chunk.length} bytes)`) 
+    }
+    idx++
+    // Pace to ~20ms per 160-sample chunk at 8kHz
+    await new Promise(resolve => setTimeout(resolve, 20))
   }
+  console.log('✅ Finished sending audio to Twilio')
 }
 
 serve(async (req) => {
