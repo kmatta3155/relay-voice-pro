@@ -22,7 +22,12 @@ serve(async (req) => {
 
   console.log('Starting voice stream for tenant:', tenantId, 'call:', callSid)
 
-  const { socket, response } = Deno.upgradeWebSocket(req)
+  const clientProtocols = headers.get('sec-websocket-protocol') || ''
+  const requested = clientProtocols.split(',').map(p => p.trim())
+  const selectedProtocol = requested.includes('audio') ? 'audio' : (requested[0] || undefined)
+  console.log('twilio-voice-stream: requested protocols =', requested, 'selected =', selectedProtocol)
+
+  const { socket, response } = Deno.upgradeWebSocket(req, { protocol: selectedProtocol })
   
   let openAISocket: WebSocket | null = null
   let conversationActive = false
