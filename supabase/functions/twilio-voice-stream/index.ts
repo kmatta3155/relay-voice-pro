@@ -1,12 +1,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import 'https://deno.land/x/xhr@0.1.0/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// ---- WAV parsing and audio utilities ----
+// WAV parsing utilities
 function findChunk(bytes: Uint8Array, fourcc: string, start = 12): number {
   for (let i = start; i < bytes.length - 8; ) {
     const id = String.fromCharCode(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3])
@@ -30,7 +29,7 @@ function parseWav(wavBytes: Uint8Array): { sampleRate: number; channels: number;
   const channels = view.getUint16(fmtIdx + 10, true)
   const sampleRate = view.getUint32(fmtIdx + 12, true)
   const bitsPerSample = view.getUint16(fmtIdx + 22, true)
-  if (audioFormat !== 1 || bitsPerSample !== 16) throw new Error('Only PCM16 WAV supported')
+  if (audioFormat !== 1 || bitsPerSample !== 16) throw new Error('Only PCM16 supported')
 
   const dataIdx = findChunk(wavBytes, 'data')
   if (dataIdx < 0) throw new Error('data chunk not found')
@@ -71,20 +70,18 @@ function resamplePcm16(src: Int16Array, fromRate: number, toRate: number): Int16
   return dst
 }
 
-// 16-bit linear PCM to μ-law (G.711)
+// 16-bit linear PCM to μ-law
 function linearToMulaw(pcm: number): number {
-  const BIAS = 0x84;
-  const CLIP = 32635;
-  let sign = (pcm >> 8) & 0x80;
-  if (sign !== 0) pcm = -pcm;
-  if (pcm > CLIP) pcm = CLIP;
-  pcm = pcm + BIAS;
-  let exponent = 7;
-  let mask = 0x4000;
-  for (; exponent > 0 && (pcm & mask) === 0; exponent--, mask >>= 1) {}
-  const mantissa = (pcm >> (exponent + 3)) & 0x0F;
-  const mulaw = ~(sign | (exponent << 4) | mantissa);
-  return mulaw & 0xff;
+  const BIAS = 0x84
+  const CLIP = 32635
+  let sign = 0
+  if (pcm < 0) { sign = 0x80; pcm = -pcm }
+  pcm += BIAS
+  if (pcm > CLIP) pcm = CLIP
+  let exponent = 7
+  for (let expLut = 0x4000; (pcm & ~expLut) === 0 && exponent > 0; expLut >>= 1) exponent--
+  const mantissa = (pcm >> (exponent + 3)) & 0x0F
+  return (~(sign | (exponent << 4) | mantissa)) & 0xFF
 }
 
 function pcm16ToMulawBytes(pcm: Int16Array): Uint8Array {
@@ -93,18 +90,8 @@ function pcm16ToMulawBytes(pcm: Int16Array): Uint8Array {
   return out
 }
 
-function base64FromBytes(bytes: Uint8Array): string {
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
-  }
-  // deno-lint-ignore no-explicit-any
-  return (btoa as any)(binary)
-}
-
 async function ttsToMulawChunks(text: string): Promise<Uint8Array[]> {
-  // Request WAV from OpenAI TTS
+  // Get WAV from OpenAI TTS
   const resp = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
@@ -117,10 +104,11 @@ async function ttsToMulawChunks(text: string): Promise<Uint8Array[]> {
   const wavBytes = new Uint8Array(await resp.arrayBuffer())
 
   const { sampleRate, pcm } = parseWav(wavBytes)
+  // Resample to 8kHz for Twilio Media Streams
   const pcm8k = resamplePcm16(pcm, sampleRate, 8000)
   const mulaw = pcm16ToMulawBytes(pcm8k)
 
-  // 20ms chunks => 160 samples at 8kHz
+  // Split into 20ms chunks => 160 samples at 8kHz
   const CHUNK = 160
   const chunks: Uint8Array[] = []
   for (let i = 0; i < mulaw.length; i += CHUNK) {
@@ -129,21 +117,30 @@ async function ttsToMulawChunks(text: string): Promise<Uint8Array[]> {
   return chunks
 }
 
-async function sendMulawChunksOverTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
-  let sent = 0;
-  for (const bytes of chunks) {
-    const payload = base64FromBytes(bytes);
-    const media = { event: 'media', streamSid, media: { payload } };
-    socket.send(JSON.stringify(media));
-    sent++;
-    await new Promise((r) => setTimeout(r, 20)); // 20ms pacing
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
   }
-  console.log(`✅ Sent ${sent} outbound media chunks`);
+  // deno-lint-ignore no-explicit-any
+  return (btoa as any)(binary)
+}
+
+async function sendMulawChunksOverTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
+  for (const bytes of chunks) {
+    const payload = base64FromBytes(bytes)
+    const media = { event: 'media', streamSid, media: { payload } }
+    socket.send(JSON.stringify(media))
+    await new Promise((r) => setTimeout(r, 20)) // 20ms pacing
+  }
 }
 
 serve(async (req) => {
-  console.log('=== TWILIO VOICE STREAM (μ-law 8kHz) ===')
-  console.log('Method:', req.method, 'URL:', req.url)
+  console.log('🎵 VOICE STREAM FUNCTION CALLED')
+  console.log('Method:', req.method)
+  console.log('URL:', req.url)
+  console.log('Headers:', Object.fromEntries(req.headers.entries()))
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -155,19 +152,17 @@ serve(async (req) => {
   }
 
   try {
-    const requestedProtocols = req.headers.get('sec-websocket-protocol')?.split(',').map(p => p.trim()) || []
-    const chosenProtocol = requestedProtocols[0]
-    const { socket, response } = Deno.upgradeWebSocket(req, { protocol: chosenProtocol })
+    const { socket, response } = Deno.upgradeWebSocket(req)
 
     const url = new URL(req.url)
     const tenantId = url.searchParams.get('tenant_id')
     const callSid = url.searchParams.get('call_sid')
-    console.log('Params:', { tenantId, callSid })
+    console.log('📋 Parameters:', { tenantId, callSid })
 
     let streamSid = ''
 
     socket.onopen = () => {
-      console.log('✅ WebSocket opened')
+      console.log('✅ WebSocket opened successfully!')
     }
 
     socket.onmessage = async (event) => {
@@ -175,7 +170,7 @@ serve(async (req) => {
         const data = JSON.parse(event.data)
         const evt = data.event
         if (!evt) return
-        console.log('📨 Event:', evt)
+        console.log('📨 Event from Twilio:', evt)
 
         if (evt === 'connected') {
           console.log('🔌 Twilio connected')
@@ -183,52 +178,42 @@ serve(async (req) => {
 
         if (evt === 'start') {
           streamSid = data.start?.streamSid || data.streamSid
-          console.log('▶️ Stream started. streamSid =', streamSid)
+          console.log('▶️ Stream started. streamSid=', streamSid)
 
-          // Send a mark (optional, protocol-valid)
-          socket.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'greeting_start' } }))
-
-          // Generate greeting and stream μ-law at 8kHz back to caller
-          const greeting = "Hello! You're connected to the AI receptionist. How can I help you today?"
-          try {
-            const chunks = await ttsToMulawChunks(greeting)
-            console.log('TTS chunks:', chunks.length)
-            await sendMulawChunksOverTwilio(chunks, streamSid, socket)
-            console.log('🎤 Greeting streamed')
-          } catch (e) {
-            console.error('TTS/stream error:', e)
-          }
-
-          socket.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'greeting_done' } }))
+          // Send TwiML greeting so Twilio handles TTS/encoding
+          const greetingTwiml = '<Say>Hello! You\'re connected to the AI receptionist. How can I help you today?</Say>'
+          socket.send(JSON.stringify({ event: 'twiml', streamSid, twiml: greetingTwiml }))
+          console.log('📢 Sent TwiML greeting')
         }
 
         if (evt === 'media') {
-          // Inbound audio from caller (base64 μ-law in data.media.payload)
-          // For now, just log length
-          const len = data.media?.payload?.length || 0
-          if (len) console.log('🎵 Inbound payload length:', len)
+          // We receive caller μ-law audio here as base64 in data.media.payload
+          // For now, just acknowledge with a mark to keep the stream alive during testing
+          if (data.media?.payload) {
+            // no-op
+          }
         }
 
         if (evt === 'stop') {
           console.log('🛑 Stream stopped')
         }
       } catch (err) {
-        console.error('Message handling error:', err)
+        console.error('❌ Error handling message:', err)
         console.error('Raw:', event.data)
       }
     }
 
     socket.onerror = (error) => {
-      console.error('WebSocket error:', error)
+      console.error('❌ WebSocket error:', error)
     }
 
     socket.onclose = (event) => {
-      console.log('WebSocket closed:', event.code, event.reason)
+      console.log('🔒 WebSocket closed:', event.code, event.reason)
     }
 
     return response
   } catch (error) {
-    console.error('Upgrade error:', error)
+    console.error('❌ Error setting up WebSocket:', error)
     return new Response('WebSocket upgrade failed', { status: 500 })
   }
 })
