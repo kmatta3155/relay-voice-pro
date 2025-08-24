@@ -24,5 +24,8 @@ verify_jwt = false
 [functions.twilio-status]
 verify_jwt = false
 
+[functions.twilio-voice-simple]
+verify_jwt = false
+
 [functions.twilio-voicemail]
 verify_jwt = false
