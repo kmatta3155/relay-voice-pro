@@ -193,7 +193,8 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
           similarity_boost: 0.5,
           style: 0.0,
           use_speaker_boost: true
-        }
+        },
+        output_format: 'wav'
       }),
     })
 
@@ -459,6 +460,7 @@ serve(async (req) => {
     let streamSid = ''
     const audioBuffer = new AudioBuffer()
     let isPlayingAudio = false // Track audio playback state
+    let hasGreeted = false // Ensure we greet once, with our TTS voice
 
     socket.onopen = () => {
       console.log('✅ WebSocket opened successfully!')
@@ -485,8 +487,24 @@ serve(async (req) => {
           console.log('▶️ Stream started. streamSid=', streamSid)
           console.log('✅ Stream ready, awaiting caller audio')
           
-          // No auto-greeting; wait for caller speech to avoid overlap/echo
-          // Stream is ready for inbound audio.
+          // Friendly greeting with same voice, once
+          if (!hasGreeted && streamSid && !isPlayingAudio) {
+            console.log('🙋 Sending initial greeting with ElevenLabs voice...')
+            isPlayingAudio = true
+            try {
+              const greeting = "Hi! I'm your AI receptionist. How can I help you today?"
+              const greetChunks = await generateTTSAudio(greeting)
+              if (greetChunks.length > 0) {
+                await sendAudioToTwilio(greetChunks, streamSid, socket)
+                console.log('✅ Greeting sent')
+              }
+            } catch (err) {
+              console.error('❌ Failed to send greeting:', err)
+            } finally {
+              isPlayingAudio = false
+              hasGreeted = true
+            }
+          }
         }
 
         if (evt === 'media') {
