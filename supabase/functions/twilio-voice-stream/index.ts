@@ -6,10 +6,10 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  console.log('🎵 VOICE STREAM FUNCTION CALLED')
+  console.log('🎵 VOICE STREAM FUNCTION CALLED - NEW VERSION')
   console.log('Method:', req.method)
   console.log('URL:', req.url)
-  console.log('Headers:', Object.fromEntries(req.headers.entries()))
+  console.log('Headers:', JSON.stringify(Object.fromEntries(req.headers.entries()), null, 2))
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -36,10 +36,16 @@ serve(async (req) => {
 
     socket.onmessage = async (event) => {
       try {
+        console.log('📥 Raw WebSocket message received:', event.data)
         const data = JSON.parse(event.data)
         const evt = data.event
-        if (!evt) return
-        console.log('📨 Event from Twilio:', evt)
+        console.log('📨 Parsed event type:', evt)
+        console.log('📊 Full event data:', JSON.stringify(data, null, 2))
+        
+        if (!evt) {
+          console.log('⚠️ No event type found in message')
+          return
+        }
 
         if (evt === 'connected') {
           console.log('🔌 Twilio connected')
