@@ -24,7 +24,7 @@ serve(async (req) => {
       // Generate TwiML response to connect call to AI receptionist
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Hello! You've reached our AI receptionist. Please hold while we connect you.</Say>
+  <Say>Hello! You've reached our AI receptionist. Please hold while we connect you.</Say>
   <Connect>
     <Stream url="wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}" />
   </Connect>
