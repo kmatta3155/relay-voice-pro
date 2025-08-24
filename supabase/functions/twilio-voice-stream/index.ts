@@ -81,7 +81,8 @@ serve(async (req) => {
     let audioBuffer = [];
     let mediaStreamSid = null;
 
-    if (agentConfig) {
+    const enableAI = false; // Temporary: disable AI bridge to stabilize calls
+    if (enableAI && agentConfig) {
       console.log('🤖 Initializing OpenAI Realtime API connection...');
       
       const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
