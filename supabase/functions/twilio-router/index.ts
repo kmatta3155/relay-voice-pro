@@ -18,9 +18,12 @@ const projectRef = new URL(supabaseUrl).hostname.split('.')[0] // abcd1234
 const functionsDomain = `${projectRef}.functions.supabase.co`
 
 serve(async (req) => {
+  console.log('🚀 ROUTER FUNCTION STARTED')
   if (req.method === 'OPTIONS') {
+    console.log('✅ OPTIONS request handled')
     return new Response('ok', { headers: corsHeaders })
   }
+  console.log('📞 Processing voice call request')
 
   try {
     console.log('=== TWILIO ROUTER DEBUG START ===');
