@@ -48,7 +48,14 @@ serve(async (req) => {
         if (evt === 'start') {
           streamSid = data.start?.streamSid || data.streamSid
           console.log('▶️ Stream started. streamSid=', streamSid)
-          console.log('✅ Stream ready, awaiting caller input')
+
+          // Send properly formatted TwiML event with complete Response wrapper
+          socket.send(JSON.stringify({
+            event: 'twiml',
+            streamSid: streamSid,
+            twiml: '<Response><Say>Hello! You\'re connected to the AI receptionist. How can I help you today?</Say></Response>'
+          }))
+          console.log('🎤 Sent TwiML greeting to Twilio')
         }
 
         if (evt === 'media') {
