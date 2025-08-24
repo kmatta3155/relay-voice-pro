@@ -60,8 +60,8 @@ serve(async (req) => {
       // Return fallback TwiML
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Thank you for calling. This number is not currently configured. Goodbye.</Say>
-  <Hangup />
+  <Say>Thank you for calling. This number is not currently configured. Goodbye.</Say>
+  <Hangup/>
 </Response>`
       return new Response(twiml, {
         headers: { 'Content-Type': 'text/xml' }
@@ -82,8 +82,8 @@ serve(async (req) => {
       // If no agent in live mode, just hang up politely
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Thank you for calling. We're currently unavailable. Please try again later.</Say>
-  <Hangup />
+  <Say>Thank you for calling. We're currently unavailable. Please try again later.</Say>
+  <Hangup/>
 </Response>`
       
       return new Response(twiml, {
@@ -98,8 +98,8 @@ serve(async (req) => {
       console.log('Agent is in simulation mode, not handling live calls. Mode:', agentData.mode)
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Thank you for calling. We're currently unavailable. Please try again later.</Say>
-  <Hangup />
+  <Say>Thank you for calling. We're currently unavailable. Please try again later.</Say>
+  <Hangup/>
 </Response>`
       
       return new Response(twiml, {
