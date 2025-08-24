@@ -183,12 +183,13 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
       method: 'POST',
       headers: {
         'xi-api-key': `${elevenLabsKey}`,
-        'accept': 'audio/wav',
+        'accept': 'audio/mulaw;rate=8000',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         text: text,
         model_id: 'eleven_turbo_v2_5',
+        output_format: 'ulaw_8000',
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.5,
@@ -205,10 +206,23 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
       throw new Error(`ElevenLabs TTS API failed: ${errorText}`)
     }
 
-    const audioBytes = new Uint8Array(await response.arrayBuffer())
-    console.log('🔄 Converting ElevenLabs audio to μ-law chunks, audio size:', audioBytes.length)
-    const chunks = convertWavToMulawChunks(audioBytes)
-    console.log('✅ Generated', chunks.length, 'audio chunks for Twilio')
+    const ulawBytes = new Uint8Array(await response.arrayBuffer())
+    console.log('✅ Received μ-law audio, size:', ulawBytes.length)
+
+    // Split into 20ms frames (160 bytes @ 8kHz μ-law), pad last frame with silence (0xFF)
+    const chunks: Uint8Array[] = []
+    for (let i = 0; i < ulawBytes.length; i += 160) {
+      const end = Math.min(i + 160, ulawBytes.length)
+      if (end - i === 160) {
+        chunks.push(ulawBytes.subarray(i, end))
+      } else {
+        const padded = new Uint8Array(160)
+        padded.fill(0xFF) // μ-law silence
+        padded.set(ulawBytes.subarray(i, end), 0)
+        chunks.push(padded)
+      }
+    }
+    console.log('📦 Chunked raw μ-law into', chunks.length, 'frames')
     return chunks
   } catch (error) {
     console.error('❌ Error with ElevenLabs TTS:', error)
@@ -407,6 +421,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     const mediaMessage = {
       event: 'media',
       streamSid: streamSid,
+      track: 'outbound',
       media: { payload }
     }
     socket.send(JSON.stringify(mediaMessage))
