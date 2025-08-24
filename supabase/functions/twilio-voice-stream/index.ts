@@ -180,10 +180,20 @@ serve(async (req) => {
           streamSid = data.start?.streamSid || data.streamSid
           console.log('▶️ Stream started. streamSid=', streamSid)
 
-          // Send TwiML greeting so Twilio handles TTS/encoding
-          const greetingTwiml = '<Say>Hello! You\'re connected to the AI receptionist. How can I help you today?</Say>'
-          socket.send(JSON.stringify({ event: 'twiml', streamSid, twiml: greetingTwiml }))
-          console.log('📢 Sent TwiML greeting')
+          // Send a protocol-valid mark event
+          socket.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'greeting_start' } }))
+
+          // Generate greeting via TTS -> WAV -> 8kHz PCM -> μ-law -> 20ms chunks
+          const greeting = "Hello! You're connected to the AI receptionist. How can I help you today?"
+          try {
+            const chunks = await ttsToMulawChunks(greeting)
+            await sendMulawChunksOverTwilio(chunks, streamSid, socket)
+            console.log(`🎤 Sent greeting in ${chunks.length} chunks`)
+          } catch (e) {
+            console.error('TTS pipeline failed:', e)
+          }
+
+          socket.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'greeting_done' } }))
         }
 
         if (evt === 'media') {
