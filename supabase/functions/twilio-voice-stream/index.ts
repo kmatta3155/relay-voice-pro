@@ -243,8 +243,8 @@ Keep responses concise and friendly. If you don't have specific information, pol
   }
 }
 
-// Function to convert text to speech using OpenAI TTS
-async function textToSpeech(text: string): Promise<string | null> {
+// Function to convert text to speech and send as chunked μ-law to Twilio
+async function sendTTSResponse(text: string, streamSid: string, socket: WebSocket): Promise<void> {
   try {
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
@@ -262,22 +262,46 @@ async function textToSpeech(text: string): Promise<string | null> {
 
     if (!response.ok) {
       console.error('TTS error:', await response.text())
-      return null
+      return
     }
 
     const arrayBuffer = await response.arrayBuffer()
     const wavBytes = new Uint8Array(arrayBuffer)
     
-    // Convert WAV to μ-law for Twilio
-    const mulawBytes = convertWavToMulaw(wavBytes)
-    
-    // Encode as base64 for Twilio
-    const base64Audio = btoa(String.fromCharCode(...mulawBytes))
-    return base64Audio
+    // Convert WAV to μ-law and send in chunks
+    await sendMulawChunks(wavBytes, streamSid, socket)
   } catch (error) {
     console.error('Error converting text to speech:', error)
-    return null
   }
+}
+
+// Function to send μ-law audio in 20ms chunks to Twilio
+async function sendMulawChunks(wavBytes: Uint8Array, streamSid: string, socket: WebSocket): Promise<void> {
+  // Convert WAV to μ-law
+  const mulawBytes = convertWavToMulaw(wavBytes)
+  
+  // Send in 20ms chunks (160 samples at 8kHz = 20ms)
+  const CHUNK_SIZE = 160 // 20ms at 8kHz
+  
+  for (let i = 0; i < mulawBytes.length; i += CHUNK_SIZE) {
+    const chunk = mulawBytes.slice(i, Math.min(i + CHUNK_SIZE, mulawBytes.length))
+    const base64Chunk = btoa(String.fromCharCode(...chunk))
+    
+    const mediaMessage = {
+      event: 'media',
+      streamSid: streamSid,
+      media: {
+        payload: base64Chunk
+      }
+    }
+    
+    socket.send(JSON.stringify(mediaMessage))
+    
+    // Small delay between chunks to simulate real-time streaming
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+  
+  console.log(`🎤 Sent ${Math.ceil(mulawBytes.length / CHUNK_SIZE)} audio chunks to caller`)
 }
 
 // Function to convert WAV audio to μ-law format for Twilio
@@ -426,21 +450,10 @@ serve(async (req) => {
           console.log('🎤 Sent TwiML confirmation to Twilio')
           
           // Send initial greeting
-          if (tenantId) {
+          if (tenantId && streamSid) {
             const greeting = await generateReceptionistResponse(tenantId, "Hello, please introduce yourself and ask how you can help.")
-            const audioBase64 = await textToSpeech(greeting)
-            
-            if (audioBase64 && streamSid) {
-              const mediaMessage = {
-                event: 'media',
-                streamSid: streamSid,
-                media: {
-                  payload: audioBase64
-                }
-              }
-              socket.send(JSON.stringify(mediaMessage))
-              console.log('🎤 Sent greeting to caller:', greeting)
-            }
+            await sendTTSResponse(greeting, streamSid, socket)
+            console.log('🎤 Sent greeting to caller:', greeting)
           }
           
         } else if (data.event === 'media') {
@@ -467,17 +480,8 @@ serve(async (req) => {
                 if (elapsedTime > MAX_CONVERSATION_TIME) {
                   console.log('⏰ Conversation timeout reached')
                   const timeoutMessage = "I'm sorry, but our conversation time limit has been reached. Thank you for calling!"
-                  const audioBase64 = await textToSpeech(timeoutMessage)
-                  
-                  if (audioBase64 && streamSid) {
-                    const mediaMessage = {
-                      event: 'media',
-                      streamSid: streamSid,
-                      media: { payload: audioBase64 }
-                    }
-                    socket.send(JSON.stringify(mediaMessage))
-                    console.log('🎤 Sent timeout message to caller')
-                  }
+                  await sendTTSResponse(timeoutMessage, streamSid, socket)
+                  console.log('🎤 Sent timeout message to caller')
                   socket.close()
                   return
                 }
@@ -485,17 +489,8 @@ serve(async (req) => {
                 if (messageCount > MAX_MESSAGES) {
                   console.log('💬 Message limit reached')
                   const limitMessage = "I've reached my conversation limit for this call. Let me transfer you to a human representative. Thank you!"
-                  const audioBase64 = await textToSpeech(limitMessage)
-                  
-                  if (audioBase64 && streamSid) {
-                    const mediaMessage = {
-                      event: 'media',
-                      streamSid: streamSid,
-                      media: { payload: audioBase64 }
-                    }
-                    socket.send(JSON.stringify(mediaMessage))
-                    console.log('🎤 Sent message limit notification to caller')
-                  }
+                  await sendTTSResponse(limitMessage, streamSid, socket)
+                  console.log('🎤 Sent message limit notification to caller')
                   socket.close()
                   return
                 }
@@ -504,20 +499,9 @@ serve(async (req) => {
                 const aiResponse = await generateReceptionistResponse(tenantId, transcription)
                 console.log('🤖 AI Response:', aiResponse)
                 
-                // Convert to speech and send back
-                const audioBase64 = await textToSpeech(aiResponse)
-                
-                if (audioBase64 && streamSid) {
-                  const mediaMessage = {
-                    event: 'media',
-                    streamSid: streamSid,
-                    media: {
-                      payload: audioBase64
-                    }
-                  }
-                  socket.send(JSON.stringify(mediaMessage))
-                  console.log('🎤 Sent AI response to caller')
-                }
+                // Convert to speech and send back as chunked μ-law
+                await sendTTSResponse(aiResponse, streamSid, socket)
+                console.log('🎤 Sent AI response to caller')
               }
             }
           }
@@ -528,19 +512,8 @@ serve(async (req) => {
           // Send final goodbye if we have a streamSid
           if (streamSid && tenantId) {
             const goodbye = "Thank you for calling. Have a great day!"
-            const audioBase64 = await textToSpeech(goodbye)
-            
-            if (audioBase64) {
-              const mediaMessage = {
-                event: 'media',
-                streamSid: streamSid,
-                media: {
-                  payload: audioBase64
-                }
-              }
-              socket.send(JSON.stringify(mediaMessage))
-              console.log('🎤 Sent goodbye to caller')
-            }
+            await sendTTSResponse(goodbye, streamSid, socket)
+            console.log('🎤 Sent goodbye to caller')
           }
         }
       } catch (err) {
