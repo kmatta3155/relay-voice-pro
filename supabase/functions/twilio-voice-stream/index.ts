@@ -71,19 +71,20 @@ function resamplePcm16(src: Int16Array, fromRate: number, toRate: number): Int16
   return dst
 }
 
-// 16-bit linear PCM to μ-law
+// 16-bit linear PCM to μ-law (G.711)
 function linearToMulaw(pcm: number): number {
-  const BIAS = 0x84
-  const CLIP = 32635
-  let sign = 0
-  if (pcm < 0) { sign = 0x80; pcm = -pcm }
-  pcm += BIAS
-  if (pcm > CLIP) pcm = CLIP
-
-  let exponent = 7
-  for (let expLut = 0x4000; (pcm & ~expLut) === 0 && exponent > 0; expLut >>= 1) exponent--
-  const mantissa = (pcm >> (exponent + 3)) & 0x0F
-  return (~(sign | (exponent << 4) | mantissa)) & 0xFF
+  const BIAS = 0x84;
+  const CLIP = 32635;
+  let sign = (pcm >> 8) & 0x80;
+  if (sign !== 0) pcm = -pcm;
+  if (pcm > CLIP) pcm = CLIP;
+  pcm = pcm + BIAS;
+  let exponent = 7;
+  let mask = 0x4000;
+  for (; exponent > 0 && (pcm & mask) === 0; exponent--, mask >>= 1) {}
+  const mantissa = (pcm >> (exponent + 3)) & 0x0F;
+  const mulaw = ~(sign | (exponent << 4) | mantissa);
+  return mulaw & 0xff;
 }
 
 function pcm16ToMulawBytes(pcm: Int16Array): Uint8Array {
@@ -129,12 +130,15 @@ async function ttsToMulawChunks(text: string): Promise<Uint8Array[]> {
 }
 
 async function sendMulawChunksOverTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
+  let sent = 0;
   for (const bytes of chunks) {
-    const payload = base64FromBytes(bytes)
-    const media = { event: 'media', streamSid, media: { payload, track: 'outbound' as const } }
-    socket.send(JSON.stringify(media))
-    await new Promise((r) => setTimeout(r, 20)) // 20ms pacing
+    const payload = base64FromBytes(bytes);
+    const media = { event: 'media', streamSid, media: { payload } };
+    socket.send(JSON.stringify(media));
+    sent++;
+    await new Promise((r) => setTimeout(r, 20)); // 20ms pacing
   }
+  console.log(`✅ Sent ${sent} outbound media chunks`);
 }
 
 serve(async (req) => {
