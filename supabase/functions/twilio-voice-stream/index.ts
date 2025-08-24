@@ -182,7 +182,8 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
     const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/9BWtsMINqrJLrRacOk9x', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${elevenLabsKey}`,
+        'xi-api-key': `${elevenLabsKey}`,
+        'accept': 'audio/wav',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
