@@ -51,16 +51,51 @@ serve(async (req) => {
           streamSid = data.start?.streamSid || data.streamSid
           console.log('🆔 Stream SID:', streamSid)
 
-          // Send a simple test message back to Twilio
-          const testMessage = {
-            event: 'media',
-            streamSid: streamSid,
-            media: {
-              payload: 'dGVzdA==' // base64 for 'test'
+          // Send a simple greeting as audio
+          const greeting = "Hello! Thank you for calling. I'm your AI assistant. How can I help you today?"
+          console.log('📢 Sending greeting:', greeting)
+          
+          // Generate TTS and send as audio
+          try {
+            const ttsResponse = await fetch('https://api.openai.com/v1/audio/speech', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'tts-1',
+                input: greeting,
+                voice: 'alloy',
+                response_format: 'mp3',
+              }),
+            })
+            
+            if (ttsResponse.ok) {
+              const audioBuffer = await ttsResponse.arrayBuffer()
+              const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)))
+              
+              // Send audio in chunks
+              const chunkSize = 1000 // Smaller chunks for testing
+              for (let i = 0; i < base64Audio.length; i += chunkSize) {
+                const chunk = base64Audio.slice(i, i + chunkSize)
+                const mediaMessage = {
+                  event: 'media',
+                  streamSid: streamSid,
+                  media: {
+                    payload: chunk
+                  }
+                }
+                socket.send(JSON.stringify(mediaMessage))
+                await new Promise(resolve => setTimeout(resolve, 50)) // Small delay
+              }
+              console.log('🎤 Sent greeting audio to caller')
+            } else {
+              console.error('Failed to generate TTS:', await ttsResponse.text())
             }
+          } catch (error) {
+            console.error('Error generating greeting:', error)
           }
-          socket.send(JSON.stringify(testMessage))
-          console.log('📤 Sent test message')
         }
 
         if (data.event === 'media') {
