@@ -5,6 +5,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Derive project ref and functions domain from environment
+const supabaseUrl = Deno.env.get('SUPABASE_URL')! // e.g. https://abcd1234.supabase.co
+const projectRef = new URL(supabaseUrl).hostname.split('.')[0] // abcd1234
+const functionsDomain = `${projectRef}.functions.supabase.co`
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -26,7 +31,7 @@ serve(async (req) => {
 <Response>
   <Say>Hello! You've reached our AI receptionist. Please hold while we connect you.</Say>
   <Connect>
-    <Stream url="wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}" />
+    <Stream url="wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}" />
   </Connect>
 </Response>`
 
@@ -46,8 +51,8 @@ serve(async (req) => {
     // Return TwiML error response
     const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Sorry, we're experiencing technical difficulties. Please try again later.</Say>
-  <Hangup />
+  <Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say>
+  <Hangup/>
 </Response>`
 
     return new Response(errorTwiml, {

@@ -12,6 +12,11 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
 
+// Derive project ref and functions domain from environment
+const supabaseUrl = Deno.env.get('SUPABASE_URL')! // e.g. https://abcd1234.supabase.co
+const projectRef = new URL(supabaseUrl).hostname.split('.')[0] // abcd1234
+const functionsDomain = `${projectRef}.functions.supabase.co`
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -121,15 +126,15 @@ serve(async (req) => {
       })
 
     // Connect to AI receptionist (agent is ready and in live mode)
-    // Use wss:// protocol and functions subdomain for WebSocket streams
-    const streamUrl = `wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+    // Use dynamically derived functions domain for WebSocket streams
+    const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
 
     // Build valid TwiML with proper XML declaration and <Response> root
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Connecting you to your AI receptionist.</Say>
   <Connect>
-    <Stream url="${streamUrl}" statusCallback="https://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-status?tenant_id=${tenantId}" statusCallbackMethod="POST" statusCallbackEvent="start stop" />
+    <Stream url="${streamUrl}" statusCallback="https://${functionsDomain}/twilio-status?tenant_id=${tenantId}" statusCallbackMethod="POST" statusCallbackEvent="start stop" />
   </Connect>
 </Response>`
 
@@ -145,8 +150,8 @@ serve(async (req) => {
     // Return error TwiML
     const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Sorry, we're experiencing technical difficulties. Please try again later.</Say>
-  <Hangup />
+  <Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say>
+  <Hangup/>
 </Response>`
 
     return new Response(errorTwiml, {
