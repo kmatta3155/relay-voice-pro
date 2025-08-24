@@ -95,10 +95,14 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   const pcm16Samples = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.length / 2)
   console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples`)
   
-  // Downsample from 16kHz to 8kHz (take every 2nd sample)
-  const pcm8kSamples = new Int16Array(Math.floor(pcm16Samples.length / 2))
-  for (let i = 0; i < pcm8kSamples.length; i++) {
-    pcm8kSamples[i] = pcm16Samples[i * 2]
+  // Downsample from 16kHz to 8kHz with simple low-pass (average pairs)
+  const len = Math.floor(pcm16Samples.length / 2)
+  const pcm8kSamples = new Int16Array(len)
+  for (let i = 0; i < len; i++) {
+    const a = pcm16Samples[i * 2]
+    const b = pcm16Samples[i * 2 + 1]
+    // Box filter to reduce aliasing before decimation
+    pcm8kSamples[i] = (a + b) / 2
   }
   
   console.log(`🎵 Downsampled to ${pcm8kSamples.length} samples at 8kHz`)
@@ -298,8 +302,9 @@ serve(async (req) => {
           elevenLabsWs.onopen = () => {
             console.log('✅ ElevenLabs WebSocket connected successfully')
             
-            // Send conversation initiation message immediately
+            // Send conversation initiation with required type to trigger greeting
             const initMessage = {
+              type: 'conversation_initiation_client_data',
               conversation_config_override: {
                 agent: {
                   prompt: {
@@ -317,7 +322,7 @@ serve(async (req) => {
             }
             
             elevenLabsWs!.send(JSON.stringify(initMessage))
-            console.log('📤 Sent conversation config to ElevenLabs')
+            console.log('📤 Sent conversation config to ElevenLabs (init)')
           }
 
           elevenLabsWs.onmessage = async (message) => {
