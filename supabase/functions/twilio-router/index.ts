@@ -109,6 +109,7 @@ serve(async (req) => {
       })
 
     // Connect to AI receptionist (agent is ready and in live mode)
+    // Use wss:// protocol and functions subdomain for WebSocket streams
     const streamUrl = `wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
     
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>

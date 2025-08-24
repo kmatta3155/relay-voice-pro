@@ -6,7 +6,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  console.log('=== TWILIO VOICE STREAM START ===')
+  console.log('=== TWILIO VOICE STREAM HANDLER ===')
   console.log('Method:', req.method)
   console.log('URL:', req.url)
   console.log('Headers:', Object.fromEntries(req.headers.entries()))
@@ -15,59 +15,89 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  // Check if this is a WebSocket upgrade request
-  const upgrade = req.headers.get("upgrade") || ""
-  if (upgrade.toLowerCase() !== "websocket") {
-    console.log('Not a WebSocket request, upgrade header:', upgrade)
-    return new Response("Expected WebSocket", { status: 400 })
-  }
-
+  // Extract parameters from URL
   const url = new URL(req.url)
   const tenantId = url.searchParams.get('tenant_id')
   const callSid = url.searchParams.get('call_sid')
 
-  console.log('Tenant ID:', tenantId)
-  console.log('Call SID:', callSid)
+  console.log('Parameters:', { tenantId, callSid })
 
   if (!tenantId || !callSid) {
     console.log('Missing required parameters')
     return new Response("Missing tenant_id or call_sid", { status: 400 })
   }
 
-  console.log('Upgrading to WebSocket...')
-  const { socket, response } = Deno.upgradeWebSocket(req)
+  // Check if this is a WebSocket upgrade request
+  const upgradeHeader = req.headers.get("upgrade")
+  const connectionHeader = req.headers.get("connection")
+  
+  console.log('Connection headers:', { 
+    upgrade: upgradeHeader, 
+    connection: connectionHeader 
+  })
 
-  socket.onopen = () => {
-    console.log('WebSocket opened successfully!')
+  if (upgradeHeader?.toLowerCase() !== "websocket") {
+    console.log('Not a WebSocket upgrade request')
+    return new Response("Expected WebSocket upgrade", { status: 426 })
   }
 
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data)
-      console.log('Received from Twilio:', data.event || data.type || 'unknown')
-      
-      if (data.event === 'connected') {
-        console.log('Twilio connected!')
-      } else if (data.event === 'start') {
-        console.log('Call started with streamSid:', data.start?.streamSid)
-      } else if (data.event === 'media') {
-        console.log('Received audio data')
-      } else if (data.event === 'stop') {
-        console.log('Call stopped')
-      }
-    } catch (err) {
-      console.error('Error parsing message:', err)
+  try {
+    console.log('Upgrading to WebSocket...')
+    const { socket, response } = Deno.upgradeWebSocket(req, {
+      protocol: req.headers.get("sec-websocket-protocol") || undefined,
+    })
+
+    socket.onopen = () => {
+      console.log('✅ WebSocket connection established successfully!')
+      console.log('Ready to receive Twilio media stream data')
     }
-  }
 
-  socket.onerror = (error) => {
-    console.error('WebSocket error:', error)
-  }
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        console.log('📨 Received from Twilio:', data.event || data.type || 'unknown')
+        
+        if (data.event === 'connected') {
+          console.log('🔗 Twilio WebSocket connected!')
+        } else if (data.event === 'start') {
+          console.log('▶️ Media stream started:', {
+            streamSid: data.start?.streamSid,
+            callSid: data.start?.callSid,
+            tracks: data.start?.tracks,
+            mediaFormat: data.start?.mediaFormat
+          })
+        } else if (data.event === 'media') {
+          // Log first few media packets then reduce verbosity
+          console.log('🎵 Audio data received (seq:', data.sequenceNumber + ')')
+        } else if (data.event === 'stop') {
+          console.log('⏹️ Media stream stopped')
+        }
+      } catch (err) {
+        console.error('❌ Error parsing Twilio message:', err)
+        console.log('Raw message:', event.data)
+      }
+    }
 
-  socket.onclose = (event) => {
-    console.log('WebSocket closed:', event.code, event.reason)
-  }
+    socket.onerror = (error) => {
+      console.error('❌ WebSocket error:', error)
+    }
 
-  console.log('Returning WebSocket response')
-  return response
+    socket.onclose = (event) => {
+      console.log('🔌 WebSocket closed:', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean
+      })
+    }
+
+    console.log('✅ WebSocket upgrade successful, returning response')
+    return response
+
+  } catch (error) {
+    console.error('❌ Failed to upgrade WebSocket:', error)
+    return new Response(`WebSocket upgrade failed: ${error.message}`, { 
+      status: 500,
+      headers: corsHeaders 
+    })
+  }
 })
