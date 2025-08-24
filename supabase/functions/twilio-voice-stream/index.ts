@@ -58,6 +58,17 @@ serve(async (req) => {
         
         if (data.event === 'connected') {
           console.log('🔗 Twilio WebSocket connected!')
+          // Send initial greeting message back to caller
+          const greetingMessage = {
+            event: 'media',
+            streamSid: data.streamSid,
+            media: {
+              payload: 'SGVsbG8gZnJvbSB5b3VyIEFJIHJlY2VwdGlvbmlzdCE=' // "Hello from your AI receptionist!" in base64
+            }
+          }
+          socket.send(JSON.stringify(greetingMessage))
+          console.log('🎤 Sent greeting to caller')
+          
         } else if (data.event === 'start') {
           console.log('▶️ Media stream started:', {
             streamSid: data.start?.streamSid,
@@ -65,11 +76,38 @@ serve(async (req) => {
             tracks: data.start?.tracks,
             mediaFormat: data.start?.mediaFormat
           })
+          
         } else if (data.event === 'media') {
           // Log first few media packets then reduce verbosity
           console.log('🎵 Audio data received (seq:', data.sequenceNumber + ')')
+          
+          // Proof-of-life: Send a simple response after receiving audio
+          // This demonstrates two-way communication is working
+          if (data.sequenceNumber && data.sequenceNumber % 100 === 0) {
+            const responseMessage = {
+              event: 'media',
+              streamSid: data.streamSid,
+              media: {
+                payload: 'VGhhbmsgeW91IGZvciBjYWxsaW5nIQ==' // "Thank you for calling!" in base64
+              }
+            }
+            socket.send(JSON.stringify(responseMessage))
+            console.log('🎤 Sent periodic response to caller')
+          }
+          
         } else if (data.event === 'stop') {
           console.log('⏹️ Media stream stopped')
+          
+          // Send final message
+          const goodbyeMessage = {
+            event: 'media',
+            streamSid: data.streamSid,
+            media: {
+              payload: 'R29vZGJ5ZSE=' // "Goodbye!" in base64
+            }
+          }
+          socket.send(JSON.stringify(goodbyeMessage))
+          console.log('🎤 Sent goodbye to caller')
         }
       } catch (err) {
         console.error('❌ Error parsing Twilio message:', err)
