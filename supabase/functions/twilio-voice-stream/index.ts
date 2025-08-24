@@ -354,8 +354,6 @@ serve(async (req) => {
           console.error('❌ ELEVENLABS_API_KEY not found - cannot connect to ElevenLabs')
           return
         }
-        // Send immediate fallback greeting while agent connects
-        await sendImmediateGreeting(streamSid, socket, businessName)
 
         console.log('🔗 Getting signed URL from ElevenLabs...')
         try {
