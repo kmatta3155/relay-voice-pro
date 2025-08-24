@@ -245,6 +245,50 @@ async function processAudioWithWhisper(audioData: Uint8Array): Promise<string> {
   }
 }
 
+// Send an immediate fallback greeting via ElevenLabs TTS (PCM16 16k -> μ-law 8k)
+async function sendImmediateGreeting(streamSid: string, socket: WebSocket, businessName: string) {
+  try {
+    const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
+    if (!elevenLabsKey) {
+      console.error('❌ ELEVENLABS_API_KEY missing for TTS greeting')
+      return
+    }
+    const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x' // Aria
+    const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
+
+    console.log('🗣️ Generating fallback TTS greeting with ElevenLabs...')
+    const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': elevenLabsKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/octet-stream'
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2_5',
+        output_format: 'pcm_16000'
+      })
+    })
+
+    if (!resp.ok) {
+      const err = await resp.text()
+      console.error('❌ TTS greeting failed:', resp.status, err)
+      return
+    }
+
+    const audioBuffer = await resp.arrayBuffer()
+    const pcm16kBytes = new Uint8Array(audioBuffer)
+    console.log('🎼 TTS greeting bytes:', pcm16kBytes.length)
+
+    const chunks = processElevenLabsAudioToMulaw(pcm16kBytes)
+    await sendAudioToTwilio(chunks, streamSid, socket)
+    console.log('✅ Fallback TTS greeting sent to Twilio')
+  } catch (e) {
+    console.error('❌ Error sending fallback TTS greeting:', e)
+  }
+}
+
 serve(async (req) => {
   console.log('🎵 TWILIO VOICE STREAM - FIXED VERSION 5.0')
   console.log('📍 Request received, checking WebSocket upgrade...')
@@ -296,6 +340,8 @@ serve(async (req) => {
           console.error('❌ ELEVENLABS_API_KEY not found - cannot connect to ElevenLabs')
           return
         }
+        // Send immediate fallback greeting while agent connects
+        await sendImmediateGreeting(streamSid, socket, businessName)
 
         console.log('🔗 Getting signed URL from ElevenLabs...')
         try {
@@ -344,6 +390,14 @@ serve(async (req) => {
             
             elevenLabsWs!.send(JSON.stringify(initMessage))
             console.log('📤 Sent conversation config to ElevenLabs (init)')
+
+            // Explicitly trigger greeting to ensure first audio is produced
+            const greetMessage = {
+              type: 'user_message',
+              text: `Please greet the caller for ${businessName} politely and ask how you can help.`
+            }
+            elevenLabsWs!.send(JSON.stringify(greetMessage))
+            console.log('📤 Sent explicit greet trigger to ElevenLabs')
           }
 
           elevenLabsWs.onmessage = async (message) => {
