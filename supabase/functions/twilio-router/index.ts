@@ -125,24 +125,22 @@ serve(async (req) => {
         outcome: 'incoming'
       })
 
-    // Connect to AI receptionist (agent is ready and in live mode)
-    // Use dynamically derived functions domain for WebSocket streams
+    // Derive stream URL
     const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
 
-    // Build valid TwiML with proper XML declaration and <Response> root
+    // Build the TwiML response
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Connecting you to your AI receptionist.</Say>
   <Connect>
-    <Stream url="${streamUrl}" statusCallback="https://${functionsDomain}/twilio-status?tenant_id=${tenantId}" statusCallbackMethod="POST" statusCallbackEvent="start stop" />
+    <Stream url="${streamUrl}" />
   </Connect>
 </Response>`
 
     console.log('Generated TwiML:', twiml)
 
-    return new Response(twiml, {
-      headers: { 'Content-Type': 'text/xml' }
-    })
+    // Return the TwiML
+    return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } })
 
   } catch (error) {
     console.error('Twilio router error:', error)

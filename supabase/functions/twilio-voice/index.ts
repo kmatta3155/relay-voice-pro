@@ -26,12 +26,15 @@ serve(async (req) => {
 
       console.log('Incoming call:', { callSid, from, to, tenantId })
 
-      // Generate TwiML response to connect call to AI receptionist
+      // Derive stream URL
+      const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+
+      // Build the TwiML response
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Hello! You've reached our AI receptionist. Please hold while we connect you.</Say>
   <Connect>
-    <Stream url="wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}" />
+    <Stream url="${streamUrl}" />
   </Connect>
 </Response>`
 
