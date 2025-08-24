@@ -164,7 +164,7 @@ serve(async (req) => {
 <Response>
   <Say>Connecting you to your AI receptionist.</Say>
   <Connect>
-    <Stream url="${xmlEncodedUrl}" />
+    <Stream url="${xmlEncodedUrl}" track="both_tracks" />
   </Connect>
 </Response>`
 

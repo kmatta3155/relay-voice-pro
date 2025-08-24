@@ -155,7 +155,9 @@ serve(async (req) => {
   }
 
   try {
-    const { socket, response } = Deno.upgradeWebSocket(req)
+    const requestedProtocols = req.headers.get('sec-websocket-protocol')?.split(',').map(p => p.trim()) || []
+    const chosenProtocol = requestedProtocols[0]
+    const { socket, response } = Deno.upgradeWebSocket(req, { protocol: chosenProtocol })
 
     const url = new URL(req.url)
     const tenantId = url.searchParams.get('tenant_id')
