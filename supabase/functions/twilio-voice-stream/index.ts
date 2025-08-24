@@ -49,20 +49,13 @@ serve(async (req) => {
           streamSid = data.start?.streamSid || data.streamSid
           console.log('▶️ Stream started. streamSid=', streamSid)
 
-          // Send a protocol-valid mark event
-          socket.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'greeting_start' } }))
-
-          // Use Twilio's built-in TTS via TwiML
-          const greeting = "Hello! You're connected to the AI receptionist. How can I help you today?"
-          const twimlEvent = {
-            event: 'twiml',
-            streamSid,
-            twiml: `<Say>${greeting}</Say>`
-          }
-          socket.send(JSON.stringify(twimlEvent))
-          console.log('🎤 Sent TwiML greeting to Twilio')
-
-          socket.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: 'greeting_done' } }))
+          // Send a simple mark event to acknowledge the stream is ready
+          socket.send(JSON.stringify({ 
+            event: 'mark', 
+            streamSid, 
+            mark: { name: 'stream_ready' } 
+          }))
+          console.log('✅ Stream ready, awaiting caller input')
         }
 
         if (evt === 'media') {
