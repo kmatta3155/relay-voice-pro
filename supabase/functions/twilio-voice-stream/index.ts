@@ -444,7 +444,7 @@ serve(async (req) => {
           // Send TwiML confirmation to ensure bidirectional signalling works
           const confirm = {
             event: 'twiml',
-            twiml: 'Connected to your AI receptionist test.'
+            twiml: '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Connected to your AI receptionist test.</Say></Response>'
           }
           socket.send(JSON.stringify(confirm))
           console.log('🎤 Sent TwiML confirmation to Twilio')
