@@ -23,33 +23,42 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Incoming Twilio call webhook');
+    console.log('=== TWILIO ROUTER DEBUG START ===');
+    console.log('Request method:', req.method);
+    console.log('Request URL:', req.url);
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
     
     // Parse Twilio params from POST form or GET query
     const contentType = req.headers.get('content-type') || ''
+    console.log('Content-Type:', contentType);
+    
     let callSid: string | null = null
     let from: string | null = null
     let to: string | null = null
 
     if (req.method === 'POST' && contentType.includes('application/x-www-form-urlencoded')) {
       const formData = await req.formData()
+      console.log('FormData entries:', Array.from(formData.entries()));
       callSid = (formData.get('CallSid') as string) || null
       from = (formData.get('From') as string) || null
       to = (formData.get('To') as string) || null
     } else {
       const urlParams = new URL(req.url).searchParams
+      console.log('URL params:', Object.fromEntries(urlParams.entries()));
       callSid = urlParams.get('CallSid')
       from = urlParams.get('From')
       to = urlParams.get('To')
     }
     
-    console.log('Call details:', { callSid, from, to })
+    console.log('Parsed call details:', { callSid, from, to })
 
     // Get tenant_id from query params or lookup by phone number
     const url = new URL(req.url)
     let tenantId = url.searchParams.get('tenant_id')
+    console.log('Initial tenant_id from params:', tenantId);
     
     if (!tenantId && to) {
+      console.log('Looking up tenant by phone number:', to);
       // Look up tenant by phone number
       const { data, error } = await supabase
         .from('agent_settings')
@@ -57,25 +66,33 @@ serve(async (req) => {
         .eq('twilio_number', to)
         .maybeSingle()
       
+      console.log('Agent settings lookup result:', { data, error });
+      
       if (error) {
         console.error('Error looking up tenant by phone number:', error)
       }
       
       tenantId = data?.tenant_id
+      console.log('Found tenant_id:', tenantId);
     }
 
     if (!tenantId) {
-      console.error('No tenant found for phone number:', to)
+      console.error('=== NO TENANT FOUND ===');
+      console.error('Phone number searched:', to);
+      console.error('Returning fallback TwiML');
       // Return fallback TwiML
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Thank you for calling. This number is not currently configured. Goodbye.</Say>
   <Hangup/>
 </Response>`
+      console.log('Fallback TwiML:', twiml);
       return new Response(twiml, {
         headers: { 'Content-Type': 'text/xml' }
       })
     }
+
+    console.log('Found tenant_id:', tenantId, 'Looking up agent...');
 
     // Check if AI agent is in live mode
     const { data: agentData, error: agentError } = await supabase
@@ -84,6 +101,8 @@ serve(async (req) => {
       .eq('tenant_id', tenantId)
       .eq('status', 'ready')
       .maybeSingle()
+
+    console.log('Agent lookup result:', { agentData, agentError });
 
     if (agentError || !agentData) {
       console.log('No ready agent found or agent error:', agentError)
@@ -131,6 +150,7 @@ serve(async (req) => {
 
     // Derive stream URL
     const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+    console.log('Stream URL:', streamUrl);
 
     // Build the TwiML response
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -141,7 +161,10 @@ serve(async (req) => {
   </Connect>
 </Response>`
 
-    console.log('Generated TwiML:', twiml)
+    console.log('=== FINAL SUCCESS TwiML ===');
+    console.log('TwiML length:', twiml.length);
+    console.log('TwiML content:', twiml);
+    console.log('=== END DEBUG ===');
 
     // Return the TwiML
     return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } })
