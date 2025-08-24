@@ -164,6 +164,9 @@ serve(async (req) => {
     console.log('=== STREAMING TwiML ===');
     console.log('TwiML length:', twiml.length);
     console.log('TwiML content:', twiml);
+    console.log('Stream URL being used:', streamUrl);
+    console.log('Functions domain:', functionsDomain);
+    console.log('Project ref:', projectRef);
     console.log('=== END DEBUG ===');
 
     // Return the streaming TwiML
