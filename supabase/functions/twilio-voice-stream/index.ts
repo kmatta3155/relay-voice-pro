@@ -444,7 +444,6 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     const mediaMessage = {
       event: 'media',
       streamSid: streamSid,
-      track: 'outbound',
       media: { payload }
     }
     socket.send(JSON.stringify(mediaMessage))
