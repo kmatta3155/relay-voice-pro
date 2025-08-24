@@ -113,7 +113,7 @@ async function getAIResponse(text: string, tenantId?: string): Promise<string> {
     }
 
     // Defaults if we can't load a tenant-specific agent
-    let systemPrompt = 'You are a helpful AI receptionist. Be concise and friendly.'
+    let systemPrompt = 'You are a helpful AI receptionist. The caller has already been greeted. Answer their questions directly and naturally. Be concise, friendly, and helpful.'
     let model = 'gpt-4o'
 
     if (tenantId) {
@@ -186,10 +186,11 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'tts-1',
+        model: 'tts-1-hd', // Use HD model for better quality
         input: text,
-        voice: 'alloy',
+        voice: 'alloy', // Consistent voice
         response_format: 'wav',
+        speed: 1.0 // Normal speed for consistency
       }),
     })
 
