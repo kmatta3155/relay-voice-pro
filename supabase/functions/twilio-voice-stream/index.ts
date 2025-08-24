@@ -134,10 +134,21 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
 
 // Send raw μ-law audio to Twilio (NO headers!)
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
-  console.log(`➡️ Sending ${chunks.length} μ-law chunks to Twilio`)
+  console.log(`➡️ Sending ${chunks.length} μ-law chunks to Twilio (streamSid: ${streamSid})`)
+  console.log(`🔌 WebSocket readyState: ${socket.readyState}`)
   
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
+    
+    // Verify chunk is exactly 160 bytes
+    if (chunk.length !== 160) {
+      console.warn(`⚠️ Chunk ${i + 1} has incorrect size: ${chunk.length} bytes (expected 160)`)
+    }
+    
+    // Log first chunk details for debugging
+    if (i === 0) {
+      console.log(`🔍 First chunk bytes (hex): ${Array.from(chunk.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`)
+    }
     
     // Send raw μ-law data (NO headers according to Twilio docs!)
     const message = {
@@ -148,8 +159,13 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       }
     }
     
-    socket.send(JSON.stringify(message))
-    console.log(`📤 Sent μ-law chunk ${i + 1}/${chunks.length} (${chunk.length} bytes)`)
+    try {
+      socket.send(JSON.stringify(message))
+      console.log(`📤 Sent μ-law chunk ${i + 1}/${chunks.length} (${chunk.length} bytes)`)
+    } catch (e) {
+      console.error(`❌ Failed to send chunk ${i + 1}:`, e)
+      break
+    }
     
     // 20ms delay for proper timing
     await new Promise(resolve => setTimeout(resolve, 20))
@@ -248,6 +264,7 @@ async function processAudioWithWhisper(audioData: Uint8Array): Promise<string> {
 // Send an immediate fallback greeting via ElevenLabs TTS (PCM16 16k -> μ-law 8k)
 async function sendImmediateGreeting(streamSid: string, socket: WebSocket, businessName: string) {
   try {
+    console.log('🎯 Starting immediate greeting generation...')
     const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
     if (!elevenLabsKey) {
       console.error('❌ ELEVENLABS_API_KEY missing for TTS greeting')
@@ -257,6 +274,9 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
 
     console.log('🗣️ Generating fallback TTS greeting (μ-law 8kHz) with ElevenLabs...')
+    console.log(`🎤 Voice ID: ${voiceId}`)
+    console.log(`📝 Text: "${text}"`)
+    
     const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -271,6 +291,7 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
       })
     })
 
+    console.log(`📡 ElevenLabs TTS response status: ${resp.status}`)
     if (!resp.ok) {
       const err = await resp.text()
       console.error('❌ TTS greeting failed:', resp.status, err)
@@ -279,23 +300,31 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
 
     const audioBuffer = await resp.arrayBuffer()
     const muLawBytes = new Uint8Array(audioBuffer)
-    console.log('🎼 TTS greeting μ-law bytes:', muLawBytes.length)
+    console.log('🎼 TTS greeting μ-law bytes received:', muLawBytes.length)
+    
+    // Log first few bytes to verify μ-law format
+    console.log('🔍 First 10 μ-law bytes:', Array.from(muLawBytes.slice(0, 10)).map(b => b.toString(16)).join(' '))
 
     // Chunk into 20ms frames (160 bytes at 8kHz μ-law) and pad final frame if needed
     const chunks: Uint8Array[] = []
+    let totalChunks = 0
     for (let i = 0; i < muLawBytes.length; i += 160) {
       const end = Math.min(i + 160, muLawBytes.length)
       const slice = muLawBytes.slice(i, end)
       if (slice.length === 160) {
         chunks.push(slice)
-      } else {
+        totalChunks++
+      } else if (slice.length > 0) {
         const padded = new Uint8Array(160)
         padded.set(slice)
         padded.fill(0xFF, slice.length) // μ-law silence padding
         chunks.push(padded)
+        totalChunks++
+        console.log(`🔧 Padded final chunk: ${slice.length} → 160 bytes`)
       }
     }
 
+    console.log(`📦 Created ${totalChunks} μ-law chunks of 160 bytes each`)
     await sendAudioToTwilio(chunks, streamSid, socket)
     console.log('✅ Fallback μ-law TTS greeting sent to Twilio')
   } catch (e) {
@@ -413,7 +442,11 @@ serve(async (req) => {
 
                 if (data.type === 'audio') {
                   console.log('🎵 Received audio from ElevenLabs, processing...')
+                  console.log(`📊 Audio data length: ${data.audio_event?.audio_base_64?.length || 0}`)
+                  
                   const audioData = new Uint8Array(atob(data.audio_event.audio_base_64).split('').map(c => c.charCodeAt(0)))
+                  console.log(`🎧 Decoded audio bytes: ${audioData.length}`)
+                  console.log(`🔍 First 8 bytes (hex): ${Array.from(audioData.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`)
                   
                   // Process and send to Twilio - NO WAV HEADERS, raw μ-law only
                   const processedChunks = processElevenLabsAudioToMulaw(audioData)
