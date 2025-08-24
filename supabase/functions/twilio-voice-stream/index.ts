@@ -132,10 +132,15 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   return chunks
 }
 
-// Send raw μ-law audio to Twilio (NO headers!)
+// Send raw μ-law audio to Twilio with better error handling and timing
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
   console.log(`➡️ Sending ${chunks.length} μ-law chunks to Twilio (streamSid: ${streamSid})`)
   console.log(`🔌 WebSocket readyState: ${socket.readyState}`)
+  
+  if (socket.readyState !== WebSocket.OPEN) {
+    console.error('❌ WebSocket not open, cannot send audio')
+    return
+  }
   
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
@@ -145,33 +150,40 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       console.warn(`⚠️ Chunk ${i + 1} has incorrect size: ${chunk.length} bytes (expected 160)`)
     }
     
-    // Log first chunk details for debugging
-    if (i === 0) {
-      console.log(`🔍 First chunk bytes (hex): ${Array.from(chunk.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`)
+    // Create media message with proper base64 encoding
+    let base64Payload: string
+    try {
+      base64Payload = btoa(String.fromCharCode(...chunk))
+    } catch (e) {
+      console.error(`❌ Failed to encode chunk ${i + 1} to base64:`, e)
+      continue
     }
     
-    // Send raw μ-law data (NO headers according to Twilio docs!)
     const message = {
       event: 'media',
       streamSid: streamSid,
       media: {
-        payload: btoa(String.fromCharCode(...chunk))
+        payload: base64Payload
       }
     }
     
     try {
       socket.send(JSON.stringify(message))
-      console.log(`📤 Sent μ-law chunk ${i + 1}/${chunks.length} (${chunk.length} bytes)`)
+      if (i === 0) {
+        console.log(`🔍 First chunk sent successfully (${chunk.length} bytes)`)
+      }
     } catch (e) {
       console.error(`❌ Failed to send chunk ${i + 1}:`, e)
       break
     }
     
-    // 20ms delay for proper timing
-    await new Promise(resolve => setTimeout(resolve, 20))
+    // Precise 20ms timing (8kHz μ-law = 160 samples = 20ms)
+    if (i < chunks.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
   }
   
-  console.log('✅ All μ-law chunks sent to Twilio')
+  console.log(`✅ All ${chunks.length} μ-law chunks sent to Twilio`)
 }
 
 // Create WAV from μ-law for Whisper
@@ -273,21 +285,22 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
     const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x' // Aria
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
 
-    console.log('🗣️ Generating fallback TTS greeting (μ-law 8kHz) with ElevenLabs...')
+    console.log('🗣️ Generating TTS greeting (PCM16 16k → μ-law 8k) with ElevenLabs...')
     console.log(`🎤 Voice ID: ${voiceId}`)
     console.log(`📝 Text: "${text}"`)
     
+    // Use PCM16 16kHz format (proven to work) then convert to μ-law 8kHz
     const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
         'xi-api-key': elevenLabsKey,
         'Content-Type': 'application/json',
-        'Accept': 'audio/basic' // μ-law
+        'Accept': 'application/octet-stream'
       },
       body: JSON.stringify({
         text,
         model_id: 'eleven_turbo_v2_5',
-        output_format: 'ulaw_8000'
+        output_format: 'pcm_16000' // Use proven format
       })
     })
 
@@ -299,36 +312,17 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
     }
 
     const audioBuffer = await resp.arrayBuffer()
-    const muLawBytes = new Uint8Array(audioBuffer)
-    console.log('🎼 TTS greeting μ-law bytes received:', muLawBytes.length)
+    const pcm16kBytes = new Uint8Array(audioBuffer)
+    console.log('🎼 TTS greeting PCM16 bytes received:', pcm16kBytes.length)
     
-    // Log first few bytes to verify μ-law format
-    console.log('🔍 First 10 μ-law bytes:', Array.from(muLawBytes.slice(0, 10)).map(b => b.toString(16)).join(' '))
-
-    // Chunk into 20ms frames (160 bytes at 8kHz μ-law) and pad final frame if needed
-    const chunks: Uint8Array[] = []
-    let totalChunks = 0
-    for (let i = 0; i < muLawBytes.length; i += 160) {
-      const end = Math.min(i + 160, muLawBytes.length)
-      const slice = muLawBytes.slice(i, end)
-      if (slice.length === 160) {
-        chunks.push(slice)
-        totalChunks++
-      } else if (slice.length > 0) {
-        const padded = new Uint8Array(160)
-        padded.set(slice)
-        padded.fill(0xFF, slice.length) // μ-law silence padding
-        chunks.push(padded)
-        totalChunks++
-        console.log(`🔧 Padded final chunk: ${slice.length} → 160 bytes`)
-      }
-    }
-
-    console.log(`📦 Created ${totalChunks} μ-law chunks of 160 bytes each`)
+    // Convert PCM16 16kHz to μ-law 8kHz using our proven conversion function
+    const chunks = processElevenLabsAudioToMulaw(pcm16kBytes)
+    console.log(`📦 Converted to ${chunks.length} μ-law chunks`)
+    
     await sendAudioToTwilio(chunks, streamSid, socket)
-    console.log('✅ Fallback μ-law TTS greeting sent to Twilio')
+    console.log('✅ TTS greeting sent to Twilio via proven conversion pipeline')
   } catch (e) {
-    console.error('❌ Error sending fallback TTS greeting:', e)
+    console.error('❌ Error sending TTS greeting:', e)
   }
 }
 
