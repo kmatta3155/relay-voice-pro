@@ -295,9 +295,18 @@ serve(async (req) => {
           const agentId = Deno.env.get('ELEVENLABS_AGENT_ID') || '4dv4ZFiVvCcdXFqlpVzY'
           console.log('🎵 Connecting to ElevenLabs agent:', agentId)
           
-          // Correct ElevenLabs WebSocket URL with API key as query parameter
-          const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}&xi-api-key=${elevenLabsKey}`
-          elevenLabsWs = new WebSocket(wsUrl)
+          // Get signed URL from ElevenLabs to authenticate WebSocket
+          const urlResp = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`, {
+            method: 'GET',
+            headers: { 'xi-api-key': elevenLabsKey }
+          })
+          if (!urlResp.ok) {
+            const txt = await urlResp.text()
+            console.error('❌ Failed to get signed URL from ElevenLabs:', urlResp.status, txt)
+            return
+          }
+          const { signed_url } = await urlResp.json()
+          elevenLabsWs = new WebSocket(signed_url)
 
           elevenLabsWs.onopen = () => {
             console.log('✅ ElevenLabs WebSocket connected successfully')
@@ -380,11 +389,37 @@ serve(async (req) => {
         
         buffer.addChunk(audioData)
         
-        // Send to ElevenLabs immediately
+        // Send to ElevenLabs immediately (convert Twilio μ-law 8k -> PCM16 16k)
         if (elevenLabsWs?.readyState === WebSocket.OPEN) {
-          const base64Audio = btoa(String.fromCharCode(...audioData))
+          // μ-law 8k to PCM16 8k
+          const pcm8k = new Int16Array(audioData.length)
+          for (let i = 0; i < audioData.length; i++) {
+            pcm8k[i] = mulawToPcm(audioData[i])
+          }
+          // Upsample to 16k (linear)
+          const pcm16k = new Int16Array(pcm8k.length * 2)
+          for (let i = 0; i < pcm8k.length; i++) {
+            const s0 = pcm8k[i]
+            const s1 = i < pcm8k.length - 1 ? pcm8k[i + 1] : s0
+            pcm16k[i * 2] = s0
+            pcm16k[i * 2 + 1] = (s0 + s1) >> 1
+          }
+          // Int16 -> bytes (LE) -> base64
+          const bytes = new Uint8Array(pcm16k.length * 2)
+          let o = 0
+          for (let i = 0; i < pcm16k.length; i++) {
+            const s = pcm16k[i]
+            bytes[o++] = s & 0xff
+            bytes[o++] = (s >> 8) & 0xff
+          }
+          let binary = ''
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          const base64Audio = btoa(binary)
           elevenLabsWs.send(JSON.stringify({
-            user_audio_chunk: base64Audio
+            type: 'user_audio_chunk',
+            audio: base64Audio
           }))
         }
 
