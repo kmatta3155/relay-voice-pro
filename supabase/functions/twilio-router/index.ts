@@ -162,7 +162,7 @@ serve(async (req) => {
     const xmlEncodedUrl = streamUrl.replace(/&/g, '&amp;')
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Connecting you to your AI receptionist.</Say>
+  <Say>Hello! You're connected to the AI receptionist. How can I help you today?</Say>
   <Connect>
     <Stream url="${xmlEncodedUrl}" />
   </Connect>
