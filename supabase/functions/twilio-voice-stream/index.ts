@@ -207,11 +207,23 @@ async function generateTTSAudio(text: string): Promise<Uint8Array[]> {
 
     const arrayBuffer = await response.arrayBuffer()
     const bytes = new Uint8Array(arrayBuffer)
-    console.log('✅ Received PCM16 from ElevenLabs, size:', bytes.length)
+    const contentType = response.headers.get('content-type') || ''
+    console.log('📦 ElevenLabs content-type:', contentType, 'size:', bytes.length)
 
-    // Convert PCM16 (16kHz) to μ-law (8kHz) chunks for Twilio
-    const chunks = convertPcm16ToMulawChunks(bytes)
-    console.log('🔄 Converted to', chunks.length, 'μ-law chunks for Twilio')
+    // Peek signature to detect WAV vs raw PCM
+    const sig = String.fromCharCode(bytes[0] || 0, bytes[1] || 0, bytes[2] || 0, bytes[3] || 0)
+    console.log('🔎 First 4 bytes signature:', sig)
+
+    let chunks: Uint8Array[]
+    if (sig === 'RIFF' || contentType.includes('wav')) {
+      console.log('🎛 Detected WAV container from ElevenLabs, converting to μ-law...')
+      chunks = convertWavToMulawChunks(bytes)
+    } else {
+      console.log('🎛 Detected raw PCM16 from ElevenLabs, converting to μ-law...')
+      chunks = convertPcm16ToMulawChunks(bytes)
+    }
+
+    console.log('🔄 Prepared', chunks.length, 'μ-law chunks for Twilio')
     return chunks
   } catch (error) {
     console.error('❌ Error with ElevenLabs TTS:', error)
