@@ -163,6 +163,8 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       event: 'media',
       streamSid: streamSid,
       media: {
+        track: 'outbound',
+        contentType: 'audio/x-mulaw;rate=8000',
         payload: base64Payload
       }
     }
@@ -170,7 +172,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     try {
       socket.send(JSON.stringify(message))
       if (i === 0) {
-        console.log(`🔍 First chunk sent successfully (${chunk.length} bytes)`)
+        console.log(`🔍 First chunk sent successfully (${chunk.length} bytes)`) 
       }
     } catch (e) {
       console.error(`❌ Failed to send chunk ${i + 1}:`, e)
