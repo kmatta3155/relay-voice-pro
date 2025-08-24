@@ -109,7 +109,7 @@ serve(async (req) => {
       })
 
     // Connect to AI receptionist (agent is ready and in live mode)
-    const streamUrl = `wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+    const streamUrl = `wss://gnqqktmslswgjtvxfvdo.functions.supabase.co/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
     
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
