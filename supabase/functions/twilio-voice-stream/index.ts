@@ -441,13 +441,16 @@ serve(async (req) => {
           
           streamSid = data.start?.streamSid
           
-          // Send TwiML confirmation to ensure bidirectional signalling works
-          const confirm = {
-            event: 'twiml',
-            twiml: '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Connected to your AI receptionist test.</Say></Response>'
+          // Send mark event instead of invalid TwiML
+          const markEvent = {
+            event: 'mark',
+            streamSid: streamSid,
+            mark: {
+              name: 'connection_established'
+            }
           }
-          socket.send(JSON.stringify(confirm))
-          console.log('🎤 Sent TwiML confirmation to Twilio')
+          socket.send(JSON.stringify(markEvent))
+          console.log('📍 Sent mark event to confirm connection')
           
           // Send initial greeting
           if (tenantId && streamSid) {
