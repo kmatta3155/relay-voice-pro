@@ -291,26 +291,31 @@ serve(async (req) => {
           const agentId = Deno.env.get('ELEVENLABS_AGENT_ID') || '4dv4ZFiVvCcdXFqlpVzY'
           console.log('🎵 Connecting to ElevenLabs agent:', agentId)
           
-          elevenLabsWs = new WebSocket(`wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}`)
+          // Use the proper ElevenLabs WebSocket URL with API key
+          elevenLabsWs = new WebSocket(`wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}`, {
+            headers: {
+              'xi-api-key': elevenLabsKey
+            }
+          })
 
           elevenLabsWs.onopen = () => {
-            console.log('🎵 Connected to ElevenLabs')
+            console.log('✅ ElevenLabs WebSocket connected successfully')
             
-            // Send proper conversation initiation
-            elevenLabsWs!.send(JSON.stringify({
-              type: 'conversation_initiation_client_data',
+            // Send conversation initiation with proper format
+            const initMessage = {
               conversation_config_override: {
                 agent: {
                   prompt: {
-                    prompt: `You are a professional receptionist for ${businessName}. Keep responses brief and helpful.`
+                    prompt: `You are a helpful receptionist for ${businessName}. Answer calls professionally and keep responses brief.`
                   },
-                  first_message: `Hello! Thank you for calling ${businessName}. How may I assist you today?`,
+                  first_message: `Hello! Thank you for calling ${businessName}. How can I help you today?`,
                   language: 'en'
                 }
               }
-            }))
+            }
             
-            console.log('🎤 Sent greeting config to ElevenLabs')
+            elevenLabsWs!.send(JSON.stringify(initMessage))
+            console.log('📤 Sent conversation config to ElevenLabs:', JSON.stringify(initMessage))
           }
 
           elevenLabsWs.onmessage = async (message) => {
