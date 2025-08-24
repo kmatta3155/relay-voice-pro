@@ -246,7 +246,8 @@ async function processAudioWithWhisper(audioData: Uint8Array): Promise<string> {
 }
 
 serve(async (req) => {
-  console.log('🎵 TWILIO VOICE STREAM - ELEVENLABS FIXED VERSION')
+  console.log('🎵 TWILIO VOICE STREAM - FIXED VERSION 5.0')
+  console.log('📍 Request received, checking WebSocket upgrade...')
   
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -276,37 +277,48 @@ serve(async (req) => {
       console.log('📨 Parsed event type:', data.event)
 
       if (data.event === 'start') {
-        console.log('🚀 Stream started')
+        console.log('🚀 Stream started - initializing ElevenLabs connection')
         streamSid = data.streamSid
         phoneNumber = data.start?.customParameters?.phoneNumber || 'unknown'
         tenantId = data.start?.customParameters?.tenantId || ''
         businessName = data.start?.customParameters?.businessName || 'this business'
         
         console.log(`📞 Call details: Phone=${phoneNumber}, Tenant=${tenantId}, Business=${businessName}`)
+        console.log('🔑 Checking environment variables...')
+        
+        const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
+        const agentId = Deno.env.get('ELEVENLABS_AGENT_ID') || '4dv4ZFiVvCcdXFqlpVzY'
+        
+        console.log(`🔑 ElevenLabs Key present: ${!!elevenLabsKey}`)
+        console.log(`🤖 Agent ID: ${agentId}`)
 
-        // Connect to ElevenLabs
+        if (!elevenLabsKey) {
+          console.error('❌ ELEVENLABS_API_KEY not found - cannot connect to ElevenLabs')
+          return
+        }
+
+        console.log('🔗 Getting signed URL from ElevenLabs...')
         try {
-          const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
-          if (!elevenLabsKey) {
-            console.error('❌ ELEVENLABS_API_KEY not found')
-            return
-          }
-
-          const agentId = Deno.env.get('ELEVENLABS_AGENT_ID') || '4dv4ZFiVvCcdXFqlpVzY'
-          console.log('🎵 Connecting to ElevenLabs agent:', agentId)
-          
-          // Get signed URL from ElevenLabs to authenticate WebSocket
           const urlResp = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`, {
             method: 'GET',
             headers: { 'xi-api-key': elevenLabsKey }
           })
+          
+          console.log(`📡 ElevenLabs API response status: ${urlResp.status}`)
+          
           if (!urlResp.ok) {
-            const txt = await urlResp.text()
-            console.error('❌ Failed to get signed URL from ElevenLabs:', urlResp.status, txt)
+            const errorText = await urlResp.text()
+            console.error(`❌ Failed to get signed URL: ${urlResp.status} - ${errorText}`)
             return
           }
-          const { signed_url } = await urlResp.json()
-          elevenLabsWs = new WebSocket(signed_url)
+          
+          const urlData = await urlResp.json()
+          console.log('✅ Signed URL obtained successfully')
+          
+          const signedUrl = urlData.signed_url
+          console.log(`🔗 Connecting to ElevenLabs WebSocket: ${signedUrl.substring(0, 50)}...`)
+          
+          elevenLabsWs = new WebSocket(signedUrl)
 
           elevenLabsWs.onopen = () => {
             console.log('✅ ElevenLabs WebSocket connected successfully')
