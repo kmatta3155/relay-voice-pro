@@ -266,12 +266,84 @@ async function textToSpeech(text: string): Promise<string | null> {
     }
 
     const arrayBuffer = await response.arrayBuffer()
-    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+    const wavBytes = new Uint8Array(arrayBuffer)
+    
+    // Convert WAV to μ-law for Twilio
+    const mulawBytes = convertWavToMulaw(wavBytes)
+    
+    // Encode as base64 for Twilio
+    const base64Audio = btoa(String.fromCharCode(...mulawBytes))
     return base64Audio
   } catch (error) {
     console.error('Error converting text to speech:', error)
     return null
   }
+}
+
+// Function to convert WAV audio to μ-law format for Twilio
+function convertWavToMulaw(wavBytes: Uint8Array): Uint8Array {
+  // Parse WAV header to find data section
+  const dataView = new DataView(wavBytes.buffer)
+  let dataOffset = 44 // Standard WAV header size
+  
+  // Find 'data' chunk (in case of non-standard WAV)
+  for (let i = 12; i < wavBytes.length - 4; i++) {
+    if (wavBytes[i] === 0x64 && wavBytes[i+1] === 0x61 && 
+        wavBytes[i+2] === 0x74 && wavBytes[i+3] === 0x61) { // 'data'
+      dataOffset = i + 8
+      break
+    }
+  }
+  
+  // Extract PCM data (16-bit samples)
+  const pcmData: number[] = []
+  for (let i = dataOffset; i < wavBytes.length; i += 2) {
+    if (i + 1 < wavBytes.length) {
+      const sample = dataView.getInt16(i, true) // little-endian
+      pcmData.push(sample)
+    }
+  }
+  
+  // Convert 16-bit PCM to μ-law
+  const mulawData = new Uint8Array(pcmData.length)
+  for (let i = 0; i < pcmData.length; i++) {
+    mulawData[i] = linearToMulaw(pcmData[i])
+  }
+  
+  return mulawData
+}
+
+// Convert 16-bit linear PCM to μ-law
+function linearToMulaw(pcm: number): number {
+  const BIAS = 0x84
+  const CLIP = 32635
+  
+  let sign = 0
+  let position = 0
+  let lsb = 0
+  
+  if (pcm < 0) {
+    pcm = BIAS - pcm
+    sign = 0x80
+  } else {
+    pcm += BIAS
+  }
+  
+  if (pcm > CLIP) pcm = CLIP
+  
+  if (pcm >= 256) {
+    let exponent = 1
+    for (let exp_lut = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768]; 
+         exponent < 8; exponent++) {
+      if (pcm < exp_lut[exponent - 1]) break
+    }
+    position = (exponent << 4) | ((pcm >> (exponent + 3)) & 0x0F)
+  } else {
+    position = pcm >> 4
+  }
+  
+  lsb = (position ^ 0x55) | sign
+  return lsb & 0xFF
 }
 
 serve(async (req) => {
@@ -317,6 +389,10 @@ serve(async (req) => {
 
     const audioBuffer = new AudioBuffer()
     let streamSid: string | null = null
+    let conversationStartTime = Date.now()
+    let messageCount = 0
+    const MAX_CONVERSATION_TIME = 5 * 60 * 1000 // 5 minutes
+    const MAX_MESSAGES = 20
 
     socket.onopen = () => {
       console.log('✅ WebSocket connection established successfully!')
@@ -383,6 +459,46 @@ serve(async (req) => {
               
               if (transcription && transcription.trim() && tenantId) {
                 console.log('📝 Transcribed:', transcription)
+                
+                // Check conversation limits
+                const elapsedTime = Date.now() - conversationStartTime
+                messageCount++
+                
+                if (elapsedTime > MAX_CONVERSATION_TIME) {
+                  console.log('⏰ Conversation timeout reached')
+                  const timeoutMessage = "I'm sorry, but our conversation time limit has been reached. Thank you for calling!"
+                  const audioBase64 = await textToSpeech(timeoutMessage)
+                  
+                  if (audioBase64 && streamSid) {
+                    const mediaMessage = {
+                      event: 'media',
+                      streamSid: streamSid,
+                      media: { payload: audioBase64 }
+                    }
+                    socket.send(JSON.stringify(mediaMessage))
+                    console.log('🎤 Sent timeout message to caller')
+                  }
+                  socket.close()
+                  return
+                }
+                
+                if (messageCount > MAX_MESSAGES) {
+                  console.log('💬 Message limit reached')
+                  const limitMessage = "I've reached my conversation limit for this call. Let me transfer you to a human representative. Thank you!"
+                  const audioBase64 = await textToSpeech(limitMessage)
+                  
+                  if (audioBase64 && streamSid) {
+                    const mediaMessage = {
+                      event: 'media',
+                      streamSid: streamSid,
+                      media: { payload: audioBase64 }
+                    }
+                    socket.send(JSON.stringify(mediaMessage))
+                    console.log('🎤 Sent message limit notification to caller')
+                  }
+                  socket.close()
+                  return
+                }
                 
                 // Generate AI response
                 const aiResponse = await generateReceptionistResponse(tenantId, transcription)
