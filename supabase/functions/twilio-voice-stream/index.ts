@@ -15,14 +15,27 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 class AudioBuffer {
   private chunks: Uint8Array[] = []
   private lastProcessTime = Date.now()
+  private lastChunkTime = 0
   
   addChunk(audioData: Uint8Array) {
     this.chunks.push(audioData)
+    this.lastChunkTime = Date.now()
+  }
+  
+  size(): number {
+    return this.chunks.length
   }
   
   shouldProcess(): boolean {
-    // Process every 0.8 seconds or when we have enough data
-    return Date.now() - this.lastProcessTime > 800 && this.chunks.length > 0
+    // Real-world fix:
+    // - Lower the cadence to feel more responsive (~500ms)
+    // - Also flush on "silence" (no new chunks) for 500ms
+    // - Avoid processing when there's truly nothing buffered
+    const now = Date.now()
+    const timeElapsed = now - this.lastProcessTime >= 500
+    const silenceElapsed = this.chunks.length > 0 && now - this.lastChunkTime >= 500
+    const haveMinChunks = this.chunks.length >= 12 // ~240ms at 20ms/chunk
+    return (haveMinChunks && timeElapsed) || silenceElapsed
   }
   
   getAndClear(): Uint8Array {
@@ -88,7 +101,7 @@ async function processAudioWithWhisper(audioData: Uint8Array): Promise<string> {
   }
 }
 
-async function getAIResponse(text: string, tenantId: string): Promise<string> {
+async function getAIResponse(text: string, tenantId?: string): Promise<string> {
   try {
     console.log('🤖 Getting AI response for tenant:', tenantId)
     
@@ -99,31 +112,43 @@ async function getAIResponse(text: string, tenantId: string): Promise<string> {
       return "I'm sorry, I'm not properly configured right now. Please try again later."
     }
 
-    // Get agent configuration
-    console.log('📋 Fetching agent configuration...')
-    const { data: agent, error } = await supabase
-      .from('ai_agents')
-      .select('system_prompt, model')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'ready')
-      .single()
+    // Defaults if we can't load a tenant-specific agent
+    let systemPrompt = 'You are a helpful AI receptionist. Be concise and friendly.'
+    let model = 'gpt-4o'
 
-    console.log('🔍 Agent query result:', { agent, error })
-    if (error || !agent) {
-      console.error('❌ No ready agent found for tenant:', tenantId, error)
-      return "I'm sorry, I'm not available right now. Please try again later."
+    if (tenantId) {
+      // Try to get agent configuration
+      console.log('📋 Fetching agent configuration...')
+      const { data: agent, error } = await supabase
+        .from('ai_agents')
+        .select('system_prompt, model')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'ready')
+        .maybeSingle()
+
+      console.log('🔍 Agent query result:', { agent, error })
+      if (agent) {
+        systemPrompt = agent.system_prompt || systemPrompt
+        model = agent.model || model
+      } else if (error) {
+        console.warn('⚠️ Falling back to default agent due to lookup error:', error)
+      } else {
+        console.warn('⚠️ No tenant agent found. Using defaults.')
+      }
+    } else {
+      console.warn('⚠️ No tenantId provided. Using default agent configuration.')
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Authorization': `Bearer ${openaiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: agent.model || 'gpt-4o',
+        model,
         messages: [
-          { role: 'system', content: agent.system_prompt || 'You are a helpful AI receptionist.' },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: text }
         ],
         max_tokens: 150,
@@ -131,7 +156,8 @@ async function getAIResponse(text: string, tenantId: string): Promise<string> {
     })
 
     if (!response.ok) {
-      throw new Error(`OpenAI API failed: ${await response.text()}`)
+      const errorText = await response.text()
+      throw new Error(`OpenAI API failed: ${errorText}`)
     }
 
     const result = await response.json()
@@ -396,7 +422,7 @@ serve(async (req) => {
         }
 
         if (evt === 'media') {
-          if (data.media?.payload && streamSid && tenantId) {
+          if (data.media?.payload && streamSid) {
             // Decode base64 audio payload
             const audioData = new Uint8Array(
               atob(data.media.payload)
@@ -405,7 +431,7 @@ serve(async (req) => {
             )
             
             audioBuffer.addChunk(audioData)
-            console.log('🎤 Audio chunk received, buffer size:', audioBuffer.chunks.length)
+            console.log('🎤 Audio chunk received, buffer size:', audioBuffer.size())
             console.log('🔍 Audio chunk size:', audioData.length, 'bytes')
             
             // Process accumulated audio when we have enough
@@ -454,6 +480,23 @@ serve(async (req) => {
 
         if (evt === 'stop') {
           console.log('🛑 Stream stopped')
+          try {
+            // Flush any remaining buffered audio on stop
+            if (audioBuffer.size() > 0) {
+              console.log('🧹 Flushing remaining buffered audio on stop...')
+              const combinedAudio = audioBuffer.getAndClear()
+              const transcription = await processAudioWithWhisper(combinedAudio)
+              if (transcription.trim()) {
+                const aiResponse = await getAIResponse(transcription, tenantId || undefined)
+                const audioChunks = await generateTTSAudio(aiResponse)
+                if (audioChunks.length > 0) {
+                  await sendAudioToTwilio(audioChunks, streamSid, socket)
+                }
+              }
+            }
+          } catch (e) {
+            console.error('❌ Error flushing on stop:', e)
+          }
         }
       } catch (err) {
         console.error('❌ Error handling message:', err)
