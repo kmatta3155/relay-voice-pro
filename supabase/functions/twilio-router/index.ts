@@ -26,6 +26,17 @@ serve(async (req) => {
   console.log('📞 Processing voice call request')
 
   try {
+    // TEMPORARY TEST - Return immediate TwiML to verify function is working
+    const testTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Function is working. This is a test response.</Say>
+  <Hangup/>
+</Response>`
+    
+    return new Response(testTwiml, { headers: { 'Content-Type': 'text/xml' } })
+    
+    // Rest of the function commented out for testing
+    /*
     console.log('=== TWILIO ROUTER DEBUG START ===');
     console.log('Request method:', req.method);
     console.log('Request URL:', req.url);
