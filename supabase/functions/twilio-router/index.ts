@@ -154,7 +154,7 @@ serve(async (req) => {
       })
 
     // Derive stream URL using functions/v1 path
-    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
+    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&amp;call_sid=${callSid}`
     console.log('Stream URL:', streamUrl);
 
     // Build proper streaming TwiML that connects the call to the WebSocket stream
