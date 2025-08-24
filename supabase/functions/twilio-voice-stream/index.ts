@@ -256,18 +256,18 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
     const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x' // Aria
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
 
-    console.log('🗣️ Generating fallback TTS greeting with ElevenLabs...')
+    console.log('🗣️ Generating fallback TTS greeting (μ-law 8kHz) with ElevenLabs...')
     const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
         'xi-api-key': elevenLabsKey,
         'Content-Type': 'application/json',
-        'Accept': 'application/octet-stream'
+        'Accept': 'audio/basic' // μ-law
       },
       body: JSON.stringify({
         text,
         model_id: 'eleven_turbo_v2_5',
-        output_format: 'pcm_16000'
+        output_format: 'ulaw_8000'
       })
     })
 
@@ -278,12 +278,26 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
     }
 
     const audioBuffer = await resp.arrayBuffer()
-    const pcm16kBytes = new Uint8Array(audioBuffer)
-    console.log('🎼 TTS greeting bytes:', pcm16kBytes.length)
+    const muLawBytes = new Uint8Array(audioBuffer)
+    console.log('🎼 TTS greeting μ-law bytes:', muLawBytes.length)
 
-    const chunks = processElevenLabsAudioToMulaw(pcm16kBytes)
+    // Chunk into 20ms frames (160 bytes at 8kHz μ-law) and pad final frame if needed
+    const chunks: Uint8Array[] = []
+    for (let i = 0; i < muLawBytes.length; i += 160) {
+      const end = Math.min(i + 160, muLawBytes.length)
+      const slice = muLawBytes.slice(i, end)
+      if (slice.length === 160) {
+        chunks.push(slice)
+      } else {
+        const padded = new Uint8Array(160)
+        padded.set(slice)
+        padded.fill(0xFF, slice.length) // μ-law silence padding
+        chunks.push(padded)
+      }
+    }
+
     await sendAudioToTwilio(chunks, streamSid, socket)
-    console.log('✅ Fallback TTS greeting sent to Twilio')
+    console.log('✅ Fallback μ-law TTS greeting sent to Twilio')
   } catch (e) {
     console.error('❌ Error sending fallback TTS greeting:', e)
   }
