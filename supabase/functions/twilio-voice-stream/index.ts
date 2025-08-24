@@ -1,10 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 serve(async (req) => {
+  console.log('twilio-voice-stream: incoming request', req.method, req.url)
   const { headers } = req
   const upgradeHeader = headers.get("upgrade") || ""
+  console.log('twilio-voice-stream: upgrade header =', upgradeHeader)
 
   if (upgradeHeader.toLowerCase() !== "websocket") {
+    console.log('twilio-voice-stream: non-websocket request received')
     return new Response("Expected WebSocket connection", { status: 400 })
   }
 
@@ -13,6 +16,7 @@ serve(async (req) => {
   const callSid = url.searchParams.get('call_sid')
 
   if (!tenantId || !callSid) {
+    console.error('twilio-voice-stream: missing params', { tenantId, callSid })
     return new Response("Missing required parameters", { status: 400 })
   }
 
@@ -24,33 +28,11 @@ serve(async (req) => {
   let conversationActive = false
   let audioBuffer: string[] = []
   let streamSid: string | null = null
+  let agent: any = null
+  let settings: any = null
 
-  // Get AI agent configuration
-  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.38.4')
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  )
-
-  const { data: agent } = await supabase
-    .from('ai_agents')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .eq('mode', 'live')
-    .eq('status', 'ready')
-    .single()
-
-  const { data: settings } = await supabase
-    .from('agent_settings')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .single()
-
-  if (!agent) {
-    console.error('No ready agent in live mode found for tenant:', tenantId)
-    socket.close(1000, 'No agent available in live mode')
-    return response
-  }
+  // Supabase client will be initialized after WebSocket upgrade to avoid handshake delays
+  let supabase: any = null
 
   // Connect to OpenAI Realtime API
   const connectToOpenAI = () => {
@@ -309,9 +291,44 @@ serve(async (req) => {
     return btoa(String.fromCharCode(...mulawData))
   }
 
-  socket.onopen = () => {
+  socket.onopen = async () => {
     console.log('Twilio stream connected')
-    connectToOpenAI()
+    try {
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.38.4')
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+
+      const agentRes = await supabase
+        .from('ai_agents')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('mode', 'live')
+        .eq('status', 'ready')
+        .single()
+
+      agent = agentRes.data
+
+      const settingsRes = await supabase
+        .from('agent_settings')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .single()
+
+      settings = settingsRes.data
+
+      if (!agent) {
+        console.error('No ready agent in live mode found for tenant:', tenantId)
+        socket.close(1000, 'No agent available in live mode')
+        return
+      }
+
+      connectToOpenAI()
+    } catch (err) {
+      console.error('Failed to initialize on socket open:', err)
+      socket.close(1011, 'Initialization error')
+    }
   }
 
   socket.onmessage = (event) => {
