@@ -15,39 +15,143 @@ const supabase = createClient(
 
 // Audio buffer to accumulate incoming audio
 class AudioBuffer {
-  private chunks: string[] = []
-  private totalDuration = 0
+  private chunks: Uint8Array[] = []
+  private totalSamples = 0
   
   append(audioBase64: string) {
-    this.chunks.push(audioBase64)
-    this.totalDuration += 20 // Assuming 20ms chunks
+    // Decode base64 to get μ-law encoded bytes
+    const binaryString = atob(audioBase64)
+    const mulawBytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      mulawBytes[i] = binaryString.charCodeAt(i)
+    }
+    
+    this.chunks.push(mulawBytes)
+    this.totalSamples += mulawBytes.length
   }
   
-  getFullAudio(): string {
-    return this.chunks.join('')
+  getWavAudio(): Uint8Array {
+    // Combine all μ-law chunks
+    const allMulawBytes = new Uint8Array(this.totalSamples)
+    let offset = 0
+    for (const chunk of this.chunks) {
+      allMulawBytes.set(chunk, offset)
+      offset += chunk.length
+    }
+    
+    // Convert μ-law to 16-bit PCM
+    const pcmData = this.mulawToPcm(allMulawBytes)
+    
+    // Create WAV file with proper headers
+    return this.createWavFile(pcmData)
+  }
+  
+  private mulawToPcm(mulawData: Uint8Array): Int16Array {
+    const pcmData = new Int16Array(mulawData.length)
+    
+    // μ-law to linear conversion table
+    const mulawTable = new Int16Array([
+      -32124, -31100, -30076, -29052, -28028, -27004, -25980, -24956,
+      -23932, -22908, -21884, -20860, -19836, -18812, -17788, -16764,
+      -15996, -15484, -14972, -14460, -13948, -13436, -12924, -12412,
+      -11900, -11388, -10876, -10364, -9852, -9340, -8828, -8316,
+      -7932, -7676, -7420, -7164, -6908, -6652, -6396, -6140,
+      -5884, -5628, -5372, -5116, -4860, -4604, -4348, -4092,
+      -3900, -3772, -3644, -3516, -3388, -3260, -3132, -3004,
+      -2876, -2748, -2620, -2492, -2364, -2236, -2108, -1980,
+      -1884, -1820, -1756, -1692, -1628, -1564, -1500, -1436,
+      -1372, -1308, -1244, -1180, -1116, -1052, -988, -924,
+      -876, -844, -812, -780, -748, -716, -684, -652,
+      -620, -588, -556, -524, -492, -460, -428, -396,
+      -372, -356, -340, -324, -308, -292, -276, -260,
+      -244, -228, -212, -196, -180, -164, -148, -132,
+      -120, -112, -104, -96, -88, -80, -72, -64,
+      -56, -48, -40, -32, -24, -16, -8, 0,
+      32124, 31100, 30076, 29052, 28028, 27004, 25980, 24956,
+      23932, 22908, 21884, 20860, 19836, 18812, 17788, 16764,
+      15996, 15484, 14972, 14460, 13948, 13436, 12924, 12412,
+      11900, 11388, 10876, 10364, 9852, 9340, 8828, 8316,
+      7932, 7676, 7420, 7164, 6908, 6652, 6396, 6140,
+      5884, 5628, 5372, 5116, 4860, 4604, 4348, 4092,
+      3900, 3772, 3644, 3516, 3388, 3260, 3132, 3004,
+      2876, 2748, 2620, 2492, 2364, 2236, 2108, 1980,
+      1884, 1820, 1756, 1692, 1628, 1564, 1500, 1436,
+      1372, 1308, 1244, 1180, 1116, 1052, 988, 924,
+      876, 844, 812, 780, 748, 716, 684, 652,
+      620, 588, 556, 524, 492, 460, 428, 396,
+      372, 356, 340, 324, 308, 292, 276, 260,
+      244, 228, 212, 196, 180, 164, 148, 132,
+      120, 112, 104, 96, 88, 80, 72, 64,
+      56, 48, 40, 32, 24, 16, 8, 0
+    ])
+    
+    for (let i = 0; i < mulawData.length; i++) {
+      pcmData[i] = mulawTable[mulawData[i]]
+    }
+    
+    return pcmData
+  }
+  
+  private createWavFile(pcmData: Int16Array): Uint8Array {
+    const sampleRate = 8000 // Twilio uses 8kHz
+    const numChannels = 1
+    const bitsPerSample = 16
+    const byteRate = sampleRate * numChannels * bitsPerSample / 8
+    const blockAlign = numChannels * bitsPerSample / 8
+    const dataSize = pcmData.length * 2
+    const fileSize = 36 + dataSize
+    
+    const buffer = new ArrayBuffer(44 + dataSize)
+    const view = new DataView(buffer)
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i))
+      }
+    }
+    
+    writeString(0, 'RIFF')
+    view.setUint32(4, fileSize, true)
+    writeString(8, 'WAVE')
+    writeString(12, 'fmt ')
+    view.setUint32(16, 16, true) // fmt chunk size
+    view.setUint16(20, 1, true) // PCM format
+    view.setUint16(22, numChannels, true)
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, byteRate, true)
+    view.setUint16(32, blockAlign, true)
+    view.setUint16(34, bitsPerSample, true)
+    writeString(36, 'data')
+    view.setUint32(40, dataSize, true)
+    
+    // PCM data
+    const pcmBytes = new Uint8Array(buffer, 44)
+    for (let i = 0; i < pcmData.length; i++) {
+      const sample = pcmData[i]
+      pcmBytes[i * 2] = sample & 0xFF
+      pcmBytes[i * 2 + 1] = (sample >> 8) & 0xFF
+    }
+    
+    return new Uint8Array(buffer)
   }
   
   clear() {
     this.chunks = []
-    this.totalDuration = 0
+    this.totalSamples = 0
   }
   
   getDuration(): number {
-    return this.totalDuration
+    // Twilio sends 8kHz μ-law, so samples = ms * 8
+    return this.totalSamples / 8
   }
 }
 
 // Function to transcribe audio using OpenAI Whisper
-async function transcribeAudio(audioBase64: string): Promise<string | null> {
+async function transcribeAudio(wavBytes: Uint8Array): Promise<string | null> {
   try {
-    const binaryString = atob(audioBase64)
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
-    }
-    
     const formData = new FormData()
-    const blob = new Blob([bytes], { type: 'audio/wav' })
+    const blob = new Blob([wavBytes], { type: 'audio/wav' })
     formData.append('file', blob, 'audio.wav')
     formData.append('model', 'whisper-1')
     
@@ -271,11 +375,11 @@ serve(async (req) => {
             
             // Process accumulated audio when we have enough (e.g., 2 seconds)
             if (audioBuffer.getDuration() >= 2000) {
-              const fullAudio = audioBuffer.getFullAudio()
+              const wavAudio = audioBuffer.getWavAudio()
               audioBuffer.clear()
               
               console.log('🎙️ Processing accumulated audio for transcription')
-              const transcription = await transcribeAudio(fullAudio)
+              const transcription = await transcribeAudio(wavAudio)
               
               if (transcription && transcription.trim() && tenantId) {
                 console.log('📝 Transcribed:', transcription)
