@@ -268,6 +268,8 @@ function convertWavToMulawChunks(wavBytes: Uint8Array): Uint8Array[] {
   const pcmLength = wavBytes.length - pcmStart
   const samples = new Int16Array(wavBytes.buffer, pcmStart, pcmLength / 2)
   
+  console.log(`📊 Original audio: ${samples.length} samples at ${sampleRate}Hz`)
+  
   // Resample to 8kHz if needed
   let resampledSamples: Int16Array
   if (sampleRate !== 8000) {
@@ -279,8 +281,27 @@ function convertWavToMulawChunks(wavBytes: Uint8Array): Uint8Array[] {
       const srcIndex = Math.floor(i * ratio)
       resampledSamples[i] = samples[srcIndex]
     }
+    console.log(`🔄 Resampled to 8kHz: ${resampledSamples.length} samples`)
   } else {
     resampledSamples = samples
+  }
+  
+  // Normalize audio levels - find max amplitude
+  let maxAmplitude = 0
+  for (let i = 0; i < resampledSamples.length; i++) {
+    maxAmplitude = Math.max(maxAmplitude, Math.abs(resampledSamples[i]))
+  }
+  
+  // Apply gain if audio is too quiet (but don't over-amplify)
+  const targetAmplitude = 16000 // Target ~50% of max 16-bit range
+  if (maxAmplitude > 0 && maxAmplitude < targetAmplitude) {
+    const gain = Math.min(2.0, targetAmplitude / maxAmplitude)
+    console.log(`🔊 Applying gain: ${gain.toFixed(2)}x (max was ${maxAmplitude})`)
+    for (let i = 0; i < resampledSamples.length; i++) {
+      resampledSamples[i] = Math.round(resampledSamples[i] * gain)
+    }
+  } else {
+    console.log(`📈 Audio levels OK: max amplitude ${maxAmplitude}`)
   }
   
   // Convert to μ-law
@@ -295,6 +316,7 @@ function convertWavToMulawChunks(wavBytes: Uint8Array): Uint8Array[] {
     chunks.push(mulaw.subarray(i, Math.min(i + 160, mulaw.length)))
   }
   
+  console.log(`✅ Created ${chunks.length} μ-law chunks`)
   return chunks
 }
 
