@@ -21,8 +21,8 @@ class AudioBuffer {
   }
   
   shouldProcess(): boolean {
-    // Process every 1.5 seconds or when we have enough data
-    return Date.now() - this.lastProcessTime > 1500 && this.chunks.length > 0
+    // Process every 0.8 seconds or when we have enough data
+    return Date.now() - this.lastProcessTime > 800 && this.chunks.length > 0
   }
   
   getAndClear(): Uint8Array {
@@ -367,6 +367,21 @@ serve(async (req) => {
           streamSid = data.start?.streamSid
           console.log('▶️ Stream started. streamSid=', streamSid)
           console.log('✅ Stream ready, awaiting caller audio')
+          
+          // Send a test greeting to confirm the pipeline works
+          if (streamSid && tenantId) {
+            console.log('🧪 Sending test greeting on stream start...')
+            try {
+              const testGreeting = "Hello! I can hear you. How can I help you today?"
+              const greetingAudio = await generateTTSAudio(testGreeting)
+              if (greetingAudio.length > 0) {
+                await sendAudioToTwilio(greetingAudio, streamSid, socket)
+                console.log('✅ Test greeting sent successfully')
+              }
+            } catch (error) {
+              console.error('❌ Failed to send test greeting:', error)
+            }
+          }
         }
 
         if (evt === 'media') {
