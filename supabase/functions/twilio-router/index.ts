@@ -174,6 +174,7 @@ serve(async (req) => {
     console.log('Stream URL being used:', streamUrl);
     console.log('Functions domain:', functionsDomain);
     console.log('Project ref:', projectRef);
+    console.log('=== ROUTER SENDING TWIML RESPONSE ===');
     console.log('=== END DEBUG ===');
 
     // Return the streaming TwiML
