@@ -187,7 +187,21 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     }
   }
   
-  console.log(`✅ All ${chunks.length} μ-law chunks sent to Twilio`)
+  // Send mark message to tell Twilio to flush its buffer and play the audio
+  const markMessage = {
+    event: "mark",
+    streamSid,
+    mark: { name: `end-of-message-${sequenceNumber}` }
+  };
+  
+  try {
+    socket.send(JSON.stringify(markMessage));
+    console.log(`📌 Mark message sent for sequence ${sequenceNumber}`);
+  } catch (e) {
+    console.error('❌ Failed to send mark message:', e);
+  }
+  
+  console.log(`✅ All ${chunks.length} μ-law chunks sent to Twilio with mark`)
 }
 
 // Create WAV from μ-law for Whisper
