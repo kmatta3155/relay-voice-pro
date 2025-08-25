@@ -162,11 +162,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     const message = {
       event: 'media',
       streamSid: streamSid,
-      media: {
-        track: 'outbound',
-        contentType: 'audio/x-mulaw;rate=8000',
-        payload: base64Payload
-      }
+      media: { payload: base64Payload }
     }
     
     try {
