@@ -97,17 +97,28 @@ serve(async (req) => {
       })
     }
 
-    console.log('Found tenant_id:', tenantId, 'Looking up agent...');
+    console.log('Found tenant_id:', tenantId, 'Looking up agent and business info...');
 
-    // Check if AI agent is in live mode
-    const { data: agentData, error: agentError } = await supabase
-      .from('ai_agents')
-      .select('mode, status')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'ready')
-      .maybeSingle()
+    // Check if AI agent is in live mode and get business name
+    const [agentResult, tenantResult] = await Promise.all([
+      supabase
+        .from('ai_agents')
+        .select('mode, status')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'ready')
+        .maybeSingle(),
+      supabase
+        .from('tenants')
+        .select('name')
+        .eq('id', tenantId)
+        .maybeSingle()
+    ]);
+
+    const { data: agentData, error: agentError } = agentResult;
+    const { data: tenantData, error: tenantError } = tenantResult;
 
     console.log('Agent lookup result:', { agentData, agentError });
+    console.log('Tenant lookup result:', { tenantData, tenantError });
 
     if (agentError || !agentData) {
       console.log('No ready agent found or agent error:', agentError)
@@ -140,7 +151,9 @@ serve(async (req) => {
       })
     }
 
-    console.log('Proceeding with live agent connection. Agent mode:', agentData.mode)
+    // Get business name for custom parameters
+    const businessName = tenantData?.name || 'this business';
+    console.log('Proceeding with live agent connection. Agent mode:', agentData.mode, 'Business name:', businessName)
 
     // Log the call
     await supabase
@@ -157,13 +170,21 @@ serve(async (req) => {
     const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
     console.log('Stream URL:', streamUrl);
 
-    // Build proper streaming TwiML that connects the call to the WebSocket stream
+    // Build proper streaming TwiML that connects the call to the WebSocket stream with custom parameters
     // XML-encode the URL to escape ampersands
     const xmlEncodedUrl = streamUrl.replace(/&/g, '&amp;')
+    // XML-encode the parameters
+    const xmlEncodedBusinessName = (businessName || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    const xmlEncodedPhoneNumber = (from || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${xmlEncodedUrl}" />
+    <Stream url="${xmlEncodedUrl}" name="ai-stream">
+      <Parameter name="tenantId" value="${tenantId}" />
+      <Parameter name="businessName" value="${xmlEncodedBusinessName}" />
+      <Parameter name="phoneNumber" value="${xmlEncodedPhoneNumber}" />
+    </Stream>
   </Connect>
 </Response>`
 
