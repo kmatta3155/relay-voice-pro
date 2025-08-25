@@ -142,6 +142,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     return
   }
   
+  let sequenceNumber = 0;
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
     
@@ -162,7 +163,12 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     const message = {
       event: 'media',
       streamSid: streamSid,
-      media: { payload: base64Payload }
+      media: {
+        track: "outbound",
+        chunk: (++sequenceNumber).toString(),
+        timestamp: (sequenceNumber * 20).toString(),
+        payload: base64Payload
+      }
     }
     
     try {
