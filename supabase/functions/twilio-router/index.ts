@@ -179,8 +179,9 @@ serve(async (req) => {
 
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say>Hello! You're connected to the AI receptionist. How can I help you today?</Say>
   <Connect>
-    <Stream url="${xmlEncodedUrl}" name="ai-stream">
+    <Stream url="${xmlEncodedUrl}">
       <Parameter name="tenantId" value="${tenantId}" />
       <Parameter name="businessName" value="${xmlEncodedBusinessName}" />
       <Parameter name="phoneNumber" value="${xmlEncodedPhoneNumber}" />
