@@ -1,218 +1,117 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
-// Initialize Supabase client
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-)
+);
 
-// Derive project ref and functions domain from environment
-const supabaseUrl = Deno.env.get('SUPABASE_URL')! // e.g. https://abcd1234.supabase.co
-const projectRef = new URL(supabaseUrl).hostname.split('.')[0] // abcd1234
-const functionsDomain = `${projectRef}.functions.supabase.co`
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+const functionsDomain = `${projectRef}.functions.supabase.co`;
+
+// Helper to escape XML attribute values
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
 
 serve(async (req) => {
-  console.log('🚀 ROUTER FUNCTION STARTED - VERSION 4.0 - NO GREETING')
   if (req.method === 'OPTIONS') {
-    console.log('✅ OPTIONS request handled')
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders });
   }
-  console.log('📞 Processing voice call request')
 
   try {
-    console.log('=== TWILIO ROUTER DEBUG START ===');
-    console.log('Request method:', req.method);
-    console.log('Request URL:', req.url);
-    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
-    
-    // Parse Twilio params from POST form or GET query
-    const contentType = req.headers.get('content-type') || ''
-    console.log('Content-Type:', contentType);
-    
-    let callSid: string | null = null
-    let from: string | null = null
-    let to: string | null = null
+    const contentType = req.headers.get('content-type') || '';
+    let callSid: string | null = null;
+    let from   : string | null = null;
+    let to     : string | null = null;
 
+    // Parse Twilio parameters
     if (req.method === 'POST' && contentType.includes('application/x-www-form-urlencoded')) {
-      const formData = await req.formData()
-      console.log('FormData entries:', Array.from(formData.entries()));
-      callSid = (formData.get('CallSid') as string) || null
-      from = (formData.get('From') as string) || null
-      to = (formData.get('To') as string) || null
+      const formData = await req.formData();
+      callSid = (formData.get('CallSid') as string) || null;
+      from    = (formData.get('From') as string)   || null;
+      to      = (formData.get('To') as string)     || null;
     } else {
-      const urlParams = new URL(req.url).searchParams
-      console.log('URL params:', Object.fromEntries(urlParams.entries()));
-      callSid = urlParams.get('CallSid')
-      from = urlParams.get('From')
-      to = urlParams.get('To')
+      const urlParams = new URL(req.url).searchParams;
+      callSid = urlParams.get('CallSid');
+      from    = urlParams.get('From');
+      to      = urlParams.get('To');
     }
-    
-    console.log('Parsed call details:', { callSid, from, to })
 
-    // Get tenant_id from query params or lookup by phone number
-    const url = new URL(req.url)
-    let tenantId = url.searchParams.get('tenant_id')
-    console.log('Initial tenant_id from params:', tenantId);
-    
+    // Look up tenant_id by phone number if not provided
+    const url        = new URL(req.url);
+    let tenantId     = url.searchParams.get('tenant_id');
     if (!tenantId && to) {
-      console.log('Looking up tenant by phone number:', to);
-      // Look up tenant by phone number
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('agent_settings')
         .select('tenant_id')
         .eq('twilio_number', to)
-        .maybeSingle()
-      
-      console.log('Agent settings lookup result:', { data, error });
-      console.log('Raw query result data:', JSON.stringify(data));
-      console.log('Query error details:', JSON.stringify(error));
-      
-      if (error) {
-        console.error('Error looking up tenant by phone number:', error)
-      }
-      
-      tenantId = data?.tenant_id
-      console.log('Found tenant_id:', tenantId);
-      console.log('Tenant lookup successful:', !!tenantId);
+        .maybeSingle();
+      tenantId = data?.tenant_id || null;
     }
-
     if (!tenantId) {
-      console.error('=== NO TENANT FOUND ===');
-      console.error('Phone number searched:', to);
-      console.error('Returning fallback TwiML');
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Thank you for calling. This number is not currently configured. Goodbye.</Say>
-  <Hangup/>
-</Response>`;
-      console.log('Fallback TwiML:', twiml);
-      return new Response(twiml, {
-        headers: { 'Content-Type': 'text/xml' }
-      })
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. This number is not currently configured. Goodbye.</Say><Hangup/></Response>`;
+      return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
     }
 
-    console.log('Found tenant_id:', tenantId, 'Looking up agent and business info...');
-
-    // Check if AI agent is in live mode and get business name
-    const [agentResult, tenantResult] = await Promise.all([
-      supabase
-        .from('ai_agents')
-        .select('mode, status')
-        .eq('tenant_id', tenantId)
-        .eq('status', 'ready')
-        .maybeSingle(),
-      supabase
-        .from('tenants')
-        .select('name')
-        .eq('id', tenantId)
-        .maybeSingle()
-    ]);
-
-    const { data: agentData, error: agentError } = agentResult;
-    const { data: tenantData, error: tenantError } = tenantResult;
-
-    console.log('Agent lookup result:', { agentData, agentError });
-    console.log('Tenant lookup result:', { tenantData, tenantError });
-
-    if (agentError || !agentData) {
-      console.log('No ready agent found or agent error:', agentError)
-      console.log('Agent lookup for tenant:', tenantId)
-      // If no agent in live mode, just hang up politely
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Thank you for calling. We're currently unavailable. Please try again later.</Say>
-  <Hangup/>
-</Response>`;
-      
-      return new Response(twiml, {
-        headers: { 'Content-Type': 'text/xml' }
-      })
+    // Check agent status
+    const { data: agentData } = await supabase
+      .from('ai_agents')
+      .select('mode, status')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'ready')
+      .maybeSingle();
+    if (!agentData || agentData.mode !== 'live') {
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. We're currently unavailable. Please try again later.</Say><Hangup/></Response>`;
+      return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
     }
 
-    console.log('Agent found:', agentData)
-
-    // Only proceed if agent is in live mode
-    if (agentData.mode !== 'live') {
-      console.log('Agent is in simulation mode, not handling live calls. Mode:', agentData.mode)
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Thank you for calling. We're currently unavailable. Please try again later.</Say>
-  <Hangup/>
-</Response>`;
-      
-      return new Response(twiml, {
-        headers: { 'Content-Type': 'text/xml' }
-      })
-    }
-
-    // Get business name for custom parameters
+    // Look up business name (optional)
+    const { data: tenantData } = await supabase
+      .from('tenants')
+      .select('name')
+      .eq('id', tenantId)
+      .maybeSingle();
     const businessName = tenantData?.name || 'this business';
-    console.log('Proceeding with live agent connection. Agent mode:', agentData.mode, 'Business name:', businessName)
 
-    // Log the call
-    await supabase
-      .from('calls')
-      .insert({
-        tenant_id: tenantId,
-        from: from,
-        to: to,
-        at: new Date().toISOString(),
-        outcome: 'incoming'
-      })
+    // Log call
+    await supabase.from('calls').insert({
+      tenant_id: tenantId,
+      from: from,
+      to: to,
+      at: new Date().toISOString(),
+      outcome: 'incoming',
+    });
 
-    // Derive stream URL using functions/v1 path
-    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`
-    console.log('Stream URL:', streamUrl);
+    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
+    const xmlUrl    = xmlEscape(streamUrl);
 
-    // Build proper streaming TwiML that connects the call to the WebSocket stream with custom parameters
-    // XML-encode the URL to escape ampersands
-    const xmlEncodedUrl = streamUrl.replace(/&/g, '&amp;')
-    // XML-encode the parameters
-    const xmlEncodedBusinessName = (businessName || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-    const xmlEncodedPhoneNumber = (from || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-
-const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Hello! You're connected to the AI receptionist. How can I help you today?</Say>
   <Connect>
-    <Stream url="${xmlEncodedUrl}">
-      <Parameter name="tenantId" value="${tenantId}" />
-      <Parameter name="businessName" value="${xmlEncodedBusinessName}" />
-      <Parameter name="phoneNumber" value="${xmlEncodedPhoneNumber}" />
+    <Stream url="${xmlUrl}">
+      <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
+      <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
+      <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
     </Stream>
   </Connect>
-</Response>`
-
-    console.log('=== STREAMING TwiML ===');
-    console.log('TwiML length:', twiml.length);
-    console.log('TwiML content:', twiml);
-    console.log('Stream URL being used:', streamUrl);
-    console.log('Functions domain:', functionsDomain);
-    console.log('Project ref:', projectRef);
-    console.log('=== ROUTER SENDING TWIML RESPONSE ===');
-    console.log('=== END DEBUG ===');
-
-    // Return the streaming TwiML
-    return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } })
-
-  } catch (error) {
-    console.error('Twilio router error:', error)
-    
-    // Return error TwiML
-    const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say>
-  <Hangup/>
 </Response>`;
-
-    return new Response(errorTwiml, {
-      headers: { 'Content-Type': 'text/xml' }
-    })
+    return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
+  } catch (err) {
+    console.error('router error:', err);
+    const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say><Hangup/></Response>`;
+    return new Response(errorTwiml, { headers: { 'Content-Type': 'text/xml' } });
   }
-})
+});
