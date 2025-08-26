@@ -322,7 +322,7 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
 }
 
 serve(async (req) => {
-  console.log('🎵 TWILIO VOICE STREAM - FIXED VERSION 5.0')
+  console.log('🎵 TWILIO VOICE STREAM - FIXED VERSION 5.1 - STATIC ELIMINATED')
   console.log('📍 Request received, checking WebSocket upgrade...')
   
   if (req.method === 'OPTIONS') {
