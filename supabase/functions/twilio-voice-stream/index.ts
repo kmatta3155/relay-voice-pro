@@ -377,8 +377,9 @@ serve(async (req) => {
   if (upgrade.toLowerCase() !== 'websocket') {
     return new Response('Expected Websocket', { status: 426 })
   }
-  const protocols = req.headers.get('sec-websocket-protocol') || undefined
-  const { socket, response } = Deno.upgradeWebSocket(req, protocols ? { protocol: protocols } : {})
+  const protocols = req.headers.get('sec-websocket-protocol') || ''
+  const protocol = protocols ? protocols.split(',')[0].trim() : undefined
+  const { socket, response } = Deno.upgradeWebSocket(req, protocol ? { protocol } : {})
   const buffer = new AudioBuffer()
   let streamSid = ''
   let phoneNumber = ''
