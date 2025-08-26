@@ -87,40 +87,61 @@ function mulawToPcm(mu: number): number {
   return sign ? (0x84 - sample) : (sample - 0x84)
 }
 
-// Convert ElevenLabs PCM16 to Twilio μ-law format with proper anti-aliasing
+// FIXED: Process ElevenLabs PCM16 24kHz to Twilio μ-law 8kHz - PROPER STATIC ELIMINATION
 function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   console.log(`🎧 Processing ${audioData.length} bytes from ElevenLabs`)
   
-  // ElevenLabs Conversational AI sends PCM16 at 24kHz - convert to samples
+  // ElevenLabs Conversational AI sends PCM16 at 24kHz - convert to samples  
   const pcm16Samples = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.length / 2)
   console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples at 24kHz`)
   
-  // CRITICAL FIX: Apply proper Butterworth low-pass filter before 3:1 decimation
-  // Cut-off frequency should be < Nyquist of target rate (4kHz for 8kHz output)
-  const filteredSamples = new Int16Array(pcm16Samples.length)
-  const a = 0.1 // Low-pass filter coefficient (cutoff ~3.4kHz at 24kHz)
-  
-  // Simple IIR low-pass filter to prevent aliasing
-  filteredSamples[0] = pcm16Samples[0]
-  for (let i = 1; i < pcm16Samples.length; i++) {
-    filteredSamples[i] = Math.round(
-      a * pcm16Samples[i] + (1 - a) * filteredSamples[i - 1]
-    )
+  // CRITICAL: Ensure we have enough samples to avoid artifacts
+  if (pcm16Samples.length < 3) {
+    console.warn(`⚠️ Not enough samples for proper downsampling: ${pcm16Samples.length}`)
+    return []
   }
   
-  // Now downsample from 24kHz to 8kHz (3:1 ratio) with filtered samples
-  const len = Math.floor(filteredSamples.length / 3)
-  const pcm8kSamples = new Int16Array(len)
-  for (let i = 0; i < len; i++) {
-    // Take every 3rd sample from the filtered data
-    pcm8kSamples[i] = filteredSamples[i * 3]
+  // Step 1: Apply aggressive low-pass filter to eliminate frequencies above 3.4kHz
+  // This prevents aliasing when downsampling from 24kHz to 8kHz
+  const filteredSamples = new Float32Array(pcm16Samples.length)
+  
+  // Two-pole Butterworth-style filter with cutoff at ~3kHz
+  let y1 = 0, y2 = 0, x1 = 0, x2 = 0
+  const a0 = 0.0067, a1 = 0.0134, a2 = 0.0067
+  const b1 = -1.1429, b2 = 0.4128
+  
+  for (let i = 0; i < pcm16Samples.length; i++) {
+    const x0 = pcm16Samples[i]
+    const y0 = a0 * x0 + a1 * x1 + a2 * x2 - b1 * y1 - b2 * y2
+    
+    filteredSamples[i] = y0
+    
+    // Shift history
+    x2 = x1; x1 = x0
+    y2 = y1; y1 = y0
+  }
+  
+  // Step 2: Downsample from 24kHz to 8kHz (3:1 ratio) with averaging
+  const targetLen = Math.floor(filteredSamples.length / 3)
+  const pcm8kSamples = new Int16Array(targetLen)
+  
+  for (let i = 0; i < targetLen; i++) {
+    const idx = i * 3
+    // Average 3 consecutive filtered samples to reduce noise
+    let sum = filteredSamples[idx]
+    if (idx + 1 < filteredSamples.length) sum += filteredSamples[idx + 1]
+    if (idx + 2 < filteredSamples.length) sum += filteredSamples[idx + 2]
+    
+    // Clamp to 16-bit range and convert back to integer
+    const avg = Math.round(sum / 3)
+    pcm8kSamples[i] = Math.max(-32768, Math.min(32767, avg))
   }
   
   console.log(`🎵 Downsampled to ${pcm8kSamples.length} samples at 8kHz`)
   
-  // Convert to μ-law and chunk into 20ms frames (160 bytes each)
+  // Step 3: Convert to μ-law in exactly 160-byte chunks (20ms frames)
   const chunks: Uint8Array[] = []
-  const samplesPerChunk = 160 // 20ms at 8kHz = 160 samples
+  const samplesPerChunk = 160
   
   for (let i = 0; i < pcm8kSamples.length; i += samplesPerChunk) {
     const chunk = new Uint8Array(samplesPerChunk)
@@ -128,10 +149,9 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
     for (let j = 0; j < samplesPerChunk; j++) {
       const sampleIndex = i + j
       if (sampleIndex < pcm8kSamples.length) {
-        // Convert PCM16 to μ-law
         chunk[j] = pcmToMulaw(pcm8kSamples[sampleIndex])
       } else {
-        // μ-law silence value
+        // Fill with μ-law silence (0xFF)
         chunk[j] = 0xFF
       }
     }
