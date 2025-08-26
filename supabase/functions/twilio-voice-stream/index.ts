@@ -11,6 +11,9 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
+// Version banner for debugging deployments
+const VERSION = 'twilio-voice-stream@2025-08-26-01'
+
 // Audio buffer to accumulate incoming audio
 class AudioBuffer {
   private chunks: Uint8Array[] = []
@@ -153,6 +156,25 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   return chunks
 }
 
+// Generate μ-law 8kHz sine tone chunks for diagnostics (20ms per chunk)
+function generateMulawSineWaveChunks(durationMs: number, frequencyHz = 1000, amplitude = 10000): Uint8Array[] {
+  const sampleRate = 8000;
+  const totalSamples = Math.max(1, Math.floor((durationMs / 1000) * sampleRate));
+  const samplesPerChunk = 160; // 20ms @ 8kHz
+  const chunks: Uint8Array[] = [];
+  for (let i = 0; i < totalSamples; i += samplesPerChunk) {
+    const chunk = new Uint8Array(samplesPerChunk);
+    for (let j = 0; j < samplesPerChunk; j++) {
+      const t = (i + j) / sampleRate;
+      const s = Math.sin(2 * Math.PI * frequencyHz * t);
+      const pcm = Math.max(-32768, Math.min(32767, Math.round(s * amplitude)));
+      chunk[j] = pcmToMulaw(pcm);
+    }
+    chunks.push(chunk);
+  }
+  return chunks;
+}
+
 // Send raw μ-law audio to Twilio with better error handling and timing
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
   if (socket.readyState !== WebSocket.OPEN) {
@@ -193,9 +215,9 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       break
     }
 
-    // Reduce delay between chunks to prevent audio gaps
+    // Twilio expects 20ms pacing per 160-sample μ-law chunk @8kHz
     if (i < chunks.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise(resolve => setTimeout(resolve, 20))
     }
   }
 
@@ -316,7 +338,7 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
       body: JSON.stringify({
         text,
         model_id: 'eleven_turbo_v2_5',
-        output_format: 'pcm_16000' // Use proven format
+        output_format: 'pcm_16000' // Force PCM16 16kHz for reliable conversion
       })
     })
 
@@ -366,13 +388,14 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
 }
 
 serve(async (req) => {
-  console.log('🎵 TWILIO VOICE STREAM - FIXED VERSION 5.1 - STATIC ELIMINATED')
+  console.log(`🎵 TWILIO VOICE STREAM - ${VERSION}`)
   console.log('📍 Request received, checking WebSocket upgrade...')
+  const debugTone = (Deno.env.get('TWILIO_DEBUG_TONE') || '').toLowerCase() === 'true'
+  console.log(`🧪 Debug tone mode: ${debugTone}`)
   
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
-
   const upgrade = req.headers.get('upgrade') || ''
   if (upgrade.toLowerCase() !== 'websocket') {
     return new Response('Expected Websocket', { status: 426 })
@@ -409,14 +432,26 @@ serve(async (req) => {
         
         const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
         const agentId = Deno.env.get('ELEVENLABS_AGENT_ID') || '4dv4ZFiVvCcdXFqlpVzY'
+        const openaiKey = Deno.env.get('OPENAI_API_KEY')
         
         console.log(`🔑 ElevenLabs Key present: ${!!elevenLabsKey}`)
         console.log(`🤖 Agent ID: ${agentId}`)
-
+        console.log(`🧠 OpenAI Key present: ${!!openaiKey}`)
+        
         if (!elevenLabsKey) {
           console.error('❌ ELEVENLABS_API_KEY not found - cannot connect to ElevenLabs')
           return
         }
+
+        // Diagnostic: play a known-good tone directly to Twilio and skip agent connection
+        if (debugTone) {
+          console.log('🧪 Debug tone mode enabled - sending 3s 1kHz tone to Twilio and skipping agent.')
+          const toneChunks = generateMulawSineWaveChunks(3000, 1000)
+          await sendAudioToTwilio(toneChunks, streamSid, socket)
+          console.log('✅ Debug tone sent. Awaiting stop event.')
+          return
+        }
+
         // Send immediate μ-law greeting while agent connects (no agent first_message to avoid overlap)
         await sendImmediateGreeting(streamSid, socket, businessName)
 
