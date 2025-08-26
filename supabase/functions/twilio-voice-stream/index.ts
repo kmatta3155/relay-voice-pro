@@ -155,13 +155,12 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
 
 // Send raw μ-law audio to Twilio with better error handling and timing
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
-  console.log(`➡️ Sending ${chunks.length} μ-law chunks to Twilio (streamSid: ${streamSid})`)
-  console.log(`🔌 WebSocket readyState: ${socket.readyState}`)
-  
   if (socket.readyState !== WebSocket.OPEN) {
     console.error('❌ WebSocket not open, cannot send audio')
     return
   }
+
+  console.log(`➡️ Sending ${chunks.length} μ-law chunks to Twilio (streamSid: ${streamSid})`)
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
@@ -187,20 +186,20 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     try {
       socket.send(JSON.stringify(message))
       if (i === 0) {
-        const mediaKeys = Object.keys(message.media || {})
-        console.log(`🔍 First chunk sent; media keys: ${mediaKeys.join(',')}; b64 length: ${base64Payload.length}`)
+        console.log(`🔍 First chunk sent; payload length: ${base64Payload.length}; status: SUCCESS`)
       }
     } catch (e) {
       console.error(`❌ Failed to send chunk ${i + 1}:`, e)
       break
     }
 
+    // Reduce delay between chunks to prevent audio gaps
     if (i < chunks.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 20))
+      await new Promise(resolve => setTimeout(resolve, 10))
     }
   }
 
-  console.log(`✅ Sent ${chunks.length} μ-law chunks to Twilio`)
+  console.log(`✅ Completed sending ${chunks.length} μ-law chunks to Twilio`)
 }
 
 // Create WAV from μ-law for Whisper
@@ -396,7 +395,6 @@ serve(async (req) => {
   socket.onmessage = async (event) => {
     try {
       const data = JSON.parse(event.data)
-      console.log('📥 Raw WebSocket message received:', JSON.stringify(data))
       console.log('📨 Parsed event type:', data.event)
 
       if (data.event === 'start') {
@@ -526,8 +524,7 @@ serve(async (req) => {
             .map(char => char.charCodeAt(0))
         )
         
-        console.log('🎤 Audio chunk received, buffer size:', data.media.chunk)
-        console.log('🔍 Audio chunk size:', audioData.length, 'bytes')
+        console.log('🎤 Audio chunk received, buffer size:', data.media.chunk, 'audioData:', audioData.length, 'bytes')
         
         buffer.addChunk(audioData)
         
