@@ -87,62 +87,41 @@ function mulawToPcm(mu: number): number {
   return sign ? (0x84 - sample) : (sample - 0x84)
 }
 
-// COMPREHENSIVE FIX: ElevenLabs 24kHz PCM16 to Twilio 8kHz μ-law - STATIC ELIMINATION
+// CRITICAL FIX: ElevenLabs Conversational AI outputs 16kHz PCM16 to Twilio 8kHz μ-law
 function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   console.log(`🎧 Processing ${audioData.length} bytes from ElevenLabs`)
   
-  // ElevenLabs Conversational AI outputs PCM16 at 24kHz - verified from official docs
+  // CRITICAL CORRECTION: ElevenLabs Conversational AI outputs PCM16 at 16kHz (not 24kHz!)
   const pcm16Samples = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.length / 2)
-  console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples at 24kHz`)
+  console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples at 16kHz`)
   
-  // Validate minimum samples for proper processing
-  if (pcm16Samples.length < 6) {
-    console.warn(`⚠️ Insufficient samples for 24kHz→8kHz conversion: ${pcm16Samples.length}`)
+  // Validate minimum samples
+  if (pcm16Samples.length < 2) {
+    console.warn(`⚠️ Insufficient samples for 16kHz→8kHz conversion: ${pcm16Samples.length}`)
     return []
   }
   
-  // CRITICAL: Proper 6th-order Butterworth low-pass filter at 3.4kHz cutoff
-  // This prevents aliasing artifacts when downsampling 24kHz→8kHz (3:1 ratio)
-  const filteredSamples = new Float64Array(pcm16Samples.length)
+  // Step 1: Apply proper anti-aliasing filter for 16kHz→8kHz (2:1 decimation)
+  // Low-pass filter with 3.4kHz cutoff (below 4kHz Nyquist for 8kHz output)
+  const filteredSamples = new Float32Array(pcm16Samples.length)
   
-  // 6th-order Butterworth coefficients for 3.4kHz cutoff at 24kHz sample rate
-  // These coefficients provide -60dB attenuation above 4kHz (Nyquist for 8kHz)
-  const b = [0.000123, 0.000738, 0.001845, 0.002460, 0.001845, 0.000738, 0.000123]
-  const a = [1.0, -4.1730, 7.3373, -6.9336, 3.7940, -1.1396, 0.1453]
+  // Simple but effective low-pass filter for 2:1 decimation
+  // Coefficients for 3.4kHz cutoff at 16kHz sample rate
+  const a = 0.25 // Higher cutoff frequency for 16kHz input
+  filteredSamples[0] = pcm16Samples[0]
   
-  // Initialize filter memory
-  const x_mem = new Array(7).fill(0)
-  const y_mem = new Array(7).fill(0)
-  
-  // Apply filter
-  for (let i = 0; i < pcm16Samples.length; i++) {
-    // Shift delay line
-    for (let j = 6; j > 0; j--) {
-      x_mem[j] = x_mem[j-1]
-      y_mem[j] = y_mem[j-1]
-    }
-    x_mem[0] = pcm16Samples[i]
-    
-    // Apply filter equation
-    let output = 0
-    for (let j = 0; j < 7; j++) {
-      output += b[j] * x_mem[j]
-    }
-    for (let j = 1; j < 7; j++) {
-      output -= a[j] * y_mem[j]
-    }
-    
-    y_mem[0] = output
-    filteredSamples[i] = output
+  for (let i = 1; i < pcm16Samples.length; i++) {
+    // IIR low-pass filter
+    filteredSamples[i] = a * pcm16Samples[i] + (1 - a) * filteredSamples[i - 1]
   }
   
-  // Step 2: Downsample 24kHz→8kHz (3:1) with proper decimation
-  const targetLen = Math.floor(filteredSamples.length / 3)
+  // Step 2: Downsample from 16kHz to 8kHz (2:1 ratio)
+  const targetLen = Math.floor(filteredSamples.length / 2)
   const pcm8kSamples = new Int16Array(targetLen)
   
   for (let i = 0; i < targetLen; i++) {
-    const idx = i * 3
-    // Take every 3rd sample from filtered data (proper decimation)
+    const idx = i * 2
+    // Take every 2nd sample from filtered data (proper 2:1 decimation)
     const sample = Math.round(filteredSamples[idx])
     // Clamp to 16-bit signed integer range
     pcm8kSamples[i] = Math.max(-32768, Math.min(32767, sample))
@@ -162,7 +141,7 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
       if (sampleIndex < pcm8kSamples.length) {
         chunk[j] = pcmToMulaw(pcm8kSamples[sampleIndex])
       } else {
-        // Pad with μ-law digital silence (0xFF = -0 in μ-law)
+        // Pad with μ-law digital silence (0xFF)
         chunk[j] = 0xFF
       }
     }
