@@ -91,18 +91,25 @@ function mulawToPcm(mu: number): number {
 function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   console.log(`🎧 Processing ${audioData.length} bytes from ElevenLabs`)
   
-  // ElevenLabs sends PCM16 at 16kHz - convert to samples
+  // ElevenLabs Conversational AI sends PCM16 at 24kHz - convert to samples
   const pcm16Samples = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.length / 2)
-  console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples`)
+  console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples at 24kHz`)
   
-  // Downsample from 16kHz to 8kHz with simple low-pass (average pairs)
-  const len = Math.floor(pcm16Samples.length / 2)
+  // Downsample from 24kHz to 8kHz (3:1 ratio) with proper anti-aliasing
+  const len = Math.floor(pcm16Samples.length / 3)
   const pcm8kSamples = new Int16Array(len)
   for (let i = 0; i < len; i++) {
-    const a = pcm16Samples[i * 2]
-    const b = pcm16Samples[i * 2 + 1]
-    // Box filter to reduce aliasing before decimation
-    pcm8kSamples[i] = (a + b) / 2
+    // Take every 3rd sample and apply simple low-pass filter
+    const i3 = i * 3
+    if (i3 + 2 < pcm16Samples.length) {
+      // Average 3 samples for anti-aliasing before decimation
+      const s0 = pcm16Samples[i3]
+      const s1 = pcm16Samples[i3 + 1] 
+      const s2 = pcm16Samples[i3 + 2]
+      pcm8kSamples[i] = Math.round((s0 + s1 + s2) / 3)
+    } else {
+      pcm8kSamples[i] = pcm16Samples[i3]
+    }
   }
   
   console.log(`🎵 Downsampled to ${pcm8kSamples.length} samples at 8kHz`)
@@ -310,9 +317,32 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
     const pcm16kBytes = new Uint8Array(audioBuffer)
     console.log('🎼 TTS greeting PCM16 bytes received:', pcm16kBytes.length)
     
-    // Convert PCM16 16kHz to μ-law 8kHz using our proven conversion function
-    const chunks = processElevenLabsAudioToMulaw(pcm16kBytes)
-    console.log(`📦 Converted to ${chunks.length} μ-law chunks`)
+    // For TTS greeting (16kHz), create a separate processing function
+    // Convert PCM16 16kHz to μ-law 8kHz (2:1 ratio)
+    const pcm16Samples = new Int16Array(pcm16kBytes.buffer, pcm16kBytes.byteOffset, pcm16kBytes.length / 2)
+    const len = Math.floor(pcm16Samples.length / 2)
+    const pcm8kSamples = new Int16Array(len)
+    for (let i = 0; i < len; i++) {
+      const a = pcm16Samples[i * 2]
+      const b = pcm16Samples[i * 2 + 1] || a
+      pcm8kSamples[i] = Math.round((a + b) / 2)
+    }
+    
+    // Convert to μ-law chunks
+    const chunks: Uint8Array[] = []
+    const samplesPerChunk = 160
+    for (let i = 0; i < pcm8kSamples.length; i += samplesPerChunk) {
+      const chunk = new Uint8Array(samplesPerChunk)
+      for (let j = 0; j < samplesPerChunk; j++) {
+        const sampleIndex = i + j
+        if (sampleIndex < pcm8kSamples.length) {
+          chunk[j] = pcmToMulaw(pcm8kSamples[sampleIndex])
+        } else {
+          chunk[j] = 0xFF
+        }
+      }
+      chunks.push(chunk)
+    }
     
     await sendAudioToTwilio(chunks, streamSid, socket)
     console.log('✅ TTS greeting sent to Twilio via proven conversion pipeline')
