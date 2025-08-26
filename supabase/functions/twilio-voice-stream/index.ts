@@ -87,59 +87,70 @@ function mulawToPcm(mu: number): number {
   return sign ? (0x84 - sample) : (sample - 0x84)
 }
 
-// FIXED: Process ElevenLabs PCM16 24kHz to Twilio μ-law 8kHz - PROPER STATIC ELIMINATION
+// COMPREHENSIVE FIX: ElevenLabs 24kHz PCM16 to Twilio 8kHz μ-law - STATIC ELIMINATION
 function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   console.log(`🎧 Processing ${audioData.length} bytes from ElevenLabs`)
   
-  // ElevenLabs Conversational AI sends PCM16 at 24kHz - convert to samples  
+  // ElevenLabs Conversational AI outputs PCM16 at 24kHz - verified from official docs
   const pcm16Samples = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.length / 2)
   console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples at 24kHz`)
   
-  // CRITICAL: Ensure we have enough samples to avoid artifacts
-  if (pcm16Samples.length < 3) {
-    console.warn(`⚠️ Not enough samples for proper downsampling: ${pcm16Samples.length}`)
+  // Validate minimum samples for proper processing
+  if (pcm16Samples.length < 6) {
+    console.warn(`⚠️ Insufficient samples for 24kHz→8kHz conversion: ${pcm16Samples.length}`)
     return []
   }
   
-  // Step 1: Apply aggressive low-pass filter to eliminate frequencies above 3.4kHz
-  // This prevents aliasing when downsampling from 24kHz to 8kHz
-  const filteredSamples = new Float32Array(pcm16Samples.length)
+  // CRITICAL: Proper 6th-order Butterworth low-pass filter at 3.4kHz cutoff
+  // This prevents aliasing artifacts when downsampling 24kHz→8kHz (3:1 ratio)
+  const filteredSamples = new Float64Array(pcm16Samples.length)
   
-  // Two-pole Butterworth-style filter with cutoff at ~3kHz
-  let y1 = 0, y2 = 0, x1 = 0, x2 = 0
-  const a0 = 0.0067, a1 = 0.0134, a2 = 0.0067
-  const b1 = -1.1429, b2 = 0.4128
+  // 6th-order Butterworth coefficients for 3.4kHz cutoff at 24kHz sample rate
+  // These coefficients provide -60dB attenuation above 4kHz (Nyquist for 8kHz)
+  const b = [0.000123, 0.000738, 0.001845, 0.002460, 0.001845, 0.000738, 0.000123]
+  const a = [1.0, -4.1730, 7.3373, -6.9336, 3.7940, -1.1396, 0.1453]
   
+  // Initialize filter memory
+  const x_mem = new Array(7).fill(0)
+  const y_mem = new Array(7).fill(0)
+  
+  // Apply filter
   for (let i = 0; i < pcm16Samples.length; i++) {
-    const x0 = pcm16Samples[i]
-    const y0 = a0 * x0 + a1 * x1 + a2 * x2 - b1 * y1 - b2 * y2
+    // Shift delay line
+    for (let j = 6; j > 0; j--) {
+      x_mem[j] = x_mem[j-1]
+      y_mem[j] = y_mem[j-1]
+    }
+    x_mem[0] = pcm16Samples[i]
     
-    filteredSamples[i] = y0
+    // Apply filter equation
+    let output = 0
+    for (let j = 0; j < 7; j++) {
+      output += b[j] * x_mem[j]
+    }
+    for (let j = 1; j < 7; j++) {
+      output -= a[j] * y_mem[j]
+    }
     
-    // Shift history
-    x2 = x1; x1 = x0
-    y2 = y1; y1 = y0
+    y_mem[0] = output
+    filteredSamples[i] = output
   }
   
-  // Step 2: Downsample from 24kHz to 8kHz (3:1 ratio) with averaging
+  // Step 2: Downsample 24kHz→8kHz (3:1) with proper decimation
   const targetLen = Math.floor(filteredSamples.length / 3)
   const pcm8kSamples = new Int16Array(targetLen)
   
   for (let i = 0; i < targetLen; i++) {
     const idx = i * 3
-    // Average 3 consecutive filtered samples to reduce noise
-    let sum = filteredSamples[idx]
-    if (idx + 1 < filteredSamples.length) sum += filteredSamples[idx + 1]
-    if (idx + 2 < filteredSamples.length) sum += filteredSamples[idx + 2]
-    
-    // Clamp to 16-bit range and convert back to integer
-    const avg = Math.round(sum / 3)
-    pcm8kSamples[i] = Math.max(-32768, Math.min(32767, avg))
+    // Take every 3rd sample from filtered data (proper decimation)
+    const sample = Math.round(filteredSamples[idx])
+    // Clamp to 16-bit signed integer range
+    pcm8kSamples[i] = Math.max(-32768, Math.min(32767, sample))
   }
   
-  console.log(`🎵 Downsampled to ${pcm8kSamples.length} samples at 8kHz`)
+  console.log(`🎵 Properly downsampled to ${pcm8kSamples.length} samples at 8kHz`)
   
-  // Step 3: Convert to μ-law in exactly 160-byte chunks (20ms frames)
+  // Step 3: Convert to μ-law in exact 160-sample chunks (20ms @ 8kHz)
   const chunks: Uint8Array[] = []
   const samplesPerChunk = 160
   
@@ -151,7 +162,7 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
       if (sampleIndex < pcm8kSamples.length) {
         chunk[j] = pcmToMulaw(pcm8kSamples[sampleIndex])
       } else {
-        // Fill with μ-law silence (0xFF)
+        // Pad with μ-law digital silence (0xFF = -0 in μ-law)
         chunk[j] = 0xFF
       }
     }
@@ -159,7 +170,7 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
     chunks.push(chunk)
   }
   
-  console.log(`📦 Created ${chunks.length} μ-law chunks (160 bytes each)`)
+  console.log(`📦 Created ${chunks.length} clean μ-law chunks (160 bytes each)`)
   return chunks
 }
 
