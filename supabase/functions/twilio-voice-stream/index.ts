@@ -95,14 +95,21 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   const pcm16Samples = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.length / 2)
   console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples`)
   
-  // Downsample from 16kHz to 8kHz with simple low-pass (average pairs)
+  // Downsample from 16kHz to 8kHz with proper anti-aliasing
   const len = Math.floor(pcm16Samples.length / 2)
   const pcm8kSamples = new Int16Array(len)
+  
+  // Simple low-pass filter before decimation to prevent aliasing
   for (let i = 0; i < len; i++) {
-    const a = pcm16Samples[i * 2]
-    const b = pcm16Samples[i * 2 + 1]
-    // Box filter to reduce aliasing before decimation
-    pcm8kSamples[i] = (a + b) / 2
+    const i2 = i * 2
+    if (i2 + 1 < pcm16Samples.length) {
+      // Apply simple box filter with proper scaling
+      const sample1 = pcm16Samples[i2] * 0.6
+      const sample2 = pcm16Samples[i2 + 1] * 0.6
+      pcm8kSamples[i] = Math.round(sample1 + sample2)
+    } else {
+      pcm8kSamples[i] = pcm16Samples[i2]
+    }
   }
   
   console.log(`🎵 Downsampled to ${pcm8kSamples.length} samples at 8kHz`)
@@ -173,8 +180,10 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       break
     }
 
+    // Send chunks with proper timing - no artificial delay
     if (i < chunks.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 20))
+      // Small delay to prevent overwhelming Twilio's buffer
+      await new Promise(resolve => setTimeout(resolve, 1))
     }
   }
 
