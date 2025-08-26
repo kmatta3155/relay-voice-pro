@@ -516,19 +516,22 @@ serve(async (req) => {
           }))
         }
 
-        // Process accumulated audio for Whisper if needed
-        if (buffer.shouldProcess()) {
-          const audioToProcess = buffer.getAndClear()
-          console.log('🧠 Processing accumulated audio for Whisper:', audioToProcess.length, 'bytes')
-          
-          // Process with Whisper in background
-          processAudioWithWhisper(audioToProcess).then(transcript => {
-            if (transcript.trim()) {
-              console.log('📝 Whisper transcript:', transcript)
-            }
-          }).catch(err => {
-            console.error('❌ Whisper processing error:', err)
-          })
+        // Skip Whisper processing when ElevenLabs is handling the conversation
+        // Only use Whisper as fallback if ElevenLabs connection fails
+        if (!elevenLabsWs || elevenLabsWs.readyState !== WebSocket.OPEN) {
+          if (buffer.shouldProcess()) {
+            const audioToProcess = buffer.getAndClear()
+            console.log('🧠 Processing accumulated audio for Whisper (ElevenLabs fallback):', audioToProcess.length, 'bytes')
+            
+            // Process with Whisper in background
+            processAudioWithWhisper(audioToProcess).then(transcript => {
+              if (transcript.trim()) {
+                console.log('📝 Whisper transcript:', transcript)
+              }
+            }).catch(err => {
+              console.error('❌ Whisper processing error:', err)
+            })
+          }
         }
 
       } else if (data.event === 'stop') {
