@@ -156,6 +156,50 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   return chunks
 }
 
+// --- Container detection & helpers to prevent static ---
+function detectAudioContainer(bytes: Uint8Array): 'wav' | 'mp3' | 'ogg' | 'raw' {
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x41 && bytes[10] === 0x56 && bytes[11] === 0x45) {
+    return 'wav'
+  }
+  if (bytes.length >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+    return 'mp3'
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
+    return 'mp3'
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) {
+    return 'ogg'
+  }
+  return 'raw'
+}
+
+function stripWavHeader(bytes: Uint8Array): Uint8Array {
+  // Try to locate the 'data' chunk and return its payload
+  for (let i = 12; i < bytes.length - 8; i++) {
+    if (bytes[i] === 0x64 && bytes[i + 1] === 0x61 && bytes[i + 2] === 0x74 && bytes[i + 3] === 0x61) {
+      const dataSize = bytes[i + 4] | (bytes[i + 5] << 8) | (bytes[i + 6] << 16) | (bytes[i + 7] << 24)
+      const start = i + 8
+      return bytes.subarray(start, Math.min(start + dataSize, bytes.length))
+    }
+  }
+  // Fallback to typical 44-byte header
+  return bytes.subarray(44)
+}
+
+function chunkMulawFrames(mulaw: Uint8Array): Uint8Array[] {
+  const chunks: Uint8Array[] = []
+  for (let i = 0; i < mulaw.length; i += 160) {
+    const frame = new Uint8Array(160)
+    const len = Math.min(160, mulaw.length - i)
+    frame.set(mulaw.subarray(i, i + len), 0)
+    if (len < 160) {
+      for (let j = len; j < 160; j++) frame[j] = 0xff // μ-law digital silence
+    }
+    chunks.push(frame)
+  }
+  return chunks
+}
+
 // Generate μ-law 8kHz sine tone chunks for diagnostics (20ms per chunk)
 function generateMulawSineWaveChunks(durationMs: number, frequencyHz = 1000, amplitude = 10000): Uint8Array[] {
   const sampleRate = 8000;
@@ -207,7 +251,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     const message = {
       event: 'media',
       streamSid,
-      media: { payload: base64Payload }
+      media: { track: 'outbound', payload: base64Payload }
     }
 
     try {
@@ -415,7 +459,9 @@ serve(async (req) => {
   let businessName = ''
   let elevenLabsWs: WebSocket | null = null
   let elevenLabsConnected = false
-
+  // Track expected ConvAI output encoding for correct processing
+  let convaiOutputEncoding: 'pcm_16000' | 'ulaw_8000' = 'pcm_16000'
+  let convaiOutputSampleRate = 16000
   socket.onopen = () => {
     console.log('🔌 WebSocket connected to Twilio')
   }
@@ -436,18 +482,22 @@ serve(async (req) => {
         console.log('🔑 Checking environment variables...')
         
         const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
-        const agentId = Deno.env.get('ELEVENLABS_AGENT_ID') || '4dv4ZFiVvCcdXFqlpVzY'
+        const agentId = Deno.env.get('ELEVENLABS_AGENT_ID')
         const openaiKey = Deno.env.get('OPENAI_API_KEY')
         
         console.log(`🔑 ElevenLabs Key present: ${!!elevenLabsKey}`)
-        console.log(`🤖 Agent ID: ${agentId}`)
+        console.log(`🤖 Agent ID present: ${!!agentId}`)
         console.log(`🧠 OpenAI Key present: ${!!openaiKey}`)
         
         if (!elevenLabsKey) {
           console.error('❌ ELEVENLABS_API_KEY not found - cannot connect to ElevenLabs')
           return
         }
-
+        if (!agentId) {
+          console.error('❌ ELEVENLABS_AGENT_ID not set - cannot use ConvAI; sending greeting only')
+          await sendImmediateGreeting(streamSid, socket, businessName)
+          return
+        }
         // Diagnostic: play a known-good tone directly to Twilio and skip agent connection
         if (debugTone) {
           console.log('🧪 Debug tone mode enabled - sending 3s 1kHz tone to Twilio and skipping agent.')
@@ -516,8 +566,8 @@ serve(async (req) => {
                       sample_rate: 16000
                     },
                     output: {
-                      encoding: 'pcm_16000', // Force PCM16 16kHz output from ConvAI
-                      sample_rate: 16000
+                      encoding: 'ulaw_8000', // Force μ-law 8kHz output from ConvAI to avoid static
+                      sample_rate: 8000
                     }
                   }
                 }
@@ -525,7 +575,9 @@ serve(async (req) => {
             }
             
             elevenLabsWs!.send(JSON.stringify(initMessage))
-            console.log('📤 Sent conversation config to ElevenLabs with FORCED PCM16 16kHz output')
+            convaiOutputEncoding = 'ulaw_8000'
+            convaiOutputSampleRate = 8000
+            console.log('📤 Sent conversation config to ElevenLabs: FORCED output ulaw_8000 @ 8kHz')
           }
 
           elevenLabsWs.onmessage = async (message) => {
@@ -536,16 +588,37 @@ serve(async (req) => {
 
                 if (data.type === 'audio') {
                   console.log('🎵 Received audio from ElevenLabs, processing...')
-                  console.log(`📊 Audio data length: ${data.audio_event?.audio_base_64?.length || 0}`)
-                  
-                  const audioData = new Uint8Array(atob(data.audio_event.audio_base_64).split('').map(c => c.charCodeAt(0)))
-                  console.log(`🎧 Decoded audio bytes: ${audioData.length}`)
-                  console.log(`🔍 First 8 bytes (hex): ${Array.from(audioData.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`)
-                  
-                  // Process and send to Twilio - NO WAV HEADERS, raw μ-law only
-                  const processedChunks = processElevenLabsAudioToMulaw(audioData)
+                  const b64 = data.audio_event?.audio_base_64
+                  if (!b64) {
+                    console.warn('⚠️ Missing audio_base_64 in ElevenLabs event')
+                    return
+                  }
+                  const bytes = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)))
+                  const first8 = Array.from(bytes.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+                  const container = detectAudioContainer(bytes)
+                  console.log(`🔍 First 8 bytes (hex): ${first8} | container=${container} | expected=${convaiOutputEncoding}`)
+
+                  if (convaiOutputEncoding === 'ulaw_8000') {
+                    // Passthrough μ-law @8k directly to Twilio in 160-byte frames
+                    const mulawPayload = (container === 'wav') ? stripWavHeader(bytes) : bytes
+                    const chunks = chunkMulawFrames(mulawPayload)
+                    console.log(`🎯 ConvAI ulaw passthrough: ${chunks.length} chunks`)
+                    await sendAudioToTwilio(chunks, streamSid, socket)
+                    return
+                  }
+
+                  // Expecting PCM16 16kHz
+                  let payload = bytes
+                  if (container === 'wav') {
+                    payload = stripWavHeader(bytes)
+                    console.log('🧹 Stripped WAV header for PCM16 payload')
+                  } else if (container === 'mp3' || container === 'ogg') {
+                    console.warn(`⛔ Compressed audio detected (${container}) – dropping to prevent static`)
+                    return
+                  }
+
+                  const processedChunks = processElevenLabsAudioToMulaw(payload)
                   await sendAudioToTwilio(processedChunks, streamSid, socket)
-                  
                   console.log(`📤 Sent ${processedChunks.length} μ-law chunks to Twilio`)
                 } else if (data.type === 'user_transcript') {
                   console.log('📝 User transcript:', data.user_transcription_event.user_transcript)
