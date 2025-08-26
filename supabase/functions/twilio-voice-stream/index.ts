@@ -192,12 +192,17 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     }
 
     let base64Payload: string
-    try {
-      base64Payload = btoa(String.fromCharCode(...chunk))
-    } catch (e) {
-      console.error(`❌ Failed to encode chunk ${i + 1} to base64:`, e)
-      continue
-    }
+      try {
+        // Binary-safe base64 encoding for Twilio compliance
+        let binary = ''
+        for (let j = 0; j < chunk.length; j++) {
+          binary += String.fromCharCode(chunk[j])
+        }
+        base64Payload = btoa(binary)
+      } catch (e) {
+        console.error(`❌ Failed to encode chunk ${i + 1} to base64:`, e)
+        continue
+      }
 
     const message = {
       event: 'media',
@@ -452,6 +457,15 @@ serve(async (req) => {
           return
         }
 
+        // Check if we should use agent audio or fallback to HTTP TTS only
+        const useAgentAudio = (Deno.env.get('TWILIO_USE_AGENT_AUDIO') || 'true').toLowerCase() === 'true'
+        
+        if (!useAgentAudio) {
+          console.log('🔄 Agent audio disabled - using HTTP TTS fallback only')
+          await sendImmediateGreeting(streamSid, socket, businessName)
+          return
+        }
+
         // Send immediate μ-law greeting while agent connects (no agent first_message to avoid overlap)
         await sendImmediateGreeting(streamSid, socket, businessName)
 
@@ -482,7 +496,7 @@ serve(async (req) => {
             console.log('✅ ElevenLabs WebSocket connected successfully')
             elevenLabsConnected = true
             
-            // Send conversation initiation with required type to trigger greeting
+            // CRITICAL: Force ElevenLabs ConvAI output audio format to avoid static
             const initMessage = {
               type: 'conversation_initiation_client_data',
               conversation_config_override: {
@@ -495,13 +509,23 @@ serve(async (req) => {
                 conversation_config: {
                   turn_detection: {
                     type: 'server_vad'
+                  },
+                  audio: {
+                    input: {
+                      encoding: 'pcm_16000',
+                      sample_rate: 16000
+                    },
+                    output: {
+                      encoding: 'pcm_16000', // Force PCM16 16kHz output from ConvAI
+                      sample_rate: 16000
+                    }
                   }
                 }
               }
             }
             
             elevenLabsWs!.send(JSON.stringify(initMessage))
-            console.log('📤 Sent conversation config to ElevenLabs (init, no first_message)')
+            console.log('📤 Sent conversation config to ElevenLabs with FORCED PCM16 16kHz output')
           }
 
           elevenLabsWs.onmessage = async (message) => {
