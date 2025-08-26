@@ -341,6 +341,7 @@ serve(async (req) => {
   let tenantId = ''
   let businessName = ''
   let elevenLabsWs: WebSocket | null = null
+  let elevenLabsConnected = false
 
   socket.onopen = () => {
     console.log('🔌 WebSocket connected to Twilio')
@@ -400,6 +401,7 @@ serve(async (req) => {
 
           elevenLabsWs.onopen = () => {
             console.log('✅ ElevenLabs WebSocket connected successfully')
+            elevenLabsConnected = true
             
             // Send conversation initiation with required type to trigger greeting
             const initMessage = {
@@ -463,6 +465,7 @@ serve(async (req) => {
 
           elevenLabsWs.onclose = (event) => {
             console.log('🔌 ElevenLabs WebSocket closed:', event.code, event.reason)
+            elevenLabsConnected = false
           }
 
         } catch (error) {
@@ -483,7 +486,7 @@ serve(async (req) => {
         buffer.addChunk(audioData)
         
         // Send to ElevenLabs immediately (convert Twilio μ-law 8k -> PCM16 16k)
-        if (elevenLabsWs?.readyState === WebSocket.OPEN) {
+        if (elevenLabsConnected && elevenLabsWs?.readyState === WebSocket.OPEN) {
           // μ-law 8k to PCM16 8k
           const pcm8k = new Int16Array(audioData.length)
           for (let i = 0; i < audioData.length; i++) {
@@ -518,7 +521,7 @@ serve(async (req) => {
 
         // Skip Whisper processing when ElevenLabs is handling the conversation
         // Only use Whisper as fallback if ElevenLabs connection fails
-        if (!elevenLabsWs || elevenLabsWs.readyState !== WebSocket.OPEN) {
+        if (!elevenLabsConnected) {
           if (buffer.shouldProcess()) {
             const audioToProcess = buffer.getAndClear()
             console.log('🧠 Processing accumulated audio for Whisper (ElevenLabs fallback):', audioToProcess.length, 'bytes')
