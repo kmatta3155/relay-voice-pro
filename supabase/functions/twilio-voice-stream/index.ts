@@ -141,17 +141,14 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     console.error('❌ WebSocket not open, cannot send audio')
     return
   }
-  
-  let sequenceNumber = 0;
+
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
-    
-    // Verify chunk is exactly 160 bytes
+
     if (chunk.length !== 160) {
-      console.warn(`⚠️ Chunk ${i + 1} has incorrect size: ${chunk.length} bytes (expected 160)`)
+      console.warn(`⚠️ Chunk ${i + 1} has incorrect size: ${chunk.length} bytes (expected 160)`) 
     }
-    
-    // Create media message with proper base64 encoding
+
     let base64Payload: string
     try {
       base64Payload = btoa(String.fromCharCode(...chunk))
@@ -159,18 +156,13 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       console.error(`❌ Failed to encode chunk ${i + 1} to base64:`, e)
       continue
     }
-    
+
     const message = {
       event: 'media',
-      streamSid: streamSid,
-      media: {
-        track: "outbound",
-        chunk: (++sequenceNumber).toString(),
-        timestamp: (sequenceNumber * 20).toString(),
-        payload: base64Payload
-      }
+      streamSid,
+      media: { payload: base64Payload }
     }
-    
+
     try {
       socket.send(JSON.stringify(message))
       if (i === 0) {
@@ -180,28 +172,13 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
       console.error(`❌ Failed to send chunk ${i + 1}:`, e)
       break
     }
-    
-    // Precise 20ms timing (8kHz μ-law = 160 samples = 20ms)
+
     if (i < chunks.length - 1) {
       await new Promise(resolve => setTimeout(resolve, 20))
     }
   }
-  
-  // Send mark message to tell Twilio to flush its buffer and play the audio
-  const markMessage = {
-    event: "mark",
-    streamSid,
-    mark: { name: `end-of-message-${sequenceNumber}` }
-  };
-  
-  try {
-    socket.send(JSON.stringify(markMessage));
-    console.log(`📌 Mark message sent for sequence ${sequenceNumber}`);
-  } catch (e) {
-    console.error('❌ Failed to send mark message:', e);
-  }
-  
-  console.log(`✅ All ${chunks.length} μ-law chunks sent to Twilio with mark`)
+
+  console.log(`✅ Sent ${chunks.length} μ-law chunks to Twilio`)
 }
 
 // Create WAV from μ-law for Whisper
