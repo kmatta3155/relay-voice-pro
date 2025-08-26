@@ -187,7 +187,8 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     try {
       socket.send(JSON.stringify(message))
       if (i === 0) {
-        console.log(`🔍 First chunk sent successfully (${chunk.length} bytes)`) 
+        const mediaKeys = Object.keys(message.media || {})
+        console.log(`🔍 First chunk sent; media keys: ${mediaKeys.join(',')}; b64 length: ${base64Payload.length}`)
       }
     } catch (e) {
       console.error(`❌ Failed to send chunk ${i + 1}:`, e)
