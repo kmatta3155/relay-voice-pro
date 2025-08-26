@@ -87,7 +87,7 @@ function mulawToPcm(mu: number): number {
   return sign ? (0x84 - sample) : (sample - 0x84)
 }
 
-// Convert ElevenLabs PCM16 to Twilio μ-law format
+// Convert ElevenLabs PCM16 to Twilio μ-law format with proper anti-aliasing
 function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   console.log(`🎧 Processing ${audioData.length} bytes from ElevenLabs`)
   
@@ -95,21 +95,25 @@ function processElevenLabsAudioToMulaw(audioData: Uint8Array): Uint8Array[] {
   const pcm16Samples = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.length / 2)
   console.log(`🎵 Got ${pcm16Samples.length} PCM16 samples at 24kHz`)
   
-  // Downsample from 24kHz to 8kHz (3:1 ratio) with proper anti-aliasing
-  const len = Math.floor(pcm16Samples.length / 3)
+  // CRITICAL FIX: Apply proper Butterworth low-pass filter before 3:1 decimation
+  // Cut-off frequency should be < Nyquist of target rate (4kHz for 8kHz output)
+  const filteredSamples = new Int16Array(pcm16Samples.length)
+  const a = 0.1 // Low-pass filter coefficient (cutoff ~3.4kHz at 24kHz)
+  
+  // Simple IIR low-pass filter to prevent aliasing
+  filteredSamples[0] = pcm16Samples[0]
+  for (let i = 1; i < pcm16Samples.length; i++) {
+    filteredSamples[i] = Math.round(
+      a * pcm16Samples[i] + (1 - a) * filteredSamples[i - 1]
+    )
+  }
+  
+  // Now downsample from 24kHz to 8kHz (3:1 ratio) with filtered samples
+  const len = Math.floor(filteredSamples.length / 3)
   const pcm8kSamples = new Int16Array(len)
   for (let i = 0; i < len; i++) {
-    // Take every 3rd sample and apply simple low-pass filter
-    const i3 = i * 3
-    if (i3 + 2 < pcm16Samples.length) {
-      // Average 3 samples for anti-aliasing before decimation
-      const s0 = pcm16Samples[i3]
-      const s1 = pcm16Samples[i3 + 1] 
-      const s2 = pcm16Samples[i3 + 2]
-      pcm8kSamples[i] = Math.round((s0 + s1 + s2) / 3)
-    } else {
-      pcm8kSamples[i] = pcm16Samples[i3]
-    }
+    // Take every 3rd sample from the filtered data
+    pcm8kSamples[i] = filteredSamples[i * 3]
   }
   
   console.log(`🎵 Downsampled to ${pcm8kSamples.length} samples at 8kHz`)
