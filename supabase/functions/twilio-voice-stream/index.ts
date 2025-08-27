@@ -530,18 +530,30 @@ serve(async (req) => {
           return
         }
 
+        // Check environment variables for debugging
+        const useAgentAudio = Deno.env.get('TWILIO_USE_AGENT_AUDIO')
+        const greetingOnly = Deno.env.get('TWILIO_GREETING_ONLY')
+        console.log(`🔧 Environment check - USE_AGENT_AUDIO: ${useAgentAudio}, GREETING_ONLY: ${greetingOnly}`)
+        
+        // TEMPORARY: Enable debug tone for testing (remove after verification)
+        const debugTone = true
+        if (debugTone) {
+          console.log('🔊 DEBUG: Playing test tone for verification...')
+          const toneChunks = generateMulawSineWaveChunks(3000, 1000) // 3 seconds at 1kHz
+          await enqueueTwilioChunks(toneChunks, streamSid, socket)
+          console.log('🔊 DEBUG: Test tone sent to Twilio')
+          return // Skip ElevenLabs for now
+        }
+
         console.log('🔗 Connecting to ElevenLabs Streaming API for direct μ-law passthrough...')
         try {
           const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || 'EXAVITQu4vr4xnSDxMaL' // Sarah
-          const streamingUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=eleven_multilingual_v2&output_format=ulaw_8000`
           
-          console.log(`🔗 Connecting to: ${streamingUrl}`)
+          // ElevenLabs WebSocket URL with API key as query parameter (correct format per docs)
+          const streamingUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=eleven_turbo_v2_5&output_format=ulaw_8000&xi_api_key=${encodeURIComponent(elevenLabsKey)}`
+          console.log(`🔗 Connecting to ElevenLabs with voice ID: ${voiceId}`)
           
-          // Fix: Move API key to URL parameters (headers not supported for WebSocket in Deno)
-          const streamingUrlWithKey = `${streamingUrl}&xi-api-key=${encodeURIComponent(elevenLabsKey)}`
-          console.log(`🔗 Connecting to: ${streamingUrlWithKey.replace(elevenLabsKey, '[KEY_HIDDEN]')}`)
-          
-          elevenLabsWs = new WebSocket(streamingUrlWithKey)
+          elevenLabsWs = new WebSocket(streamingUrl)
 
           elevenLabsWs.onopen = () => {
             console.log('✅ ElevenLabs Streaming API connected successfully')
