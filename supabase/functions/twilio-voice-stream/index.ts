@@ -92,14 +92,14 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
   // Start sender loop if not already running
   if (!twilioIsSending && socket.readyState === WebSocket.OPEN) {
     twilioIsSending = true
-    console.log(`📦 Starting outbound queue with ${twilioOutboundQueue.length} chunks`)
+    console.log(`[OUTBOUND] Starting queue with ${twilioOutboundQueue.length} chunks`)
     
     try {
       while (twilioOutboundQueue.length > 0 && socket.readyState === WebSocket.OPEN) {
         const chunk = twilioOutboundQueue.shift()!
         
         if (chunk.length !== 160) {
-          console.warn(`⚠️ Chunk size mismatch: ${chunk.length} bytes (expected 160)`)
+          console.warn(`[WARN] Chunk size mismatch: ${chunk.length} bytes (expected 160)`)
         }
         
         // Binary-safe base64 encoding
@@ -124,10 +124,10 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
         await new Promise(resolve => setTimeout(resolve, 20))
       }
     } catch (e) {
-      console.error('❌ Error in outbound queue:', e)
+      console.error('[ERROR] Error in outbound queue:', e)
     } finally {
       twilioIsSending = false
-      console.log('✅ Outbound queue completed')
+      console.log('[SUCCESS] Outbound queue completed')
     }
   }
 }
@@ -137,12 +137,12 @@ async function waitForQueueDrain(timeoutMs = 5000): Promise<boolean> {
   const start = Date.now()
   while (twilioIsSending || twilioOutboundQueue.length > 0) {
     if (Date.now() - start > timeoutMs) {
-      console.warn(`⏳ Queue drain timeout after ${timeoutMs}ms (remaining: ${twilioOutboundQueue.length})`)
+      console.warn(`[TIMEOUT] Queue drain timeout after ${timeoutMs}ms (remaining: ${twilioOutboundQueue.length})`)
       return false
     }
     await new Promise(r => setTimeout(r, 25))
   }
-  console.log('🟢 Outbound queue fully drained')
+  console.log('[SUCCESS] Outbound queue fully drained')
   return true
 }
 
@@ -184,7 +184,7 @@ function parseWavPcm(audioData: Uint8Array): {
   pcmBytes: Uint8Array
 } | null {
   if (audioData.length < 12) {
-    console.log('📦 Audio too short for WAV header, assuming raw PCM16 mono 16000')
+    console.log('[WAV] Audio too short for WAV header, assuming raw PCM16 mono 16000')
     return {
       formatCode: 1,
       channels: 1,
@@ -196,7 +196,7 @@ function parseWavPcm(audioData: Uint8Array): {
   const header = String.fromCharCode(...audioData.slice(0, 4))
   const wave   = String.fromCharCode(...audioData.slice(8, 12))
   if (header !== 'RIFF' || wave !== 'WAVE') {
-    console.log('📦 No RIFF/WAVE detected, assuming raw PCM16 mono 16000')
+    console.log('[WAV] No RIFF/WAVE detected, assuming raw PCM16 mono 16000')
     return {
       formatCode: 1,
       channels: 1,
@@ -229,24 +229,24 @@ function parseWavPcm(audioData: Uint8Array): {
       // byteRate = view.getUint32(8, true)
       // blockAlign = view.getUint16(12, true)
       bitsPerSample = view.getUint16(14, true)
-      console.log(`🔎 WAV fmt: format=${formatCode}, channels=${channels}, rate=${sampleRate}, bits=${bitsPerSample}`)
+      console.log(`[WAV_FMT] format=${formatCode}, channels=${channels}, rate=${sampleRate}, bits=${bitsPerSample}`)
     } else if (chunkId === 'data') {
       dataFound = true
       const dataStart = offset + 8
       const dataEnd = dataStart + chunkSize
       pcmBytes = audioData.slice(dataStart, dataEnd)
-      console.log(`📦 WAV data size: ${pcmBytes.length} bytes`)
+      console.log(`[WAV_DATA] data size: ${pcmBytes.length} bytes`)
     }
     offset = next
   }
 
   if (!dataFound || !pcmBytes) {
-    console.warn('⚠️ No data chunk found in WAV')
+    console.warn('[ERROR] No data chunk found in WAV')
     return null
   }
 
   if (!fmtFound) {
-    console.warn('⚠️ No fmt chunk found in WAV, assuming PCM16 mono 16000')
+    console.warn('[WARN] No fmt chunk found in WAV, assuming PCM16 mono 16000')
     return {
       formatCode: 1,
       channels: 1,
@@ -301,17 +301,17 @@ function encodePcm16ToUlaw(samples: Int16Array): Uint8Array {
 // Generate reliable TTS greeting -> request PCM, parse WAV, resample to 8kHz, μ-law encode
 async function sendReliableGreeting(streamSid: string, socket: WebSocket, businessName: string) {
   try {
-    console.log('🎯 Generating reliable TTS greeting (PCM→μ-law)...')
+    console.log('[TTS] Generating reliable TTS greeting (PCM->μ-law)...')
     const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
     if (!elevenLabsKey) {
-      console.error('❌ ELEVENLABS_API_KEY missing for greeting')
+      console.error('[ERROR] ELEVENLABS_API_KEY missing for greeting')
       return
     }
 
     // Optional tone test for debugging
     const enableToneTest = Deno.env.get('ENABLE_TONE_TEST') === 'true'
     if (enableToneTest) {
-      console.log('🎵 TONE TEST: Sending 1kHz test tone...')
+      console.log('[TONE_TEST] Sending 1kHz test tone...')
       const toneData = generateUlawTone(600, 1000)
       const toneChunks: Uint8Array[] = []
       for (let i = 0; i < toneData.length; i += 160) {
@@ -322,7 +322,7 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
         toneChunks.push(chunk)
       }
       await sendAudioToTwilio(toneChunks, streamSid, socket)
-      console.log('🎵 Tone test complete, proceeding with greeting...')
+      console.log('[TONE_TEST] Tone test complete, proceeding with greeting...')
     }
 
     const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x'
@@ -343,24 +343,24 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       })
     })
 
-    console.log(`📡 TTS response status: ${resp.status}`)
+    console.log(`[TTS] TTS response status: ${resp.status}`)
     if (!resp.ok) {
       const err = await resp.text()
-      console.error('❌ TTS greeting failed (pcm_16000):', resp.status, err)
+      console.error('[ERROR] TTS greeting failed (pcm_16000):', resp.status, err)
       return
     }
 
     const audioBuffer = await resp.arrayBuffer()
     const raw = new Uint8Array(audioBuffer)
-    console.log(`📦 Received ${raw.length} bytes from ElevenLabs (PCM expected)')
+    console.log(`[TTS] Received ${raw.length} bytes from ElevenLabs (PCM expected)`)
 
     const parsed = parseWavPcm(raw)
     if (!parsed) {
-      console.error('❌ Failed to parse WAV PCM from ElevenLabs response')
+      console.error('[ERROR] Failed to parse WAV PCM from ElevenLabs response')
       return
     }
     if (parsed.formatCode !== 1 || parsed.bitsPerSample !== 16) {
-      console.error(`❌ Unsupported WAV format: code=${parsed.formatCode}, bits=${parsed.bitsPerSample}`)
+      console.error(`[ERROR] Unsupported WAV format: code=${parsed.formatCode}, bits=${parsed.bitsPerSample}`)
       return
     }
 
@@ -373,7 +373,7 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
 
     // μ-law encode
     const ulawBytes = encodePcm16ToUlaw(samples8k)
-    console.log(`🎼 Encoded greeting ${samples8k.length} samples → ${ulawBytes.length} μ-law bytes`)
+    console.log(`[ENCODE] Encoded greeting ${samples8k.length} samples -> ${ulawBytes.length} μ-law bytes`)
 
     // Chunk into strict 160-byte frames for Twilio
     const chunks: Uint8Array[] = []
@@ -384,18 +384,18 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       if (len < 160) chunk.fill(0xff, len)
       chunks.push(chunk)
     }
-    console.log(`📦 Created ${chunks.length} greeting chunks`)
+    console.log(`[CHUNK] Created ${chunks.length} greeting chunks`)
     await sendAudioToTwilio(chunks, streamSid, socket)
-    console.log('✅ Reliable greeting sent to Twilio')
+    console.log('[SUCCESS] Reliable greeting sent to Twilio')
   } catch (e) {
-    console.error('❌ Error in reliable greeting:', e)
+    console.error('[ERROR] Error in reliable greeting:', e)
   }
 }
 
 // Get signed URL for ElevenLabs Conversational AI
 async function getSignedConvAIUrl(agentId: string, apiKey: string): Promise<string | null> {
   try {
-    console.log('🔗 Requesting signed URL for ConvAI agent...')
+    console.log('[CONVAI] Requesting signed URL for ConvAI agent...')
     const response = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
       {
@@ -408,22 +408,22 @@ async function getSignedConvAIUrl(agentId: string, apiKey: string): Promise<stri
     
     if (!response.ok) {
       const error = await response.text()
-      console.error('❌ Failed to get signed URL:', response.status, error)
+      console.error('[ERROR] Failed to get signed URL:', response.status, error)
       return null
     }
     
     const data = await response.json()
-    console.log('✅ Got signed URL for ConvAI')
+    console.log('[SUCCESS] Got signed URL for ConvAI')
     return data.signed_url
   } catch (e) {
-    console.error('❌ Error getting signed URL:', e)
+    console.error('[ERROR] Error getting signed URL:', e)
     return null
   }
 }
 
 serve(async (req) => {
-  console.log(`🎵 TWILIO CONVERSATIONAL AI STREAM - ${VERSION}`)
-  console.log('📍 Checking WebSocket upgrade...')
+  console.log(`[START] TWILIO CONVERSATIONAL AI STREAM - ${VERSION}`)
+  console.log('[WS] Checking WebSocket upgrade...')
   
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -436,7 +436,7 @@ serve(async (req) => {
   
   const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
   const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
-  console.log('🤝 Requested WS protocols:', protocols)
+  console.log('[WS] Requested WS protocols:', protocols)
   const selectedProtocol = protocols.includes('audio.stream.v1')
     ? 'audio.stream.v1'
     : (protocols[0] || undefined)
@@ -454,50 +454,50 @@ serve(async (req) => {
   let conversationStarted = false
   
   socket.onopen = () => {
-    console.log('🔌 WebSocket connected to Twilio')
+    console.log('[WS] WebSocket connected to Twilio')
   }
   
   socket.onmessage = async (event) => {
     try {
       const data = JSON.parse(event.data)
-      console.log('📨 Twilio event:', data.event)
+      console.log('[TWILIO] Twilio event:', data.event)
       
       if (data.event === 'start') {
-        console.log('🚀 Stream started - initializing ConvAI connection')
+        console.log('[START] Stream started - initializing ConvAI connection')
         streamSid = data.start?.streamSid || data.streamSid || ''
         phoneNumber = data.start?.customParameters?.phoneNumber || 'unknown'
         tenantId = data.start?.customParameters?.tenantId || ''
         businessName = data.start?.customParameters?.businessName || 'this business'
         
-        console.log(`📞 Call: Phone=${phoneNumber}, Tenant=${tenantId}, Business=${businessName}`)
+        console.log(`[CALL] Call: Phone=${phoneNumber}, Tenant=${tenantId}, Business=${businessName}`)
         
         const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
         const agentId = Deno.env.get('ELEVENLABS_AGENT_ID')
         
-        console.log(`🔑 ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}`)
+        console.log(`[CONFIG] ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}`)
         
         if (!elevenLabsKey || !agentId) {
-          console.error('❌ Missing ElevenLabs credentials')
+          console.error('[ERROR] Missing ElevenLabs credentials')
           return
         }
         
         // Step 1: Send short μ-law silence prelude
-        console.log('🔇 Sending short μ-law silence prelude...')
+        console.log('[PRELUDE] Sending short μ-law silence prelude...')
         await sendSilencePrelude(streamSid, socket, 400)
 
         // Step 2: Send immediate reliable greeting
-        console.log('🎤 Sending immediate greeting...')
+        console.log('[GREETING] Sending immediate greeting...')
         await sendReliableGreeting(streamSid, socket, businessName)
         
         // Step 3: Wait for greeting to complete
         await waitForQueueDrain(10000)
         
         // Step 3: Connect to ElevenLabs Conversational AI
-        console.log('🤖 Connecting to ElevenLabs Conversational AI...')
+        console.log('[CONVAI] Connecting to ElevenLabs Conversational AI...')
         const signedUrl = await getSignedConvAIUrl(agentId, elevenLabsKey)
         
         if (!signedUrl) {
-          console.error('❌ Failed to get ConvAI signed URL')
+          console.error('[ERROR] Failed to get ConvAI signed URL')
           return
         }
         
@@ -505,7 +505,7 @@ serve(async (req) => {
           elevenLabsWs = new WebSocket(signedUrl)
           
           elevenLabsWs.onopen = () => {
-            console.log('✅ ConvAI WebSocket connected')
+            console.log('[SUCCESS] ConvAI WebSocket connected')
             elevenLabsConnected = true
             
             // Configure conversation for PCM16 16kHz output (ConvAI standard)
@@ -519,7 +519,7 @@ serve(async (req) => {
                   }
                 }
               }))
-              console.log('📤 Sent ConvAI config for PCM16 16kHz output')
+              console.log('[CONFIG] Sent ConvAI config for PCM16 16kHz output')
             }
           }
           
@@ -531,7 +531,7 @@ serve(async (req) => {
                 // Agent audio response - should be PCM16 16kHz, convert to μ-law 8kHz
                 const audioBase64 = convaiData.audio_event?.audio_base_64
                 if (audioBase64) {
-                  console.log(`🎵 Received ConvAI audio: ${audioBase64.length} base64 chars`)
+                  console.log(`[CONVAI_AUDIO] Received ConvAI audio: ${audioBase64.length} base64 chars`)
                   
                   // Decode PCM16 from base64
                   const binaryString = atob(audioBase64)
@@ -568,31 +568,31 @@ serve(async (req) => {
                   }
                   
                   await sendAudioToTwilio(chunks, streamSid, socket)
-                  console.log(`📦 Converted ${pcm16Samples.length}→${ulawBytes.length} samples, sent ${chunks.length} chunks`)
+                  console.log(`[CONVERT] Converted ${pcm16Samples.length}->${ulawBytes.length} samples, sent ${chunks.length} chunks`)
                 }
               } else if (convaiData.type === 'conversation_started') {
-                console.log('✅ ConvAI conversation started')
+                console.log('[SUCCESS] ConvAI conversation started')
                 conversationStarted = true
               } else {
-                console.log(`📋 ConvAI event: ${convaiData.type}`)
+                console.log(`[CONVAI] ConvAI event: ${convaiData.type}`)
               }
             } catch (parseError) {
-              console.error('❌ Error parsing ConvAI message:', parseError)
+              console.error('[ERROR] Error parsing ConvAI message:', parseError)
             }
           }
           
           elevenLabsWs.onerror = (error) => {
-            console.error('❌ ConvAI WebSocket error:', error)
+            console.error('[ERROR] ConvAI WebSocket error:', error)
             elevenLabsConnected = false
           }
           
           elevenLabsWs.onclose = (event) => {
-            console.log(`🔌 ConvAI WebSocket closed: ${event.code} ${event.reason}`)
+            console.log(`[WS] ConvAI WebSocket closed: ${event.code} ${event.reason}`)
             elevenLabsConnected = false
           }
           
         } catch (wsError) {
-          console.error('❌ Failed to create ConvAI WebSocket:', wsError)
+          console.error('[ERROR] Failed to create ConvAI WebSocket:', wsError)
         }
       }
       
@@ -624,16 +624,16 @@ serve(async (req) => {
             
             // Log occasionally to avoid spam
             if (Math.random() < 0.01) {
-              console.log(`🎤 Forwarded ${mulawBytes.length}→${pcm16Bytes.length} bytes to ConvAI`)
+              console.log(`[AUDIO_FORWARD] Forwarded ${mulawBytes.length}->${pcm16Bytes.length} bytes to ConvAI`)
             }
           } catch (audioError) {
-            console.error('❌ Error forwarding audio to ConvAI:', audioError)
+            console.error('[ERROR] Error forwarding audio to ConvAI:', audioError)
           }
         }
       }
       
       else if (data.event === 'stop') {
-        console.log('🛑 Stream stopped')
+        console.log('[STOP] Stream stopped')
         if (elevenLabsWs) {
           elevenLabsWs.close()
           elevenLabsWs = null
@@ -643,16 +643,16 @@ serve(async (req) => {
       }
       
     } catch (error) {
-      console.error('❌ Error processing Twilio event:', error)
+      console.error('[ERROR] Error processing Twilio event:', error)
     }
   }
   
   socket.onerror = (error) => {
-    console.error('❌ Twilio WebSocket error:', error)
+    console.error('[ERROR] Twilio WebSocket error:', error)
   }
   
   socket.onclose = (event) => {
-    console.log(`🔌 Twilio WebSocket closed: ${event.code} ${event.reason}`)
+    console.log(`[WS] Twilio WebSocket closed: ${event.code} ${event.reason}`)
     if (elevenLabsWs) {
       elevenLabsWs.close()
       elevenLabsWs = null
