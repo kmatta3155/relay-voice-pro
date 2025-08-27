@@ -113,14 +113,14 @@ serve(async (req) => {
     
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Connect>
-    <Stream url="${xmlUrl}" track="inbound_track">
+  <Start>
+    <Stream url="${xmlUrl}" track="both_tracks">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
       <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
       <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
     </Stream>
-  </Connect>
-  <Say>If you can hear this, the stream failed to connect.</Say>
+  </Start>
+  <Pause length="3600"/>
 </Response>`;
     return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
   } catch (err) {
