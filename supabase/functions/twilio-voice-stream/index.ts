@@ -251,7 +251,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
     const message = {
       event: 'media',
       streamSid,
-      media: { track: 'outbound', payload: base64Payload }
+      media: { payload: base64Payload }
     }
 
     try {
@@ -271,6 +271,25 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
   }
 
   console.log(`✅ Completed sending ${chunks.length} μ-law chunks to Twilio`)
+}
+
+// Outbound Twilio queue to prevent overlapping audio
+const twilioOutboundQueue: Uint8Array[][] = [];
+let twilioIsDraining = false;
+
+async function enqueueTwilioChunks(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
+  twilioOutboundQueue.push(chunks);
+  if (!twilioIsDraining) {
+    twilioIsDraining = true;
+    try {
+      while (twilioOutboundQueue.length > 0) {
+        const next = twilioOutboundQueue.shift()!;
+        await sendAudioToTwilio(next, streamSid, socket);
+      }
+    } finally {
+      twilioIsDraining = false;
+    }
+  }
 }
 
 // Create WAV from μ-law for Whisper
@@ -429,7 +448,7 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
       chunks.push(chunk)
     }
     
-    await sendAudioToTwilio(chunks, streamSid, socket)
+    await enqueueTwilioChunks(chunks, streamSid, socket)
     console.log('✅ TTS greeting sent to Twilio via proven conversion pipeline')
   } catch (e) {
     console.error('❌ Error sending TTS greeting:', e)
@@ -502,14 +521,20 @@ serve(async (req) => {
         if (debugTone) {
           console.log('🧪 Debug tone mode enabled - sending 3s 1kHz tone to Twilio and skipping agent.')
           const toneChunks = generateMulawSineWaveChunks(3000, 1000)
-          await sendAudioToTwilio(toneChunks, streamSid, socket)
+          await enqueueTwilioChunks(toneChunks, streamSid, socket)
           console.log('✅ Debug tone sent. Awaiting stop event.')
           return
         }
 
+        // Optional: Greeting-only mode to isolate Twilio playback
+        const greetingOnly = (Deno.env.get('TWILIO_GREETING_ONLY') || 'false').toLowerCase() === 'true'
+        if (greetingOnly) {
+          console.log('🧪 Greeting-only mode enabled - sending greeting and skipping agent.')
+          await sendImmediateGreeting(streamSid, socket, businessName)
+          return
+        }
         // Check if we should use agent audio or fallback to HTTP TTS only
         const useAgentAudio = (Deno.env.get('TWILIO_USE_AGENT_AUDIO') || 'true').toLowerCase() === 'true'
-        
         if (!useAgentAudio) {
           console.log('🔄 Agent audio disabled - using HTTP TTS fallback only')
           await sendImmediateGreeting(streamSid, socket, businessName)
@@ -561,14 +586,14 @@ serve(async (req) => {
                     type: 'server_vad'
                   },
                   audio: {
-                    input: {
-                      encoding: 'pcm_16000',
-                      sample_rate: 16000
-                    },
-                    output: {
-                      encoding: 'ulaw_8000', // Force μ-law 8kHz output from ConvAI to avoid static
-                      sample_rate: 8000
-                    }
+                      input: {
+                        encoding: 'ulaw_8000',
+                        sample_rate: 8000
+                      },
+                      output: {
+                        encoding: 'ulaw_8000', // Force μ-law 8kHz output from ConvAI to avoid static
+                        sample_rate: 8000
+                      }
                   }
                 }
               }
@@ -603,7 +628,7 @@ serve(async (req) => {
                     const mulawPayload = (container === 'wav') ? stripWavHeader(bytes) : bytes
                     const chunks = chunkMulawFrames(mulawPayload)
                     console.log(`🎯 ConvAI ulaw passthrough: ${chunks.length} chunks`)
-                    await sendAudioToTwilio(chunks, streamSid, socket)
+                    await enqueueTwilioChunks(chunks, streamSid, socket)
                     return
                   }
 
@@ -618,7 +643,7 @@ serve(async (req) => {
                   }
 
                   const processedChunks = processElevenLabsAudioToMulaw(payload)
-                  await sendAudioToTwilio(processedChunks, streamSid, socket)
+                  await enqueueTwilioChunks(processedChunks, streamSid, socket)
                   console.log(`📤 Sent ${processedChunks.length} μ-law chunks to Twilio`)
                 } else if (data.type === 'user_transcript') {
                   console.log('📝 User transcript:', data.user_transcription_event.user_transcript)
@@ -662,32 +687,10 @@ serve(async (req) => {
         
         // Send to ElevenLabs immediately (convert Twilio μ-law 8k -> PCM16 16k)
         if (elevenLabsConnected && elevenLabsWs?.readyState === WebSocket.OPEN) {
-          // μ-law 8k to PCM16 8k
-          const pcm8k = new Int16Array(audioData.length)
-          for (let i = 0; i < audioData.length; i++) {
-            pcm8k[i] = mulawToPcm(audioData[i])
-          }
-          // Upsample to 16k (linear)
-          const pcm16k = new Int16Array(pcm8k.length * 2)
-          for (let i = 0; i < pcm8k.length; i++) {
-            const s0 = pcm8k[i]
-            const s1 = i < pcm8k.length - 1 ? pcm8k[i + 1] : s0
-            pcm16k[i * 2] = s0
-            pcm16k[i * 2 + 1] = (s0 + s1) >> 1
-          }
-          // Int16 -> bytes (LE) -> base64
-          const bytes = new Uint8Array(pcm16k.length * 2)
-          let o = 0
-          for (let i = 0; i < pcm16k.length; i++) {
-            const s = pcm16k[i]
-            bytes[o++] = s & 0xff
-            bytes[o++] = (s >> 8) & 0xff
-          }
-          let binary = ''
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i])
-          }
-          const base64Audio = btoa(binary)
+          // Forward Twilio μ-law 8k directly to ElevenLabs (no resampling)
+          let binaryIn = ''
+          for (let i = 0; i < audioData.length; i++) binaryIn += String.fromCharCode(audioData[i])
+          const base64Audio = btoa(binaryIn)
           elevenLabsWs.send(JSON.stringify({
             type: 'user_audio_chunk',
             audio: base64Audio

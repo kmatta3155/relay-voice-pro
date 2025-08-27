@@ -98,9 +98,8 @@ serve(async (req) => {
     const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
     const xmlUrl    = xmlEscape(streamUrl);
 
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! You're connected to the AI receptionist. How can I help you today?</Say>
   <Connect>
     <Stream url="${xmlUrl}">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
