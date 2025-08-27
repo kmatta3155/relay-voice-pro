@@ -109,14 +109,12 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
         }
         const base64Payload = btoa(binary)
         
-        // Twilio-compliant outbound message with proper codec specification
+        // Twilio-compliant outbound message (simplified format)
         const message = {
           event: 'media',
           streamSid,
           media: {
-            payload: base64Payload,
-            contentType: 'audio/x-mulaw;rate=8000',
-            track: 'outbound'
+            payload: base64Payload
           }
         }
         
@@ -320,6 +318,24 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       return
     }
 
+    // Tone-only debug mode - bypass ElevenLabs entirely
+    const enableToneTestOnly = Deno.env.get('ENABLE_TONE_TEST_ONLY') === 'true'
+    if (enableToneTestOnly) {
+      console.log('[TONE_TEST_ONLY] Sending 1kHz test tone and skipping ElevenLabs...')
+      const toneData = generateUlawTone(3000, 1000) // 3 second tone
+      const toneChunks: Uint8Array[] = []
+      for (let i = 0; i < toneData.length; i += 160) {
+        const chunk = new Uint8Array(160)
+        const len = Math.min(160, toneData.length - i)
+        chunk.set(toneData.subarray(i, i + len), 0)
+        if (len < 160) chunk.fill(0xff, len)
+        toneChunks.push(chunk)
+      }
+      await sendAudioToTwilio(toneChunks, streamSid, socket)
+      console.log('[TONE_TEST_ONLY] Tone test complete - call should stay open with tone')
+      return
+    }
+    
     // Optional tone test for debugging
     const enableToneTest = Deno.env.get('ENABLE_TONE_TEST') === 'true'
     if (enableToneTest) {

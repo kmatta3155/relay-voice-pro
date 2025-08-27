@@ -66,16 +66,22 @@ serve(async (req) => {
       return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
     }
 
-    // Check agent status
-    const { data: agentData } = await supabase
-      .from('ai_agents')
-      .select('mode, status')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'ready')
-      .maybeSingle();
-    if (!agentData || agentData.mode !== 'live') {
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. We're currently unavailable. Please try again later.</Say><Hangup/></Response>`;
-      return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
+    // Check agent status (with debug bypass)
+    const debugForceStream = Deno.env.get('DEBUG_FORCE_STREAM') === 'true';
+    if (!debugForceStream) {
+      const { data: agentData } = await supabase
+        .from('ai_agents')
+        .select('mode, status')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'ready')
+        .maybeSingle();
+      if (!agentData || agentData.mode !== 'live') {
+        console.log(`[ROUTER] Agent not ready - status: ${agentData?.status}, mode: ${agentData?.mode}`);
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. We're currently unavailable. Please try again later.</Say><Hangup/></Response>`;
+        return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
+      }
+    } else {
+      console.log('[DEBUG] Bypassing agent status check due to DEBUG_FORCE_STREAM=true');
     }
 
     // Look up business name (optional)
@@ -86,6 +92,9 @@ serve(async (req) => {
       .maybeSingle();
     const businessName = tenantData?.name || 'this business';
 
+    // Detailed call logging
+    console.log(`[ROUTER] Incoming call - From: ${from}, To: ${to}, CallSid: ${callSid}, TenantId: ${tenantId}, Business: ${businessName}`);
+    
     // Log call
     await supabase.from('calls').insert({
       tenant_id: tenantId,
@@ -99,6 +108,9 @@ serve(async (req) => {
     const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
     const xmlUrl    = xmlEscape(streamUrl);
 
+    // Generate TwiML with status callback for better visibility
+    const statusCallbackUrl = `https://${functionsDomain}/twilio-status`;
+    
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
@@ -108,6 +120,7 @@ const twiml = `<?xml version="1.0" encoding="UTF-8"?>
       <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
     </Stream>
   </Connect>
+  <Say>If you can hear this, the stream failed to connect.</Say>
 </Response>`;
     return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
   } catch (err) {
