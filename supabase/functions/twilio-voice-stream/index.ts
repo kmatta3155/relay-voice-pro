@@ -534,7 +534,7 @@ serve(async (req) => {
         console.log(`🔧 Environment check - USE_AGENT_AUDIO: ${useAgentAudio}, GREETING_ONLY: ${greetingOnly}`)
         
         // TEMPORARY: Enable debug tone for testing (remove after verification)
-        const debugTone = true
+        const debugTone = false
         if (debugTone) {
           console.log('🔊 DEBUG: Playing test tone for verification...')
           const toneChunks = generateMulawSineWaveChunks(3000, 1000) // 3 seconds at 1kHz
