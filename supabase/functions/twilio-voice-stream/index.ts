@@ -219,77 +219,60 @@ function generateMulawSineWaveChunks(durationMs: number, frequencyHz = 1000, amp
   return chunks;
 }
 
-// Send raw μ-law audio to Twilio with better error handling and timing
+// Outbound queue for strict 20ms pacing (prevents overlapping audio)
+const twilioOutboundQueue: Uint8Array[] = []
+let twilioIsSending = false
+
 async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
-  if (socket.readyState !== WebSocket.OPEN) {
-    console.error('❌ WebSocket not open, cannot send audio')
-    return
+  // Add all chunks to queue
+  for (const chunk of chunks) {
+    twilioOutboundQueue.push(chunk)
   }
-
-  console.log(`➡️ Sending ${chunks.length} μ-law chunks to Twilio (streamSid: ${streamSid})`)
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]
-
-    if (chunk.length !== 160) {
-      console.warn(`⚠️ Chunk ${i + 1} has incorrect size: ${chunk.length} bytes (expected 160)`) 
-    }
-
-    let base64Payload: string
-      try {
-        // Binary-safe base64 encoding for Twilio compliance
+  
+  // Start sender loop if not already running
+  if (!twilioIsSending && socket.readyState === WebSocket.OPEN) {
+    twilioIsSending = true
+    console.log(`📦 Starting outbound queue with ${twilioOutboundQueue.length} chunks`)
+    
+    try {
+      while (twilioOutboundQueue.length > 0 && socket.readyState === WebSocket.OPEN) {
+        const chunk = twilioOutboundQueue.shift()!
+        
+        if (chunk.length !== 160) {
+          console.warn(`⚠️ Chunk has incorrect size: ${chunk.length} bytes (expected 160)`)
+        }
+        
+        // Binary-safe base64 encoding
         let binary = ''
         for (let j = 0; j < chunk.length; j++) {
           binary += String.fromCharCode(chunk[j])
         }
-        base64Payload = btoa(binary)
-      } catch (e) {
-        console.error(`❌ Failed to encode chunk ${i + 1} to base64:`, e)
-        continue
-      }
-
-    const message = {
-      event: 'media',
-      streamSid,
-      media: { payload: base64Payload }
-    }
-
-    try {
-      socket.send(JSON.stringify(message))
-      if (i === 0) {
-        console.log(`🔍 First chunk sent; payload length: ${base64Payload.length}; status: SUCCESS`)
+        const base64Payload = btoa(binary)
+        
+        // CRITICAL: Twilio-compliant outbound frame (payload only)
+        const message = {
+          event: 'media',
+          streamSid,
+          media: { payload: base64Payload }
+        }
+        
+        socket.send(JSON.stringify(message))
+        
+        // Precise 20ms pacing for 8kHz μ-law
+        await new Promise(resolve => setTimeout(resolve, 20))
       }
     } catch (e) {
-      console.error(`❌ Failed to send chunk ${i + 1}:`, e)
-      break
-    }
-
-    // Twilio expects 20ms pacing per 160-sample μ-law chunk @8kHz
-    if (i < chunks.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 20))
+      console.error('❌ Error in outbound queue:', e)
+    } finally {
+      twilioIsSending = false
+      console.log('✅ Outbound queue completed')
     }
   }
-
-  console.log(`✅ Completed sending ${chunks.length} μ-law chunks to Twilio`)
 }
 
-// Outbound Twilio queue to prevent overlapping audio
-const twilioOutboundQueue: Uint8Array[][] = [];
-let twilioIsDraining = false;
-
+// Simplified enqueue function (queue is now handled in sendAudioToTwilio)
 async function enqueueTwilioChunks(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
-  twilioOutboundQueue.push(chunks);
-  if (!twilioIsDraining) {
-    twilioIsDraining = true;
-    try {
-      while (twilioOutboundQueue.length > 0) {
-        const next = twilioOutboundQueue.shift()!;
-        await sendAudioToTwilio(next, streamSid, socket);
-      }
-    } finally {
-      twilioIsDraining = false;
-    }
-  }
+  await sendAudioToTwilio(chunks, streamSid, socket)
 }
 
 // Create WAV from μ-law for Whisper
@@ -685,9 +668,9 @@ serve(async (req) => {
         
         buffer.addChunk(audioData)
         
-        // Send to ElevenLabs immediately (convert Twilio μ-law 8k -> PCM16 16k)
+        // Send Twilio μ-law 8k directly to ElevenLabs (end-to-end μ-law passthrough)
         if (elevenLabsConnected && elevenLabsWs?.readyState === WebSocket.OPEN) {
-          // Forward Twilio μ-law 8k directly to ElevenLabs (no resampling)
+          // Binary-safe base64 encoding for μ-law audio
           let binaryIn = ''
           for (let i = 0; i < audioData.length; i++) binaryIn += String.fromCharCode(audioData[i])
           const base64Audio = btoa(binaryIn)
