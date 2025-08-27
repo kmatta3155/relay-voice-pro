@@ -175,80 +175,161 @@ async function sendSilencePrelude(streamSid: string, socket: WebSocket, duration
   await sendAudioToTwilio(chunks, streamSid, socket)
 }
 
-// Robust WAV parser to extract pure μ-law data
-function extractPureUlawFromWav(audioData: Uint8Array): Uint8Array {
-  // Check for RIFF header
+// Robust WAV PCM parser + converters for Twilio-compatible μ-law 8kHz
+function parseWavPcm(audioData: Uint8Array): {
+  formatCode: number
+  channels: number
+  sampleRate: number
+  bitsPerSample: number
+  pcmBytes: Uint8Array
+} | null {
   if (audioData.length < 12) {
-    console.log('📦 Audio data too short for WAV header, treating as raw μ-law')
-    return audioData
+    console.log('📦 Audio too short for WAV header, assuming raw PCM16 mono 16000')
+    return {
+      formatCode: 1,
+      channels: 1,
+      sampleRate: 16000,
+      bitsPerSample: 16,
+      pcmBytes: audioData
+    }
+  }
+  const header = String.fromCharCode(...audioData.slice(0, 4))
+  const wave   = String.fromCharCode(...audioData.slice(8, 12))
+  if (header !== 'RIFF' || wave !== 'WAVE') {
+    console.log('📦 No RIFF/WAVE detected, assuming raw PCM16 mono 16000')
+    return {
+      formatCode: 1,
+      channels: 1,
+      sampleRate: 16000,
+      bitsPerSample: 16,
+      pcmBytes: audioData
+    }
   }
 
-  const riffHeader = String.fromCharCode(...audioData.slice(0, 4))
-  if (riffHeader !== 'RIFF') {
-    console.log('📦 No RIFF header detected, treating as raw μ-law')
-    return audioData
-  }
+  let fmtFound = false
+  let dataFound = false
+  let formatCode = 1
+  let channels = 1
+  let sampleRate = 16000
+  let bitsPerSample = 16
+  let pcmBytes: Uint8Array | null = null
 
-  console.log('🔍 RIFF header detected, parsing WAV structure...')
-  
-  // Parse WAV chunks to find the data chunk
-  let offset = 12 // Skip RIFF header
-  while (offset < audioData.length - 8) {
+  let offset = 12
+  while (offset + 8 <= audioData.length) {
     const chunkId = String.fromCharCode(...audioData.slice(offset, offset + 4))
     const chunkSize = new DataView(audioData.buffer).getUint32(offset + 4, true)
-    
-    console.log(`📦 Found chunk: ${chunkId}, size: ${chunkSize}`)
-    
-    if (chunkId === 'data') {
+    const next = offset + 8 + chunkSize
+
+    if (chunkId === 'fmt ') {
+      fmtFound = true
+      const view = new DataView(audioData.buffer, offset + 8, chunkSize)
+      formatCode = view.getUint16(0, true)
+      channels = view.getUint16(2, true)
+      sampleRate = view.getUint32(4, true)
+      // byteRate = view.getUint32(8, true)
+      // blockAlign = view.getUint16(12, true)
+      bitsPerSample = view.getUint16(14, true)
+      console.log(`🔎 WAV fmt: format=${formatCode}, channels=${channels}, rate=${sampleRate}, bits=${bitsPerSample}`)
+    } else if (chunkId === 'data') {
+      dataFound = true
       const dataStart = offset + 8
       const dataEnd = dataStart + chunkSize
-      const pureData = audioData.slice(dataStart, dataEnd)
-      console.log(`✅ Extracted ${pureData.length} bytes from WAV data chunk`)
-      return pureData
+      pcmBytes = audioData.slice(dataStart, dataEnd)
+      console.log(`📦 WAV data size: ${pcmBytes.length} bytes`)
     }
-    
-    offset += 8 + chunkSize
+    offset = next
   }
-  
-  console.warn('⚠️ No data chunk found in WAV, using full buffer')
-  return audioData
+
+  if (!dataFound || !pcmBytes) {
+    console.warn('⚠️ No data chunk found in WAV')
+    return null
+  }
+
+  if (!fmtFound) {
+    console.warn('⚠️ No fmt chunk found in WAV, assuming PCM16 mono 16000')
+    return {
+      formatCode: 1,
+      channels: 1,
+      sampleRate: 16000,
+      bitsPerSample: 16,
+      pcmBytes
+    }
+  }
+
+  return { formatCode, channels, sampleRate, bitsPerSample, pcmBytes }
 }
 
-// Generate reliable TTS greeting with robust WAV parsing
+function bytesToInt16LE(bytes: Uint8Array): Int16Array {
+  return new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2))
+}
+
+function stereoToMono(samples: Int16Array, channels: number): Int16Array {
+  if (channels === 1) return samples
+  const frames = Math.floor(samples.length / channels)
+  const mono = new Int16Array(frames)
+  for (let i = 0; i < frames; i++) {
+    let acc = 0
+    for (let c = 0; c < channels; c++) acc += samples[i * channels + c]
+    mono[i] = Math.max(-32768, Math.min(32767, Math.round(acc / channels)))
+  }
+  return mono
+}
+
+function resamplePcm16Linear(input: Int16Array, fromRate: number, toRate: number): Int16Array {
+  if (fromRate === toRate) return input
+  const ratio = toRate / fromRate
+  const outLen = Math.max(1, Math.round(input.length * ratio))
+  const output = new Int16Array(outLen)
+  for (let i = 0; i < outLen; i++) {
+    const srcPos = i / ratio
+    const i0 = Math.floor(srcPos)
+    const i1 = Math.min(input.length - 1, i0 + 1)
+    const frac = srcPos - i0
+    const s0 = input[i0]
+    const s1 = input[i1]
+    output[i] = Math.round(s0 + (s1 - s0) * frac)
+  }
+  return output
+}
+
+function encodePcm16ToUlaw(samples: Int16Array): Uint8Array {
+  const ulaw = new Uint8Array(samples.length)
+  for (let i = 0; i < samples.length; i++) ulaw[i] = pcmToMulaw(samples[i])
+  return ulaw
+}
+
+// Generate reliable TTS greeting -> request PCM, parse WAV, resample to 8kHz, μ-law encode
 async function sendReliableGreeting(streamSid: string, socket: WebSocket, businessName: string) {
   try {
-    console.log('🎯 Generating reliable TTS greeting...')
+    console.log('🎯 Generating reliable TTS greeting (PCM→μ-law)...')
     const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
     if (!elevenLabsKey) {
       console.error('❌ ELEVENLABS_API_KEY missing for greeting')
       return
     }
-    
+
     // Optional tone test for debugging
     const enableToneTest = Deno.env.get('ENABLE_TONE_TEST') === 'true'
     if (enableToneTest) {
       console.log('🎵 TONE TEST: Sending 1kHz test tone...')
-      const toneData = generateUlawTone(1000, 1000) // 1 second, 1kHz
+      const toneData = generateUlawTone(600, 1000)
       const toneChunks: Uint8Array[] = []
       for (let i = 0; i < toneData.length; i += 160) {
         const chunk = new Uint8Array(160)
         const len = Math.min(160, toneData.length - i)
         chunk.set(toneData.subarray(i, i + len), 0)
-        if (len < 160) chunk.fill(0xff, len) // Pad with silence
+        if (len < 160) chunk.fill(0xff, len)
         toneChunks.push(chunk)
       }
       await sendAudioToTwilio(toneChunks, streamSid, socket)
       console.log('🎵 Tone test complete, proceeding with greeting...')
     }
-    
+
     const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x'
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
-    
-    console.log('🗣️ Requesting ulaw_8000 format from ElevenLabs TTS...')
-    console.log(`📝 Text: "${text}"`)
-    
-    // Request ulaw_8000 directly to avoid conversion issues
-    const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+
+    // Prefer PCM request to avoid any container/encoding ambiguity
+    let resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
         'xi-api-key': elevenLabsKey,
@@ -258,42 +339,54 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       body: JSON.stringify({
         text,
         model_id: 'eleven_turbo_v2_5',
-        output_format: 'ulaw_8000'  // Direct μ-law 8kHz output
+        output_format: 'pcm_16000' // Request 16k PCM, we will downsample to 8k
       })
     })
-    
+
     console.log(`📡 TTS response status: ${resp.status}`)
     if (!resp.ok) {
       const err = await resp.text()
-      console.error('❌ TTS greeting failed:', resp.status, err)
+      console.error('❌ TTS greeting failed (pcm_16000):', resp.status, err)
       return
     }
-    
+
     const audioBuffer = await resp.arrayBuffer()
-    const rawAudioData = new Uint8Array(audioBuffer)
-    console.log(`📦 Received ${rawAudioData.length} bytes from ElevenLabs`)
-    
-    // Robustly extract pure μ-law data using WAV parser
-    const ulawBytes = extractPureUlawFromWav(rawAudioData)
-    console.log(`🎼 Extracted ${ulawBytes.length} pure μ-law bytes for Twilio`)
-    
-    // Chunk into 160-byte frames for Twilio
+    const raw = new Uint8Array(audioBuffer)
+    console.log(`📦 Received ${raw.length} bytes from ElevenLabs (PCM expected)')
+
+    const parsed = parseWavPcm(raw)
+    if (!parsed) {
+      console.error('❌ Failed to parse WAV PCM from ElevenLabs response')
+      return
+    }
+    if (parsed.formatCode !== 1 || parsed.bitsPerSample !== 16) {
+      console.error(`❌ Unsupported WAV format: code=${parsed.formatCode}, bits=${parsed.bitsPerSample}`)
+      return
+    }
+
+    // Convert bytes -> Int16, deinterleave to mono if needed
+    let samples = bytesToInt16LE(parsed.pcmBytes)
+    samples = stereoToMono(samples, parsed.channels)
+
+    // Resample to 8kHz if needed
+    const samples8k = resamplePcm16Linear(samples, parsed.sampleRate, 8000)
+
+    // μ-law encode
+    const ulawBytes = encodePcm16ToUlaw(samples8k)
+    console.log(`🎼 Encoded greeting ${samples8k.length} samples → ${ulawBytes.length} μ-law bytes`)
+
+    // Chunk into strict 160-byte frames for Twilio
     const chunks: Uint8Array[] = []
     for (let i = 0; i < ulawBytes.length; i += 160) {
       const chunk = new Uint8Array(160)
       const len = Math.min(160, ulawBytes.length - i)
       chunk.set(ulawBytes.subarray(i, i + len), 0)
-      // Pad with μ-law silence if needed
-      if (len < 160) {
-        for (let j = len; j < 160; j++) chunk[j] = 0xff
-      }
+      if (len < 160) chunk.fill(0xff, len)
       chunks.push(chunk)
     }
-    
     console.log(`📦 Created ${chunks.length} greeting chunks`)
     await sendAudioToTwilio(chunks, streamSid, socket)
     console.log('✅ Reliable greeting sent to Twilio')
-    
   } catch (e) {
     console.error('❌ Error in reliable greeting:', e)
   }
