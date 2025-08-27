@@ -109,12 +109,14 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
         }
         const base64Payload = btoa(binary)
         
-        // Twilio-compliant outbound message (no track field)
+        // Twilio-compliant outbound message with proper codec specification
         const message = {
           event: 'media',
           streamSid,
           media: {
-            payload: base64Payload
+            payload: base64Payload,
+            contentType: 'audio/x-mulaw;rate=8000',
+            track: 'outbound'
           }
         }
         
@@ -260,7 +262,17 @@ function parseWavPcm(audioData: Uint8Array): {
 }
 
 function bytesToInt16LE(bytes: Uint8Array): Int16Array {
-  return new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2))
+  // Safe little-endian reader for edge cases
+  const samples = new Int16Array(Math.floor(bytes.length / 2))
+  for (let i = 0; i < samples.length; i++) {
+    const idx = i * 2
+    if (idx + 1 < bytes.length) {
+      samples[i] = bytes[idx] | (bytes[idx + 1] << 8)
+      // Handle sign extension for negative values
+      if (samples[i] > 32767) samples[i] -= 65536
+    }
+  }
+  return samples
 }
 
 function stereoToMono(samples: Int16Array, channels: number): Int16Array {
@@ -469,6 +481,8 @@ serve(async (req) => {
         tenantId = data.start?.customParameters?.tenantId || ''
         businessName = data.start?.customParameters?.businessName || 'this business'
         
+        // Log Twilio media format for diagnostics
+        console.log('[DIAGNOSTICS] Twilio mediaFormat:', JSON.stringify(data.start?.mediaFormat || {}))
         console.log(`[CALL] Call: Phone=${phoneNumber}, Tenant=${tenantId}, Business=${businessName}`)
         
         const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
