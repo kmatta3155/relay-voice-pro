@@ -288,7 +288,7 @@ serve(async (req) => {
       
       if (data.event === 'start') {
         console.log('🚀 Stream started - initializing ConvAI connection')
-        streamSid = data.streamSid
+        streamSid = data.start?.streamSid || data.streamSid || ''
         phoneNumber = data.start?.customParameters?.phoneNumber || 'unknown'
         tenantId = data.start?.customParameters?.tenantId || ''
         businessName = data.start?.customParameters?.businessName || 'this business'
