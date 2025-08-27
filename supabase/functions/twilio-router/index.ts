@@ -105,7 +105,7 @@ serve(async (req) => {
     });
 
     // Standard Twilio Stream URL pointing to voice-stream function
-    const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
+    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
     const xmlUrl    = xmlEscape(streamUrl);
 
     // Generate TwiML with status callback for better visibility
