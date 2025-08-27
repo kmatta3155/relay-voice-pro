@@ -442,9 +442,13 @@ serve(async (req) => {
   if (upgrade.toLowerCase() !== 'websocket') {
     return new Response('Expected Websocket', { status: 426 })
   }
-  const protocols = req.headers.get('sec-websocket-protocol') || ''
-  const protocol = protocols ? protocols.split(',')[0].trim() : undefined
-  const { socket, response } = Deno.upgradeWebSocket(req, protocol ? { protocol } : {})
+  // Parse Sec-WebSocket-Protocol header properly to avoid sub-protocol negotiation issues
+  const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
+  const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
+  const { socket, response } = Deno.upgradeWebSocket(
+    req,
+    protocols.length ? { protocol: protocols[0] } : {}
+  )
   const buffer = new AudioBuffer()
   let streamSid = ''
   let phoneNumber = ''
@@ -520,6 +524,12 @@ serve(async (req) => {
         // Ensure no overlap: wait for greeting queue to drain before streaming
         await waitForQueueDrain(5000)
 
+        // Guard against duplicate ElevenLabs connections
+        if (elevenLabsConnected || (elevenLabsWs && elevenLabsWs.readyState === WebSocket.OPEN)) {
+          console.log('⚠️ ElevenLabs already connected, skipping duplicate connection')
+          return
+        }
+
         console.log('🔗 Connecting to ElevenLabs Streaming API for direct μ-law passthrough...')
         try {
           const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || 'EXAVITQu4vr4xnSDxMaL' // Sarah
@@ -527,11 +537,11 @@ serve(async (req) => {
           
           console.log(`🔗 Connecting to: ${streamingUrl}`)
           
-          elevenLabsWs = new WebSocket(streamingUrl, {
-            headers: {
-              'xi-api-key': elevenLabsKey,
-            }
-          })
+          // Fix: Move API key to URL parameters (headers not supported for WebSocket in Deno)
+          const streamingUrlWithKey = `${streamingUrl}&xi-api-key=${encodeURIComponent(elevenLabsKey)}`
+          console.log(`🔗 Connecting to: ${streamingUrlWithKey.replace(elevenLabsKey, '[KEY_HIDDEN]')}`)
+          
+          elevenLabsWs = new WebSocket(streamingUrlWithKey)
 
           elevenLabsWs.onopen = () => {
             console.log('✅ ElevenLabs Streaming API connected successfully')
@@ -608,6 +618,7 @@ serve(async (req) => {
           elevenLabsWs.onclose = (event) => {
             console.log('🔌 ElevenLabs WebSocket closed:', event.code, event.reason)
             elevenLabsConnected = false
+            elevenLabsWs = null
           }
 
         } catch (error) {
@@ -661,6 +672,7 @@ serve(async (req) => {
         if (elevenLabsWs) {
           elevenLabsWs.close()
           elevenLabsWs = null
+          elevenLabsConnected = false
         }
       }
     } catch (error) {
@@ -673,6 +685,7 @@ serve(async (req) => {
     if (elevenLabsWs) {
       elevenLabsWs.close()
       elevenLabsWs = null
+      elevenLabsConnected = false
     }
   }
 
