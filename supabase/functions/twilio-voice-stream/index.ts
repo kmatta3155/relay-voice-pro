@@ -524,122 +524,89 @@ serve(async (req) => {
           return
         }
 
-        // Send immediate μ-law greeting while agent connects (no agent first_message to avoid overlap)
-        await sendImmediateGreeting(streamSid, socket, businessName)
-
-        console.log('🔗 Getting signed URL from ElevenLabs...')
+        console.log('🔗 Connecting to ElevenLabs Streaming API for direct μ-law passthrough...')
         try {
-          const urlResp = await fetch(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`, {
-            method: 'GET',
-            headers: { 'xi-api-key': elevenLabsKey }
+          const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || 'EXAVITQu4vr4xnSDxMaL' // Sarah
+          const streamingUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=eleven_multilingual_v2&output_format=ulaw_8000`
+          
+          console.log(`🔗 Connecting to: ${streamingUrl}`)
+          
+          elevenLabsWs = new WebSocket(streamingUrl, {
+            headers: {
+              'xi-api-key': elevenLabsKey,
+            }
           })
-          
-          console.log(`📡 ElevenLabs API response status: ${urlResp.status}`)
-          
-          if (!urlResp.ok) {
-            const errorText = await urlResp.text()
-            console.error(`❌ Failed to get signed URL: ${urlResp.status} - ${errorText}`)
-            return
-          }
-          
-          const urlData = await urlResp.json()
-          console.log('✅ Signed URL obtained successfully')
-          
-          const signedUrl = urlData.signed_url
-          console.log(`🔗 Connecting to ElevenLabs WebSocket: ${signedUrl.substring(0, 50)}...`)
-          
-          elevenLabsWs = new WebSocket(signedUrl)
 
           elevenLabsWs.onopen = () => {
-            console.log('✅ ElevenLabs WebSocket connected successfully')
+            console.log('✅ ElevenLabs Streaming API connected successfully')
             elevenLabsConnected = true
             
-            // CRITICAL: Force ElevenLabs ConvAI output audio format to avoid static
-            const initMessage = {
-              type: 'conversation_initiation_client_data',
-              conversation_config_override: {
-                agent: {
-                  prompt: {
-                    prompt: `You are a helpful receptionist for ${businessName}. Answer calls professionally and keep responses brief and natural.`
-                  },
-                  language: 'en'
-                },
-                conversation_config: {
-                  turn_detection: {
-                    type: 'server_vad'
-                  },
-                  audio: {
-                      input: {
-                        encoding: 'ulaw_8000',
-                        sample_rate: 8000
-                      },
-                      output: {
-                        encoding: 'ulaw_8000', // Force μ-law 8kHz output from ConvAI to avoid static
-                        sample_rate: 8000
-                      }
-                  }
-                }
+            // Send initial configuration for streaming mode
+            const config = {
+              text: " ", // Empty initial text to start the stream
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.8,
+                style: 0.0,
+                use_speaker_boost: true
+              },
+              generation_config: {
+                chunk_length_schedule: [120, 160, 250, 290]
               }
             }
             
-            elevenLabsWs!.send(JSON.stringify(initMessage))
+            elevenLabsWs!.send(JSON.stringify(config))
             convaiOutputEncoding = 'ulaw_8000'
             convaiOutputSampleRate = 8000
-            console.log('📤 Sent conversation config to ElevenLabs: FORCED output ulaw_8000 @ 8kHz')
+            console.log('📤 Sent streaming config to ElevenLabs: μ-law 8kHz direct output')
+            
+            // Send initial greeting
+            const greeting = `Hello! Thank you for calling ${businessName}. How can I help you today?`
+            elevenLabsWs!.send(JSON.stringify({
+              text: greeting,
+              try_trigger_generation: true
+            }))
+            console.log(`🎙️ Sent greeting: "${greeting}"`)
           }
 
           elevenLabsWs.onmessage = async (message) => {
             try {
               if (typeof message.data === 'string') {
                 const data = JSON.parse(message.data)
-                console.log('🎵 ElevenLabs message type:', data.type)
+                console.log('🎵 ElevenLabs streaming message type:', data.type || 'unknown')
 
-                if (data.type === 'audio') {
-                  console.log('🎵 Received audio from ElevenLabs, processing...')
-                  const b64 = data.audio_event?.audio_base_64
-                  if (!b64) {
-                    console.warn('⚠️ Missing audio_base_64 in ElevenLabs event')
-                    return
+                if (data.audio) {
+                  // Direct μ-law audio from ElevenLabs streaming API
+                  const audioBase64 = data.audio
+                  console.log(`🔊 Received μ-law audio chunk: ${audioBase64.length} base64 chars`)
+                  
+                  // Decode base64 to μ-law bytes
+                  const binaryString = atob(audioBase64)
+                  const audioBytes = new Uint8Array(binaryString.length)
+                  for (let i = 0; i < binaryString.length; i++) {
+                    audioBytes[i] = binaryString.charCodeAt(i)
                   }
-                  const bytes = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)))
-                  const first8 = Array.from(bytes.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ')
-                  const container = detectAudioContainer(bytes)
-                  console.log(`🔍 First 8 bytes (hex): ${first8} | container=${container} | expected=${convaiOutputEncoding}`)
-
-                  if (convaiOutputEncoding === 'ulaw_8000') {
-                    // Passthrough μ-law @8k directly to Twilio in 160-byte frames
-                    const mulawPayload = (container === 'wav') ? stripWavHeader(bytes) : bytes
-                    const chunks = chunkMulawFrames(mulawPayload)
-                    console.log(`🎯 ConvAI ulaw passthrough: ${chunks.length} chunks`)
-                    await enqueueTwilioChunks(chunks, streamSid, socket)
-                    return
-                  }
-
-                  // Expecting PCM16 16kHz
-                  let payload = bytes
-                  if (container === 'wav') {
-                    payload = stripWavHeader(bytes)
-                    console.log('🧹 Stripped WAV header for PCM16 payload')
-                  } else if (container === 'mp3' || container === 'ogg') {
-                    console.warn(`⛔ Compressed audio detected (${container}) – dropping to prevent static`)
-                    return
-                  }
-
-                  const processedChunks = processElevenLabsAudioToMulaw(payload)
-                  await enqueueTwilioChunks(processedChunks, streamSid, socket)
-                  console.log(`📤 Sent ${processedChunks.length} μ-law chunks to Twilio`)
-                } else if (data.type === 'user_transcript') {
-                  console.log('📝 User transcript:', data.user_transcription_event.user_transcript)
-                } else if (data.type === 'agent_response') {
-                  console.log('🤖 Agent response:', data.agent_response_event.agent_response)
-                } else if (data.type === 'conversation_initiation_metadata') {
-                  console.log('🎯 Conversation initiated successfully')
+                  
+                  // Convert to 160-byte chunks for Twilio
+                  const chunks = chunkMulawFrames(audioBytes)
+                  console.log(`🎯 Direct μ-law passthrough: ${chunks.length} chunks (${audioBytes.length} bytes)`)
+                  await enqueueTwilioChunks(chunks, streamSid, socket)
+                } else if (data.type === 'response') {
+                  console.log('🎤 ElevenLabs response:', data.response)
+                } else if (data.type === 'end') {
+                  console.log('✅ ElevenLabs stream ended')
                 } else {
-                  console.log('📋 Other ElevenLabs event:', JSON.stringify(data))
+                  console.log('📋 Other ElevenLabs streaming event:', JSON.stringify(data))
                 }
+              } else {
+                // Handle binary audio data
+                console.log(`🔊 Received binary μ-law audio: ${message.data.byteLength} bytes`)
+                const audioBytes = new Uint8Array(message.data)
+                const chunks = chunkMulawFrames(audioBytes)
+                await enqueueTwilioChunks(chunks, streamSid, socket)
               }
             } catch (error) {
-              console.error('❌ Error processing ElevenLabs message:', error)
+              console.error('❌ Error processing ElevenLabs streaming message:', error)
             }
           }
 
@@ -668,34 +635,27 @@ serve(async (req) => {
         
         buffer.addChunk(audioData)
         
-        // Send Twilio μ-law 8k directly to ElevenLabs (end-to-end μ-law passthrough)
-        if (elevenLabsConnected && elevenLabsWs?.readyState === WebSocket.OPEN) {
-          // Binary-safe base64 encoding for μ-law audio
-          let binaryIn = ''
-          for (let i = 0; i < audioData.length; i++) binaryIn += String.fromCharCode(audioData[i])
-          const base64Audio = btoa(binaryIn)
-          elevenLabsWs.send(JSON.stringify({
-            type: 'user_audio_chunk',
-            audio: base64Audio
-          }))
-        }
-
-        // Skip Whisper processing when ElevenLabs is handling the conversation
-        // Only use Whisper as fallback if ElevenLabs connection fails
-        if (!elevenLabsConnected) {
-          if (buffer.shouldProcess()) {
-            const audioToProcess = buffer.getAndClear()
-            console.log('🧠 Processing accumulated audio for Whisper (ElevenLabs fallback):', audioToProcess.length, 'bytes')
-            
-            // Process with Whisper in background
-            processAudioWithWhisper(audioToProcess).then(transcript => {
-              if (transcript.trim()) {
-                console.log('📝 Whisper transcript:', transcript)
-              }
-            }).catch(err => {
-              console.error('❌ Whisper processing error:', err)
-            })
-          }
+        // For ElevenLabs streaming API, we use Whisper to convert speech to text
+        // then send the text to ElevenLabs for response generation
+        if (buffer.shouldProcess()) {
+          const audioToProcess = buffer.getAndClear()
+          console.log('🧠 Processing accumulated audio with Whisper:', audioToProcess.length, 'bytes')
+          
+          // Process with Whisper and send transcript to ElevenLabs
+          processAudioWithWhisper(audioToProcess).then(transcript => {
+            if (transcript.trim() && elevenLabsConnected && elevenLabsWs?.readyState === WebSocket.OPEN) {
+              console.log('📝 Whisper transcript:', transcript)
+              
+              // Send transcript to ElevenLabs for response generation
+              elevenLabsWs!.send(JSON.stringify({
+                text: `Customer said: "${transcript}". Please respond appropriately as a ${businessName} receptionist.`,
+                try_trigger_generation: true
+              }))
+              console.log('📤 Sent transcript to ElevenLabs for response')
+            }
+          }).catch(err => {
+            console.error('❌ Whisper processing error:', err)
+          })
         }
 
       } else if (data.event === 'stop') {
