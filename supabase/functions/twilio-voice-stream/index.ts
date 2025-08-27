@@ -451,14 +451,20 @@ async function getSignedConvAIUrl(agentId: string, apiKey: string): Promise<stri
 
 serve(async (req) => {
   console.log(`[START] TWILIO CONVERSATIONAL AI STREAM - ${VERSION}`)
+  console.log(`[DEBUG] Request URL: ${req.url}`)
+  console.log(`[DEBUG] Request method: ${req.method}`)
+  console.log(`[DEBUG] Request headers:`, Object.fromEntries(req.headers.entries()))
   console.log('[WS] Checking WebSocket upgrade...')
   
   if (req.method === 'OPTIONS') {
+    console.log('[CORS] Returning CORS response')
     return new Response('ok', { headers: corsHeaders })
   }
   
   const upgrade = req.headers.get('upgrade') || ''
+  console.log(`[DEBUG] Upgrade header: "${upgrade}"`)
   if (upgrade.toLowerCase() !== 'websocket') {
+    console.log('[ERROR] Not a WebSocket request - rejecting')
     return new Response('Expected Websocket', { status: 426 })
   }
   
