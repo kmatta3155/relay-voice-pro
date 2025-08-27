@@ -531,8 +531,6 @@ serve(async (req) => {
         }
 
         // Check environment variables for debugging
-        const useAgentAudio = Deno.env.get('TWILIO_USE_AGENT_AUDIO')
-        const greetingOnly = Deno.env.get('TWILIO_GREETING_ONLY')
         console.log(`🔧 Environment check - USE_AGENT_AUDIO: ${useAgentAudio}, GREETING_ONLY: ${greetingOnly}`)
         
         // TEMPORARY: Enable debug tone for testing (remove after verification)
