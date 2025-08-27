@@ -557,6 +557,13 @@ serve(async (req) => {
             console.log('✅ ElevenLabs Streaming API connected successfully')
             elevenLabsConnected = true
             
+            // Send initial greeting message to ElevenLabs for immediate response
+            elevenLabsWs!.send(JSON.stringify({
+              text: `Hello! Thank you for calling ${businessName}. How can I help you today?`,
+              try_trigger_generation: true
+            }))
+            console.log('📤 Sent initial greeting to ElevenLabs')
+            
             // Send initial configuration for streaming mode
             const config = {
               text: " ", // Empty initial text to start the stream
