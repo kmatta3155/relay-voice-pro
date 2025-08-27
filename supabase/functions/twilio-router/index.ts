@@ -114,7 +114,7 @@ serve(async (req) => {
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${xmlUrl}" track="both_tracks">
+    <Stream url="${xmlUrl}" track="inbound_track">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
       <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
       <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
