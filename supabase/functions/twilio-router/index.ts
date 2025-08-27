@@ -95,7 +95,7 @@ serve(async (req) => {
       outcome: 'incoming',
     });
 
-    const streamUrl = `wss://${functionsDomain}/functions/v1/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
+    const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
     const xmlUrl    = xmlEscape(streamUrl);
 
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
