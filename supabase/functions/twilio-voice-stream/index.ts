@@ -249,11 +249,11 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
         }
         const base64Payload = btoa(binary)
         
-        // CRITICAL: Twilio-compliant outbound frame (payload only)
+        // CRITICAL: Twilio-compliant outbound frame with explicit outbound track
         const message = {
           event: 'media',
           streamSid,
-          media: { payload: base64Payload }
+          media: { payload: base64Payload, track: 'outbound' }
         }
         
         socket.send(JSON.stringify(message))
@@ -273,6 +273,20 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
 // Simplified enqueue function (queue is now handled in sendAudioToTwilio)
 async function enqueueTwilioChunks(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
   await sendAudioToTwilio(chunks, streamSid, socket)
+}
+
+// Wait until the outbound queue fully drains (or timeout)
+async function waitForQueueDrain(timeoutMs = 5000): Promise<boolean> {
+  const start = Date.now()
+  while (twilioIsSending || twilioOutboundQueue.length > 0) {
+    if (Date.now() - start > timeoutMs) {
+      console.warn(`⏳ waitForQueueDrain timed out after ${timeoutMs}ms (remaining: ${twilioOutboundQueue.length})`)
+      return false
+    }
+    await new Promise(r => setTimeout(r, 25))
+  }
+  console.log('🟢 Outbound queue fully drained')
+  return true
 }
 
 // Create WAV from μ-law for Whisper
@@ -418,7 +432,8 @@ serve(async (req) => {
   console.log(`🎵 TWILIO VOICE STREAM - ${VERSION}`)
   console.log('📍 Request received, checking WebSocket upgrade...')
   const debugTone = (Deno.env.get('TWILIO_DEBUG_TONE') || '').toLowerCase() === 'true'
-  console.log(`🧪 Debug tone mode: ${debugTone}`)
+  const echoMode = (Deno.env.get('TWILIO_ECHO') || '').toLowerCase() === 'true'
+  console.log(`🧪 Debug tone mode: ${debugTone} | Echo mode: ${echoMode}`)
   
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -502,6 +517,8 @@ serve(async (req) => {
 
         // Send immediate greeting while ElevenLabs streaming connects
         await sendImmediateGreeting(streamSid, socket, businessName)
+        // Ensure no overlap: wait for greeting queue to drain before streaming
+        await waitForQueueDrain(5000)
 
         console.log('🔗 Connecting to ElevenLabs Streaming API for direct μ-law passthrough...')
         try {
@@ -606,6 +623,13 @@ serve(async (req) => {
         )
         
         console.log('🎤 Audio chunk received, buffer size:', data.media.chunk, 'audioData:', audioData.length, 'bytes')
+
+        // Echo diagnostic: send inbound mulaw frame back out immediately
+        if (echoMode) {
+          const echoChunks = chunkMulawFrames(audioData)
+          await enqueueTwilioChunks(echoChunks, streamSid, socket)
+          return
+        }
         
         buffer.addChunk(audioData)
         
