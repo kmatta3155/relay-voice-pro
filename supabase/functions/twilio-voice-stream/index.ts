@@ -249,11 +249,11 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
         }
         const base64Payload = btoa(binary)
         
-        // CRITICAL: Twilio-compliant outbound frame with explicit outbound track
+        // CRITICAL: Twilio-compliant outbound frame (payload only)
         const message = {
           event: 'media',
           streamSid,
-          media: { payload: base64Payload, track: 'outbound' }
+          media: { payload: base64Payload }
         }
         
         socket.send(JSON.stringify(message))
