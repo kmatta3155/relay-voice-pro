@@ -109,13 +109,13 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
         }
         const base64Payload = btoa(binary)
         
-        // Twilio-compliant outbound message with track specification
+        // Twilio-compliant outbound message (no track field, add contentType)
         const message = {
           event: 'media',
           streamSid,
           media: { 
             payload: base64Payload,
-            track: 'outbound'
+            contentType: 'audio/x-mulaw;rate=8000'
           }
         }
         
@@ -186,8 +186,17 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
     }
     
     const audioBuffer = await resp.arrayBuffer()
-    const ulawBytes = new Uint8Array(audioBuffer)
-    console.log(`🎼 Received ${ulawBytes.length} μ-law bytes directly`)
+    let ulawBytes = new Uint8Array(audioBuffer)
+    
+    // Strip WAV/RIFF headers if present (causes static in Twilio)
+    if (ulawBytes.length > 44) {
+      const header = String.fromCharCode(...ulawBytes.slice(0, 4))
+      if (header === 'RIFF') {
+        console.log('🔧 Stripping WAV/RIFF header from ElevenLabs TTS')
+        ulawBytes = ulawBytes.slice(44) // Skip standard WAV header
+      }
+    }
+    console.log(`🎼 Received ${ulawBytes.length} μ-law bytes (headers stripped)`)
     
     // Chunk into 160-byte frames for Twilio
     const chunks: Uint8Array[] = []
@@ -319,18 +328,18 @@ serve(async (req) => {
             console.log('✅ ConvAI WebSocket connected')
             elevenLabsConnected = true
             
-            // Configure conversation for ulaw_8000 output
+            // Configure conversation for PCM16 16kHz output (ConvAI standard)
             if (elevenLabsWs) {
               elevenLabsWs.send(JSON.stringify({
                 type: 'conversation_initiation_metadata',
                 conversation_config_override: {
                   audio_output: {
-                    format: 'ulaw_8000',
-                    output_format: 'ulaw_8000'
+                    format: 'pcm_16000',
+                    encoding: 'pcm_s16le'
                   }
                 }
               }))
-              console.log('📤 Sent ConvAI config for ulaw_8000 output')
+              console.log('📤 Sent ConvAI config for PCM16 16kHz output')
             }
           }
           
@@ -339,16 +348,31 @@ serve(async (req) => {
               const convaiData = JSON.parse(convaiEvent.data)
               
               if (convaiData.type === 'audio') {
-                // Agent audio response - should be ulaw_8000 format
+                // Agent audio response - should be PCM16 16kHz, convert to μ-law 8kHz
                 const audioBase64 = convaiData.audio_event?.audio_base_64
                 if (audioBase64) {
                   console.log(`🎵 Received ConvAI audio: ${audioBase64.length} base64 chars`)
                   
-                  // Decode from base64
+                  // Decode PCM16 from base64
                   const binaryString = atob(audioBase64)
-                  const ulawBytes = new Uint8Array(binaryString.length)
+                  const pcm16Bytes = new Uint8Array(binaryString.length)
                   for (let i = 0; i < binaryString.length; i++) {
-                    ulawBytes[i] = binaryString.charCodeAt(i)
+                    pcm16Bytes[i] = binaryString.charCodeAt(i)
+                  }
+                  
+                  // Convert PCM16 16kHz to Int16Array
+                  const pcm16Samples = new Int16Array(pcm16Bytes.buffer)
+                  
+                  // Downsample from 16kHz to 8kHz (2:1 decimation)
+                  const pcm8kSamples = new Int16Array(Math.floor(pcm16Samples.length / 2))
+                  for (let i = 0; i < pcm8kSamples.length; i++) {
+                    pcm8kSamples[i] = pcm16Samples[i * 2] // Simple decimation
+                  }
+                  
+                  // Convert PCM to μ-law
+                  const ulawBytes = new Uint8Array(pcm8kSamples.length)
+                  for (let i = 0; i < pcm8kSamples.length; i++) {
+                    ulawBytes[i] = pcmToMulaw(pcm8kSamples[i])
                   }
                   
                   // Chunk and send to Twilio
@@ -364,7 +388,7 @@ serve(async (req) => {
                   }
                   
                   await sendAudioToTwilio(chunks, streamSid, socket)
-                  console.log(`📦 Forwarded ${chunks.length} ConvAI audio chunks to Twilio`)
+                  console.log(`📦 Converted ${pcm16Samples.length}→${ulawBytes.length} samples, sent ${chunks.length} chunks`)
                 }
               } else if (convaiData.type === 'conversation_started') {
                 console.log('✅ ConvAI conversation started')
