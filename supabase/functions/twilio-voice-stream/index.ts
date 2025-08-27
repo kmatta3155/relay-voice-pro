@@ -109,13 +109,12 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
         }
         const base64Payload = btoa(binary)
         
-        // Twilio-compliant outbound message (no track field, add contentType)
+        // Twilio-compliant outbound message (no track field)
         const message = {
           event: 'media',
           streamSid,
-          media: { 
-            payload: base64Payload,
-            contentType: 'audio/x-mulaw;rate=8000'
+          media: {
+            payload: base64Payload
           }
         }
         
@@ -145,6 +144,18 @@ async function waitForQueueDrain(timeoutMs = 5000): Promise<boolean> {
   }
   console.log('🟢 Outbound queue fully drained')
   return true
+}
+
+// Send μ-law silence prelude frames to keep Twilio engaged
+async function sendSilencePrelude(streamSid: string, socket: WebSocket, durationMs = 400) {
+  const frames = Math.max(1, Math.round(durationMs / 20))
+  const chunks: Uint8Array[] = []
+  for (let i = 0; i < frames; i++) {
+    const chunk = new Uint8Array(160)
+    chunk.fill(0xff) // μ-law silence
+    chunks.push(chunk)
+  }
+  await sendAudioToTwilio(chunks, streamSid, socket)
 }
 
 // Generate reliable TTS greeting with direct ulaw_8000 format
@@ -264,9 +275,13 @@ serve(async (req) => {
   
   const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
   const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
+  console.log('🤝 Requested WS protocols:', protocols)
+  const selectedProtocol = protocols.includes('audio.stream.v1')
+    ? 'audio.stream.v1'
+    : (protocols[0] || undefined)
   const { socket, response } = Deno.upgradeWebSocket(
     req,
-    protocols.length ? { protocol: protocols[0] } : {}
+    selectedProtocol ? { protocol: selectedProtocol } : {}
   )
   
   let streamSid = ''
@@ -305,11 +320,15 @@ serve(async (req) => {
           return
         }
         
-        // Step 1: Send immediate reliable greeting
+        // Step 1: Send short μ-law silence prelude
+        console.log('🔇 Sending short μ-law silence prelude...')
+        await sendSilencePrelude(streamSid, socket, 400)
+
+        // Step 2: Send immediate reliable greeting
         console.log('🎤 Sending immediate greeting...')
         await sendReliableGreeting(streamSid, socket, businessName)
         
-        // Step 2: Wait for greeting to complete
+        // Step 3: Wait for greeting to complete
         await waitForQueueDrain(10000)
         
         // Step 3: Connect to ElevenLabs Conversational AI
