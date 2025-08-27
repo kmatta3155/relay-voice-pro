@@ -524,6 +524,9 @@ serve(async (req) => {
           return
         }
 
+        // Send immediate greeting while ElevenLabs streaming connects
+        await sendImmediateGreeting(streamSid, socket, businessName)
+
         console.log('🔗 Connecting to ElevenLabs Streaming API for direct μ-law passthrough...')
         try {
           const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || 'EXAVITQu4vr4xnSDxMaL' // Sarah
@@ -560,13 +563,8 @@ serve(async (req) => {
             convaiOutputSampleRate = 8000
             console.log('📤 Sent streaming config to ElevenLabs: μ-law 8kHz direct output')
             
-            // Send initial greeting
-            const greeting = `Hello! Thank you for calling ${businessName}. How can I help you today?`
-            elevenLabsWs!.send(JSON.stringify({
-              text: greeting,
-              try_trigger_generation: true
-            }))
-            console.log(`🎙️ Sent greeting: "${greeting}"`)
+            // Greeting is already handled via immediate TTS; streaming will handle replies
+            console.log('ℹ️ Greeting handled via immediate TTS; streaming will handle replies.')
           }
 
           elevenLabsWs.onmessage = async (message) => {
