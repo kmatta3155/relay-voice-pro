@@ -404,32 +404,8 @@ async function sendImmediateGreeting(streamSid: string, socket: WebSocket, busin
     const pcm16kBytes = new Uint8Array(audioBuffer)
     console.log('🎼 TTS greeting PCM16 bytes received:', pcm16kBytes.length)
     
-    // For TTS greeting (16kHz), create a separate processing function
-    // Convert PCM16 16kHz to μ-law 8kHz (2:1 ratio)
-    const pcm16Samples = new Int16Array(pcm16kBytes.buffer, pcm16kBytes.byteOffset, pcm16kBytes.length / 2)
-    const len = Math.floor(pcm16Samples.length / 2)
-    const pcm8kSamples = new Int16Array(len)
-    for (let i = 0; i < len; i++) {
-      const a = pcm16Samples[i * 2]
-      const b = pcm16Samples[i * 2 + 1] || a
-      pcm8kSamples[i] = Math.round((a + b) / 2)
-    }
-    
-    // Convert to μ-law chunks
-    const chunks: Uint8Array[] = []
-    const samplesPerChunk = 160
-    for (let i = 0; i < pcm8kSamples.length; i += samplesPerChunk) {
-      const chunk = new Uint8Array(samplesPerChunk)
-      for (let j = 0; j < samplesPerChunk; j++) {
-        const sampleIndex = i + j
-        if (sampleIndex < pcm8kSamples.length) {
-          chunk[j] = pcmToMulaw(pcm8kSamples[sampleIndex])
-        } else {
-          chunk[j] = 0xFF
-        }
-      }
-      chunks.push(chunk)
-    }
+    // Use the proven processElevenLabsAudioToMulaw function for consistent results
+    const chunks = processElevenLabsAudioToMulaw(pcm16kBytes)
     
     await enqueueTwilioChunks(chunks, streamSid, socket)
     console.log('✅ TTS greeting sent to Twilio via proven conversion pipeline')
