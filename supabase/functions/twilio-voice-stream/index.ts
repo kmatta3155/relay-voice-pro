@@ -146,6 +146,23 @@ async function waitForQueueDrain(timeoutMs = 5000): Promise<boolean> {
   return true
 }
 
+// Generate μ-law tone for testing outbound path (enabled via ENABLE_TONE_TEST env var)
+function generateUlawTone(durationMs: number, frequencyHz = 1000): Uint8Array {
+  const sampleRate = 8000
+  const samples = Math.round((durationMs * sampleRate) / 1000)
+  const toneData = new Uint8Array(samples)
+  
+  for (let i = 0; i < samples; i++) {
+    // Generate sine wave
+    const sample = Math.sin(2 * Math.PI * frequencyHz * i / sampleRate)
+    // Convert to 16-bit PCM, then to μ-law
+    const pcm16 = Math.round(sample * 32767)
+    toneData[i] = pcmToMulaw(pcm16)
+  }
+  
+  return toneData
+}
+
 // Send μ-law silence prelude frames to keep Twilio engaged
 async function sendSilencePrelude(streamSid: string, socket: WebSocket, durationMs = 400) {
   const frames = Math.max(1, Math.round(durationMs / 20))
@@ -158,7 +175,46 @@ async function sendSilencePrelude(streamSid: string, socket: WebSocket, duration
   await sendAudioToTwilio(chunks, streamSid, socket)
 }
 
-// Generate reliable TTS greeting with direct ulaw_8000 format
+// Robust WAV parser to extract pure μ-law data
+function extractPureUlawFromWav(audioData: Uint8Array): Uint8Array {
+  // Check for RIFF header
+  if (audioData.length < 12) {
+    console.log('📦 Audio data too short for WAV header, treating as raw μ-law')
+    return audioData
+  }
+
+  const riffHeader = String.fromCharCode(...audioData.slice(0, 4))
+  if (riffHeader !== 'RIFF') {
+    console.log('📦 No RIFF header detected, treating as raw μ-law')
+    return audioData
+  }
+
+  console.log('🔍 RIFF header detected, parsing WAV structure...')
+  
+  // Parse WAV chunks to find the data chunk
+  let offset = 12 // Skip RIFF header
+  while (offset < audioData.length - 8) {
+    const chunkId = String.fromCharCode(...audioData.slice(offset, offset + 4))
+    const chunkSize = new DataView(audioData.buffer).getUint32(offset + 4, true)
+    
+    console.log(`📦 Found chunk: ${chunkId}, size: ${chunkSize}`)
+    
+    if (chunkId === 'data') {
+      const dataStart = offset + 8
+      const dataEnd = dataStart + chunkSize
+      const pureData = audioData.slice(dataStart, dataEnd)
+      console.log(`✅ Extracted ${pureData.length} bytes from WAV data chunk`)
+      return pureData
+    }
+    
+    offset += 8 + chunkSize
+  }
+  
+  console.warn('⚠️ No data chunk found in WAV, using full buffer')
+  return audioData
+}
+
+// Generate reliable TTS greeting with robust WAV parsing
 async function sendReliableGreeting(streamSid: string, socket: WebSocket, businessName: string) {
   try {
     console.log('🎯 Generating reliable TTS greeting...')
@@ -168,10 +224,27 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       return
     }
     
+    // Optional tone test for debugging
+    const enableToneTest = Deno.env.get('ENABLE_TONE_TEST') === 'true'
+    if (enableToneTest) {
+      console.log('🎵 TONE TEST: Sending 1kHz test tone...')
+      const toneData = generateUlawTone(1000, 1000) // 1 second, 1kHz
+      const toneChunks: Uint8Array[] = []
+      for (let i = 0; i < toneData.length; i += 160) {
+        const chunk = new Uint8Array(160)
+        const len = Math.min(160, toneData.length - i)
+        chunk.set(toneData.subarray(i, i + len), 0)
+        if (len < 160) chunk.fill(0xff, len) // Pad with silence
+        toneChunks.push(chunk)
+      }
+      await sendAudioToTwilio(toneChunks, streamSid, socket)
+      console.log('🎵 Tone test complete, proceeding with greeting...')
+    }
+    
     const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x'
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
     
-    console.log('🗣️ Requesting ulaw_8000 format directly from ElevenLabs TTS...')
+    console.log('🗣️ Requesting ulaw_8000 format from ElevenLabs TTS...')
     console.log(`📝 Text: "${text}"`)
     
     // Request ulaw_8000 directly to avoid conversion issues
@@ -197,17 +270,12 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
     }
     
     const audioBuffer = await resp.arrayBuffer()
-    let ulawBytes = new Uint8Array(audioBuffer)
+    const rawAudioData = new Uint8Array(audioBuffer)
+    console.log(`📦 Received ${rawAudioData.length} bytes from ElevenLabs`)
     
-    // Strip WAV/RIFF headers if present (causes static in Twilio)
-    if (ulawBytes.length > 44) {
-      const header = String.fromCharCode(...ulawBytes.slice(0, 4))
-      if (header === 'RIFF') {
-        console.log('🔧 Stripping WAV/RIFF header from ElevenLabs TTS')
-        ulawBytes = ulawBytes.slice(44) // Skip standard WAV header
-      }
-    }
-    console.log(`🎼 Received ${ulawBytes.length} μ-law bytes (headers stripped)`)
+    // Robustly extract pure μ-law data using WAV parser
+    const ulawBytes = extractPureUlawFromWav(rawAudioData)
+    console.log(`🎼 Extracted ${ulawBytes.length} pure μ-law bytes for Twilio`)
     
     // Chunk into 160-byte frames for Twilio
     const chunks: Uint8Array[] = []
