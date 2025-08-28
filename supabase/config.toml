@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.twilio-voicemail]
 verify_jwt = false
+
+[functions.handle-intent]
+verify_jwt = false
