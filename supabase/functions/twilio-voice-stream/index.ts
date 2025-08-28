@@ -486,6 +486,9 @@ serve(async (req) => {
   let elevenLabsWs: WebSocket | null = null
   let elevenLabsConnected = false
   let conversationStarted = false
+  // Fallback buffer for production-ready fallback pipeline
+  let fallbackBuffer: Uint8Array[] = [];
+  let fallbackActive = false;
   
   socket.onopen = () => {
     console.log('[WS] WebSocket connected to Twilio')
@@ -513,8 +516,9 @@ serve(async (req) => {
         console.log(`[CONFIG] ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}`)
         
         if (!elevenLabsKey || !agentId) {
-          console.error('[ERROR] Missing ElevenLabs credentials')
-          return
+          console.error('[ERROR] Missing ElevenLabs credentials, activating fallback')
+          fallbackActive = true;
+          return;
         }
         
         // Step 1: Send short μ-law silence prelude
@@ -633,37 +637,35 @@ serve(async (req) => {
       }
       
       else if (data.event === 'media' && data.media?.payload) {
-        // Incoming audio from caller - forward to ConvAI agent
+        // Incoming audio from caller
+        const binaryString = atob(data.media.payload);
+        const mulawBytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          mulawBytes[i] = binaryString.charCodeAt(i);
+        }
+        if (fallbackActive) {
+          fallbackBuffer.push(mulawBytes);
+          return;
+        }
+        // Forward to ConvAI agent
         if (elevenLabsConnected && conversationStarted && elevenLabsWs) {
           try {
-            // Decode μ-law audio from Twilio
-            const binaryString = atob(data.media.payload)
-            const mulawBytes = new Uint8Array(binaryString.length)
-            for (let i = 0; i < binaryString.length; i++) {
-              mulawBytes[i] = binaryString.charCodeAt(i)
-            }
-            
             // Convert μ-law 8kHz to PCM16 16kHz for ConvAI
-            const pcm16Bytes = convertMulawToPcm16(mulawBytes)
-            
-            // Encode to base64 and send to ConvAI
-            let binary = ''
+            const pcm16Bytes = convertMulawToPcm16(mulawBytes);
+            let binary = '';
             for (let i = 0; i < pcm16Bytes.length; i++) {
-              binary += String.fromCharCode(pcm16Bytes[i])
+              binary += String.fromCharCode(pcm16Bytes[i]);
             }
-            const audioBase64 = btoa(binary)
-            
+            const audioBase64 = btoa(binary);
             elevenLabsWs.send(JSON.stringify({
               type: 'user_audio_chunk',
               chunk: audioBase64
-            }))
-            
-            // Log occasionally to avoid spam
+            }));
             if (Math.random() < 0.01) {
-              console.log(`[AUDIO_FORWARD] Forwarded ${mulawBytes.length}->${pcm16Bytes.length} bytes to ConvAI`)
+              console.log(`[AUDIO_FORWARD] Forwarded ${mulawBytes.length}->${pcm16Bytes.length} bytes to ConvAI`);
             }
           } catch (audioError) {
-            console.error('[ERROR] Error forwarding audio to ConvAI:', audioError)
+            console.error('[ERROR] Error forwarding audio to ConvAI:', audioError);
           }
         }
       }
@@ -676,6 +678,142 @@ serve(async (req) => {
         }
         elevenLabsConnected = false
         conversationStarted = false
+        // Fallback pipeline
+        if (fallbackActive && fallbackBuffer.length > 0) {
+          try {
+            // 1. Concatenate all μ-law audio
+            const allMulaw = new Uint8Array(fallbackBuffer.reduce((acc, arr) => acc + arr.length, 0));
+            let offset = 0;
+            for (const arr of fallbackBuffer) {
+              allMulaw.set(arr, offset);
+              offset += arr.length;
+            }
+            // 2. Convert to PCM16 8kHz
+            const pcm8k = new Int16Array(allMulaw.length);
+            for (let i = 0; i < allMulaw.length; i++) {
+              pcm8k[i] = mulawToPcm(allMulaw[i]);
+            }
+            // 3. Encode as WAV (PCM16 8kHz mono)
+            function encodeWav(samples, sampleRate) {
+              const header = new ArrayBuffer(44);
+              const view = new DataView(header);
+              view.setUint32(0, 0x52494646, false); // "RIFF"
+              view.setUint32(4, 36 + samples.length * 2, true);
+              view.setUint32(8, 0x57415645, false); // "WAVE"
+              view.setUint32(12, 0x666d7420, false); // "fmt "
+              view.setUint32(16, 16, true);
+              view.setUint16(20, 1, true);
+              view.setUint16(22, 1, true);
+              view.setUint32(24, sampleRate, true);
+              view.setUint32(28, sampleRate * 2, true);
+              view.setUint16(32, 2, true);
+              view.setUint16(34, 16, true);
+              view.setUint32(36, 0x64617461, false); // "data"
+              view.setUint32(40, samples.length * 2, true);
+              const wav = new Uint8Array(44 + samples.length * 2);
+              wav.set(new Uint8Array(header), 0);
+              for (let i = 0; i < samples.length; i++) {
+                wav[44 + i * 2] = samples[i] & 0xff;
+                wav[44 + i * 2 + 1] = (samples[i] >> 8) & 0xff;
+              }
+              return wav;
+            }
+            const wavBytes = encodeWav(pcm8k, 8000);
+            // 4. Transcribe with Whisper API
+            const openaiKey = Deno.env.get('OPENAI_API_KEY');
+            let transcript = '';
+            if (openaiKey) {
+              const form = new FormData();
+              form.append('file', new Blob([wavBytes], { type: 'audio/wav' }), 'audio.wav');
+              form.append('model', 'whisper-1');
+              const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${openaiKey}` },
+                body: form
+              });
+              if (resp.ok) {
+                const json = await resp.json();
+                transcript = json.text || '';
+                console.log('[WHISPER] Transcript:', transcript);
+              } else {
+                console.error('[WHISPER] Transcription failed:', await resp.text());
+              }
+            }
+            // 5. Generate response with ChatGPT
+            let reply = '';
+            if (openaiKey && transcript) {
+              const chatResp = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  model: 'gpt-3.5-turbo',
+                  messages: [
+                    { role: 'system', content: `You are a helpful AI receptionist for ${businessName}.` },
+                    { role: 'user', content: transcript }
+                  ]
+                })
+              });
+              if (chatResp.ok) {
+                const json = await chatResp.json();
+                reply = json.choices?.[0]?.message?.content || '';
+                console.log('[CHATGPT] Reply:', reply);
+              } else {
+                console.error('[CHATGPT] Generation failed:', await chatResp.text());
+              }
+            }
+            // 6. Synthesize with ElevenLabs TTS if available
+            let ttsAudio = null;
+            const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY');
+            const agentId = Deno.env.get('ELEVENLABS_AGENT_ID');
+            if (elevenLabsKey && agentId) {
+              const ttsResp = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + agentId, {
+                method: 'POST',
+                headers: {
+                  'xi-api-key': elevenLabsKey,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  text: reply,
+                  voice_settings: { stability: 0.5, similarity_boost: 0.7 },
+                  output_format: 'pcm_16000'
+                })
+              });
+              if (ttsResp.ok) {
+                const arrayBuffer = await ttsResp.arrayBuffer();
+                const pcm16 = new Int16Array(arrayBuffer);
+                const pcm8k = new Int16Array(Math.floor(pcm16.length / 2));
+                for (let i = 0; i < pcm8k.length; i++) {
+                  pcm8k[i] = pcm16[i * 2];
+                }
+                const ulawBytes = new Uint8Array(pcm8k.length);
+                for (let i = 0; i < pcm8k.length; i++) {
+                  ulawBytes[i] = pcmToMulaw(pcm8k[i]);
+                }
+                ttsAudio = ulawBytes;
+              } else {
+                console.error('[TTS] Synthesis failed:', await ttsResp.text());
+              }
+            }
+            // 7. Stream TTS audio back to Twilio
+            if (ttsAudio) {
+              const chunks = [];
+              for (let i = 0; i < ttsAudio.length; i += 160) {
+                const chunk = new Uint8Array(160);
+                const len = Math.min(160, ttsAudio.length - i);
+                chunk.set(ttsAudio.subarray(i, i + len), 0);
+                if (len < 160) chunk.fill(0xff, len);
+                chunks.push(chunk);
+              }
+              await sendAudioToTwilio(chunks, streamSid, socket);
+              console.log('[FALLBACK] Sent TTS audio to Twilio');
+            } else if (reply) {
+              socket.send(JSON.stringify({ event: 'say', text: reply }));
+              console.log('[FALLBACK] Sent <Say> text to Twilio');
+            }
+          } catch (fallbackError) {
+            console.error('[FALLBACK] Error in fallback pipeline:', fallbackError);
+          }
+        }
       }
       
     } catch (error) {
