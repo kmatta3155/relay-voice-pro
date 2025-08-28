@@ -13,7 +13,7 @@ const supabase = createClient(
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
-const functionsDomain = `${projectRef}.functions.supabase.co`;
+const functionsBaseUrl = `https://${projectRef}.supabase.co/functions/v1`;
 
 // Helper to escape XML attribute values
 function xmlEscape(value: string): string {
@@ -105,7 +105,7 @@ serve(async (req) => {
     });
 
     // Generate TwiML with Say/Gather loop for reliable audio
-    const intentUrl = `https://${functionsDomain}/handle-intent?tenant_id=${tenantId}&business_name=${encodeURIComponent(businessName)}`;
+    const intentUrl = `${functionsBaseUrl}/handle-intent?tenant_id=${tenantId}&business_name=${encodeURIComponent(businessName)}`;
     
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
