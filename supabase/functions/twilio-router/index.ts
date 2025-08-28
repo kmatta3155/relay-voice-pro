@@ -13,6 +13,7 @@ const supabase = createClient(
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+// Public functions URL format: https://gnqqktmslswgjtvxfvdo.supabase.co/functions/v1/
 const functionsBaseUrl = `https://${projectRef}.supabase.co/functions/v1`;
 
 // Helper to escape XML attribute values
