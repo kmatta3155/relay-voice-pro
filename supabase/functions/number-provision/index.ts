@@ -78,7 +78,7 @@ serve(async (req) => {
 
       // Configure webhooks - point to Supabase Functions
       const base = (body.projectBase || Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "");
-      const functionsBase = base.replace('.supabase.co', '.functions.supabase.co');
+      const functionsBase = base + "/functions/v1";
       const sid = bought.sid;
       const setHooks = new URLSearchParams({
         VoiceUrl: `${functionsBase}/twilio-router?tenant_id=${body.tenantId}`,
@@ -104,8 +104,8 @@ serve(async (req) => {
     }
 
     if (body.action === "configure") {
-      const base = ((body.projectBase || Deno.env.get("SUPABASE_URL") || "") as string).replace(/\/$/, "");
-      const functionsBase = base.replace('.supabase.co', '.functions.supabase.co');
+  const base = ((body.projectBase || Deno.env.get("SUPABASE_URL") || "") as string).replace(/\/$/, "");
+  const functionsBase = base + "/functions/v1";
       // Normalize to E.164 so Twilio lookup is robust
       const normalize = (num: string) => {
         if (!num) return num;
@@ -131,9 +131,9 @@ serve(async (req) => {
 
       const sid = incoming.sid;
       const setHooks = new URLSearchParams({
-        VoiceUrl: `${functionsBase}/twilio-router?tenant_id=${body.tenantId}`,
-        StatusCallback: `${functionsBase}/twilio-status?tenant_id=${body.tenantId}`,
-        SmsUrl: `${functionsBase}/twilio-sms-incoming?tenant_id=${body.tenantId}`,
+  VoiceUrl: `${functionsBase}/twilio-router?tenant_id=${body.tenantId}`,
+  StatusCallback: `${functionsBase}/twilio-status?tenant_id=${body.tenantId}`,
+  SmsUrl: `${functionsBase}/twilio-sms-incoming?tenant_id=${body.tenantId}`,
       });
 
       await twilioFetch(
