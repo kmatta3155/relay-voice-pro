@@ -104,23 +104,16 @@ serve(async (req) => {
       outcome: 'incoming',
     });
 
-    // Standard Twilio Stream URL pointing to voice-stream function
-    const streamUrl = `wss://${functionsDomain}/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
-    const xmlUrl    = xmlEscape(streamUrl);
-
-    // Generate TwiML with status callback for better visibility
-    const statusCallbackUrl = `https://${functionsDomain}/twilio-status`;
+    // Generate TwiML with Say/Gather loop for reliable audio
+    const intentUrl = `https://${functionsDomain}/handle-intent?tenant_id=${tenantId}&business_name=${encodeURIComponent(businessName)}`;
     
 const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Start>
-    <Stream url="${xmlUrl}" track="both_tracks">
-      <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
-      <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
-      <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
-    </Stream>
-  </Start>
-  <Pause length="3600"/>
+  <Say voice="alice">Hello! I'm the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
+  <Gather input="speech" language="en-US" speechTimeout="auto" action="${xmlEscape(intentUrl)}" method="POST">
+    <Say voice="alice">I'm listening...</Say>
+  </Gather>
+  <Redirect>${xmlEscape(intentUrl)}</Redirect>
 </Response>`;
     return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
   } catch (err) {
