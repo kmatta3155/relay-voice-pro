@@ -33,10 +33,11 @@ serve(async (req) => {
   }
 
   try {
-    const contentType = req.headers.get('content-type') || '';
-    let callSid: string | null = null;
-    let from   : string | null = null;
-    let to     : string | null = null;
+  const contentType = req.headers.get('content-type') || '';
+  let callSid: string | null = null;
+  let from   : string | null = null;
+  let to     : string | null = null;
+  let agentData: any = null;
 
     // Parse Twilio parameters
     if (req.method === 'POST' && contentType.includes('application/x-www-form-urlencoded')) {
@@ -70,12 +71,13 @@ serve(async (req) => {
     // Check agent status (with debug bypass)
     const debugForceStream = Deno.env.get('DEBUG_FORCE_STREAM') === 'true';
     if (!debugForceStream) {
-      const { data: agentData } = await supabase
+      const agentRes = await supabase
         .from('ai_agents')
         .select('mode, status')
         .eq('tenant_id', tenantId)
         .eq('status', 'ready')
         .maybeSingle();
+      agentData = agentRes.data;
       if (!agentData || agentData.mode !== 'live') {
         console.log(`[ROUTER] Agent not ready - status: ${agentData?.status}, mode: ${agentData?.mode}`);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. We're currently unavailable. Please try again later.</Say><Hangup/></Response>`;
