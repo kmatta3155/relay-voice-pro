@@ -106,9 +106,26 @@ serve(async (req) => {
     });
 
     // Generate TwiML with Say/Gather loop for reliable audio
-    const intentUrl = `${functionsBaseUrl}/handle-intent?tenant_id=${tenantId}&business_name=${encodeURIComponent(businessName)}`;
-    
-const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+    const streamBaseUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream`;
+    const phoneNumber = to || '';
+    let twiml = '';
+    if (Deno.env.get('DEBUG_FORCE_STREAM') === 'true' || (agentData && agentData.mode === 'live' && agentData.status === 'ready')) {
+      // Streaming mode: <Connect><Stream>
+      twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Hello! You're connected to ${xmlEscape(businessName)}. How can I help?</Say>
+  <Connect>
+    <Stream url="${streamBaseUrl}">
+      <Parameter name="tenantId" value="${xmlEscape(tenantId)}" />
+      <Parameter name="businessName" value="${xmlEscape(businessName)}" />
+      <Parameter name="phoneNumber" value="${xmlEscape(phoneNumber)}" />
+    </Stream>
+  </Connect>
+</Response>`;
+    } else {
+      // Fallback: <Say>/<Gather>
+      const intentUrl = `${functionsBaseUrl}/handle-intent?tenant_id=${tenantId}&business_name=${encodeURIComponent(businessName)}`;
+      twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Hello! I'm the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Gather input="speech" language="en-US" speechTimeout="auto" action="${xmlEscape(intentUrl)}" method="POST">
@@ -116,6 +133,7 @@ const twiml = `<?xml version="1.0" encoding="UTF-8"?>
   </Gather>
   <Redirect>${xmlEscape(intentUrl)}</Redirect>
 </Response>`;
+    }
     return new Response(twiml, { headers: { 'Content-Type': 'text/xml' } });
   } catch (err) {
     console.error('router error:', err);
