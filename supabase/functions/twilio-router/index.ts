@@ -112,10 +112,9 @@ serve(async (req) => {
     const phoneNumber = to || '';
     let twiml = '';
     if (Deno.env.get('DEBUG_FORCE_STREAM') === 'true' || (agentData && agentData.mode === 'live' && agentData.status === 'ready')) {
-      // Streaming mode: <Connect><Stream>
+      // Streaming mode: <Connect><Stream> (no <Say> greeting)
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Hello! You're connected to ${xmlEscape(businessName)}. How can I help?</Say>
   <Connect>
     <Stream url="${streamBaseUrl}">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}" />
