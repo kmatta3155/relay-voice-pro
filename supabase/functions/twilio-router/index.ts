@@ -112,16 +112,18 @@ serve(async (req) => {
     const phoneNumber = to || '';
     let twiml = '';
     if (Deno.env.get('DEBUG_FORCE_STREAM') === 'true' || (agentData && agentData.mode === 'live' && agentData.status === 'ready')) {
-      // Streaming mode: <Say> greeting, then <Connect><Stream>
-      const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${xmlEscape(tenantId)}&call_sid=${xmlEscape(callSid)}&business_name=${xmlEscape(businessName)}&phone_number=${xmlEscape(phoneNumber)}`;
+      // Streaming mode: <Say> greeting, then <Connect><Stream> with valid XML escaping
+      let streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
+      // XML-escape the full URL (including & as &amp;)
+      streamUrl = xmlEscape(streamUrl);
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! You’re connected to the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
+  <Say>Hello! You’re connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Connect>
     <Stream url="${streamUrl}">
-      <Parameter name="tenantId" value="${xmlEscape(tenantId)}" />
-      <Parameter name="businessName" value="${xmlEscape(businessName)}" />
-      <Parameter name="phoneNumber" value="${xmlEscape(phoneNumber)}" />
+      <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
+      <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
+      <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
     </Stream>
   </Connect>
 </Response>`;
