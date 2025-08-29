@@ -95,7 +95,7 @@ function extractStructuredData(content: string): any {
   
   return businessInfo;
 }
-
+ 
 // Extract business information using AI + structured data
 async function extractBusinessInfo(content: string): Promise<any> {
   // First try structured data extraction
