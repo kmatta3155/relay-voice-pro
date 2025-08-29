@@ -112,11 +112,13 @@ serve(async (req) => {
     const phoneNumber = to || '';
     let twiml = '';
     if (Deno.env.get('DEBUG_FORCE_STREAM') === 'true' || (agentData && agentData.mode === 'live' && agentData.status === 'ready')) {
-      // Streaming mode: <Connect><Stream> (no <Say> greeting)
+      // Streaming mode: <Say> greeting, then <Connect><Stream>
+      const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${xmlEscape(tenantId)}&call_sid=${xmlEscape(callSid)}&business_name=${xmlEscape(businessName)}&phone_number=${xmlEscape(phoneNumber)}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say>Hello! You’re connected to the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Connect>
-    <Stream url="${streamBaseUrl}">
+    <Stream url="${streamUrl}">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}" />
       <Parameter name="businessName" value="${xmlEscape(businessName)}" />
       <Parameter name="phoneNumber" value="${xmlEscape(phoneNumber)}" />
@@ -125,7 +127,7 @@ serve(async (req) => {
 </Response>`;
     } else {
       // Fallback: <Say>/<Gather>
-      const intentUrl = `${functionsBaseUrl}/handle-intent?tenant_id=${tenantId}&business_name=${encodeURIComponent(businessName)}`;
+      const intentUrl = `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(tenantId)}&business_name=${encodeURIComponent(businessName)}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Hello! I'm the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
