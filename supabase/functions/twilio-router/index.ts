@@ -1,5 +1,28 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
+import { createClient } from 'https://esm.    if (Deno.env.get('DEBUG    } else {
+      // Fallback with valid XML
+      const intentUrl = `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(tenantId)}&business_name=${encodeURIComponent(businessName)}`;
+      twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Hello! I'm the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
+  <Gather input="speech" language="en-US" speechTimeout="auto" method="POST"
+          action="${xmlEscape(intentUrl)}">
+    <Say>I'm listening…</Say>
+  </Gather>
+</Response>`;EAM') === 'true' || (agentData && agentData.mode === 'live' && agentData.status === 'ready')) {
+      // Streaming mode with valid XML
+      const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
+      twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Hello! You're connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
+  <Connect>
+    <Stream url="${xmlEscape(streamUrl)}">
+      <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
+      <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
+      <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
+    </Stream>
+  </Connect>
+</Response>`;upabase-js@2.38.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
