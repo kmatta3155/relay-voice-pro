@@ -112,21 +112,9 @@ serve(async (req) => {
     const phoneNumber = to || '';
     let twiml = '';
     if (Deno.env.get('DEBUG_FORCE_STREAM') === 'true' || (agentData && agentData.mode === 'live' && agentData.status === 'ready')) {
-      // Streaming mode: <Say> greeting, then <Connect><Stream> with valid XML escaping
-      let streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
-      // XML-escape the full URL (including & as &amp;)
-      streamUrl = xmlEscape(streamUrl);
-      twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Hello! You’re connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
-  <Connect>
-    <Stream url="${streamUrl}">
-      <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
-      <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
-      <Parameter name="phoneNumber" value="${xmlEscape(from || '')}"/>
-    </Stream>
-  </Connect>
-</Response>`;
+  // Streaming mode: <Say> greeting, then <Connect><Stream> with valid XML escaping, no blank lines before <?xml
+  const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
+  twiml = `<?xml version="1.0" encoding="UTF-8"?>
     } else {
       // Fallback: <Say>/<Gather>
       const intentUrl = `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(tenantId)}&business_name=${encodeURIComponent(businessName)}`;
