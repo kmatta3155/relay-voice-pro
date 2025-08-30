@@ -57,14 +57,14 @@ serve(async (req) => {
       return `+${digits}`;
     }
     const toE164 = normalizeE164(to);
-    // Look up the tenant by phone number in E.164 format
-    const { data: numberRow } = await supabase
-      .from("numbers")
+    // Look up the tenant by phone number in agent_settings (twilio_number)
+    const { data: agent } = await supabase
+      .from("agent_settings")
       .select("tenant_id")
-      .eq("phone_number", toE164)
+      .eq("twilio_number", toE164)
       .maybeSingle();
 
-    const tenantId = numberRow?.tenant_id;
+    const tenantId = agent?.tenant_id;
     if (!tenantId) {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
