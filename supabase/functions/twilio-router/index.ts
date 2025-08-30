@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.54.0";
 
@@ -8,19 +7,33 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
 
-// Escape special XML characters
+/**
+ * Escape special XML characters in attribute values and text.
+ */
 function xmlEscape(val: string | undefined | null): string {
-  if (!val) return "";
   return val
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+    ? val.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;")
+    : "";
+}
+
+/**
+ * Normalize a phone number to E.164 (USA) format.
+ */
+function normalizeE164(num: string): string {
+  if (!num) return num;
+  if (num.startsWith("+")) return num;
+  const digits = num.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  return `+${digits}`;
 }
 
 serve(async (req) => {
-  // Handle preflight for CORS
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       headers: {
@@ -31,7 +44,7 @@ serve(async (req) => {
   }
 
   try {
-    // Parse call parameters
+    // Parse Twilio parameters
     let callSid = "";
     let from = "";
     let to = "";
@@ -47,24 +60,29 @@ serve(async (req) => {
       to      = url.searchParams.get("To") || "";
     }
 
-    // Normalize phone number to E.164 for lookup
-    function normalizeE164(num: string) {
-      if (!num) return num;
-      if (num.startsWith("+")) return num;
-      const digits = num.replace(/\D/g, "");
-      if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-      if (digits.length === 10) return `+1${digits}`;
-      return `+${digits}`;
-    }
+    // Normalize 'to' number
     const toE164 = normalizeE164(to);
-    // Look up the tenant by phone number in agent_settings (twilio_number)
-    const { data: agent } = await supabase
+    let tenantId: string | undefined | null = null;
+
+    // Look up tenant in agent_settings.twilio_number
+    const { data: agentRecord } = await supabase
       .from("agent_settings")
       .select("tenant_id")
       .eq("twilio_number", toE164)
       .maybeSingle();
 
-    const tenantId = agent?.tenant_id;
+    tenantId = agentRecord?.tenant_id;
+
+    // If not found, fall back to numbers.phone_number
+    if (!tenantId) {
+      const { data: numRecord } = await supabase
+        .from("numbers")
+        .select("tenant_id")
+        .eq("phone_number", toE164)
+        .maybeSingle();
+      tenantId = numRecord?.tenant_id;
+    }
+
     if (!tenantId) {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -74,13 +92,12 @@ serve(async (req) => {
       return new Response(twiml, { headers: { "Content-Type": "text/xml" } });
     }
 
-    // Check agent readiness
+    // Check agent status and mode
     const { data: agentRow } = await supabase
       .from("ai_agents")
       .select("mode, status")
       .eq("tenant_id", tenantId)
       .maybeSingle();
-
     const agentIsLive = agentRow && agentRow.mode === "live" && agentRow.status === "ready";
 
     // Fetch business name
@@ -100,13 +117,14 @@ serve(async (req) => {
       outcome: "incoming",
     });
 
-    // Build the appropriate TwiML
+    // Build the TwiML
     let twiml: string;
     if (agentIsLive) {
+      // Live agent—stream to WebSocket
       const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! You're connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
+  <Say>Hello! You’re connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Connect>
     <Stream url="${xmlEscape(streamUrl)}">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
@@ -116,22 +134,24 @@ serve(async (req) => {
   </Connect>
 </Response>`;
     } else {
+      // Fallback to Gather for speech recognition (calls your handle-intent function)
       const intentUrl = `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(tenantId)}&business_name=${encodeURIComponent(businessName)}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! I'm the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
+  <Say>Hello! I’m the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Gather input="speech" language="en-US" speechTimeout="auto"
           action="${xmlEscape(intentUrl)}" method="POST">
-    <Say>I'm listening…</Say>
+    <Say>I’m listening…</Say>
   </Gather>
 </Response>`;
     }
+
     return new Response(twiml, { headers: { "Content-Type": "text/xml" } });
   } catch (err) {
-    console.error(err);
+    console.error("Router error:", err);
     const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say>
+  <Say>Sorry, we’re experiencing technical difficulties. Please try again later.</Say>
   <Hangup/>
 </Response>`;
     return new Response(errorTwiml, { headers: { "Content-Type": "text/xml" } });
