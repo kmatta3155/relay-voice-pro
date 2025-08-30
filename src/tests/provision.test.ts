@@ -17,7 +17,7 @@ async function testTenantProvisioning() {
   console.log("Found number:", phoneNumber);
 
   // 3. Purchase number
-  const purchase = await purchaseNumber({ phoneNumber, tenantId, projectBase: supabase.rest.url });
+  const purchase = await purchaseNumber({ phoneNumber, tenantId, projectBase: "https://gnqqktmslswgjtvxfvdo.supabase.co" });
   if (!purchase?.ok) throw new Error("Number purchase failed");
   console.log("Purchased number:", phoneNumber);
 
