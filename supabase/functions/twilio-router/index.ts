@@ -47,11 +47,21 @@ serve(async (req) => {
       to      = url.searchParams.get("To") || "";
     }
 
-    // Look up the tenant by phone number
+    // Normalize phone number to E.164 for lookup
+    function normalizeE164(num: string) {
+      if (!num) return num;
+      if (num.startsWith("+")) return num;
+      const digits = num.replace(/\D/g, "");
+      if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+      if (digits.length === 10) return `+1${digits}`;
+      return `+${digits}`;
+    }
+    const toE164 = normalizeE164(to);
+    // Look up the tenant by phone number in E.164 format
     const { data: numberRow } = await supabase
       .from("numbers")
       .select("tenant_id")
-      .eq("phone_number", to)
+      .eq("phone_number", toE164)
       .maybeSingle();
 
     const tenantId = numberRow?.tenant_id;
