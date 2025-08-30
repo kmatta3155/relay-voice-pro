@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.54.0";
 
@@ -7,12 +8,10 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
 
-/**
- * Escape special characters for XML attributes and text.
- */
-function xmlEscape(value: string | null | undefined): string {
-  if (!value) return "";
-  return value
+// Escape special XML characters
+function xmlEscape(val: string | undefined | null): string {
+  if (!val) return "";
+  return val
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -21,7 +20,7 @@ function xmlEscape(value: string | null | undefined): string {
 }
 
 serve(async (req) => {
-  // CORS preflight
+  // Handle preflight for CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       headers: {
@@ -32,24 +31,23 @@ serve(async (req) => {
   }
 
   try {
-    // Extract Twilio parameters from POST form-data or query string
+    // Parse call parameters
     let callSid = "";
     let from = "";
     let to = "";
     if (req.headers.get("content-type")?.includes("application/x-www-form-urlencoded")) {
       const form = await req.formData();
       callSid = (form.get("CallSid") as string) || "";
-      from    = (form.get("From")   as string) || "";
-      to      = (form.get("To")     as string) || "";
+      from    = (form.get("From") as string) || "";
+      to      = (form.get("To") as string) || "";
     } else {
       const url = new URL(req.url);
       callSid = url.searchParams.get("CallSid") || "";
-      from    = url.searchParams.get("From")    || "";
-      to      = url.searchParams.get("To")      || "";
+      from    = url.searchParams.get("From") || "";
+      to      = url.searchParams.get("To") || "";
     }
-    console.log(`Incoming call: ${from} -> ${to}, CallSid: ${callSid}`);
 
-    // Look up tenant ID by phone number
+    // Look up the tenant by phone number
     const { data: numberRow } = await supabase
       .from("numbers")
       .select("tenant_id")
@@ -58,7 +56,6 @@ serve(async (req) => {
 
     const tenantId = numberRow?.tenant_id;
     if (!tenantId) {
-      console.log(`No tenant found for number: ${to}`);
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>This number is not configured. Goodbye.</Say>
@@ -66,9 +63,8 @@ serve(async (req) => {
 </Response>`;
       return new Response(twiml, { headers: { "Content-Type": "text/xml" } });
     }
-    console.log(`Found tenant: ${tenantId}`);
 
-    // Check AI agent status and mode
+    // Check agent readiness
     const { data: agentRow } = await supabase
       .from("ai_agents")
       .select("mode, status")
@@ -76,33 +72,28 @@ serve(async (req) => {
       .maybeSingle();
 
     const agentIsLive = agentRow && agentRow.mode === "live" && agentRow.status === "ready";
-    console.log(`Agent mode=${agentRow?.mode}, status=${agentRow?.status}, live=${agentIsLive}`);
 
-    // Fetch business name for greeting
+    // Fetch business name
     const { data: tenantRow } = await supabase
       .from("tenants")
       .select("name")
       .eq("id", tenantId)
       .maybeSingle();
-
     const businessName = tenantRow?.name || "this business";
-    console.log(`Business name: ${businessName}`);
 
-    // Log the incoming call
+    // Log the call
     await supabase.from("calls").insert({
       tenant_id: tenantId,
-      from: from,
-      to: to,
+      from,
+      to,
       at: new Date().toISOString(),
       outcome: "incoming",
     });
-    console.log("Call logged successfully");
 
-    let twiml = "";
+    // Build the appropriate TwiML
+    let twiml: string;
     if (agentIsLive) {
-      // Stream to voice handler (WebSocket) when agent is live/ready
-      const streamUrl =
-        `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
+      const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Hello! You're connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
@@ -114,11 +105,8 @@ serve(async (req) => {
     </Stream>
   </Connect>
 </Response>`;
-      console.log("Returning streaming TwiML for live agent");
     } else {
-      // Fall back to a Gather prompt with speech recognition
-      const intentUrl =
-        `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(tenantId)}&business_name=${encodeURIComponent(businessName)}`;
+      const intentUrl = `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(tenantId)}&business_name=${encodeURIComponent(businessName)}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Hello! I'm the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
@@ -127,12 +115,10 @@ serve(async (req) => {
     <Say>I'm listening…</Say>
   </Gather>
 </Response>`;
-      console.log("Returning gather TwiML for fallback mode");
     }
-
     return new Response(twiml, { headers: { "Content-Type": "text/xml" } });
   } catch (err) {
-    console.error("Error in twilio-router:", err);
+    console.error(err);
     const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say>
