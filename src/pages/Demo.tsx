@@ -16,10 +16,10 @@ import { Switch } from "@/components/ui/switch";
 
 // ---------- Hard-mapped ElevenLabs Voice IDs (as provided; UNCHANGED) ----------
 const VOICE_AI_EN = "21m00Tcm4TlvDq8ikWAM"; // Rachel – calm, expressive female voice (EN)
-const VOICE_AI_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – expressive female voice (works well in Spanish)
+const VOICE_AI_ES = "ZIlrSGI4jZqobxRKprJz"; // Aria – expressive female voice (works well in Spanish)
 const VOICE_CALLER_F = "Xb7hH8MSUJpSbSDYk0k2"; // Alice – confident female British
 const VOICE_CALLER_M = "pqHfZKP75CvOlQylNhV4"; // Bill – trustworthy older male
-const VOICE_CALLER_ES = "9BWtsMINqrJLrRacOk9x"; // Aria – Spanish-optimized voice for callers
+const VOICE_CALLER_ES = "ZIlrSGI4jZqobxRKprJz"; // Aria – Spanish-optimized voice for callers
 
 // ---------- Audio delivery settings (UNCHANGED) ----------
 const DEFAULT_VOICE_SETTINGS = {

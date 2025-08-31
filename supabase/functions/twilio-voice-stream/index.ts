@@ -353,7 +353,7 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       console.log('[TONE_TEST] Tone test complete, proceeding with greeting...')
     }
 
-    const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x'
+    const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || 'ZIlrSGI4jZqobxRKprJz'
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
 
     // Prefer PCM request to avoid any container/encoding ambiguity

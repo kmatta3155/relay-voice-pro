@@ -25,7 +25,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { tenant_id, agent_name = 'Receptionist', voice_provider = 'elevenlabs', voice_id = '9BWtsMINqrJLrRacOk9x', business_type = 'salon' }: TrainAgentPayload = await req.json();
+    const { tenant_id, agent_name = 'Receptionist', voice_provider = 'elevenlabs', voice_id = 'ZIlrSGI4jZqobxRKprJz', business_type = 'salon' }: TrainAgentPayload = await req.json();
 
     console.log('Training agent for tenant:', tenant_id);
 

@@ -372,7 +372,7 @@ const analyzeWebsite = async (deepCrawl = false) => {
           tenant_id: newTenantId,
           agent_name: 'Receptionist',
           voice_provider: 'elevenlabs',
-          voice_id: '9BWtsMINqrJLrRacOk9x'
+          voice_id: 'ZIlrSGI4jZqobxRKprJz'
         }
       });
 

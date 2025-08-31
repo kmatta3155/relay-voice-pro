@@ -95,7 +95,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
           tenant_id: tenantId,
           agent_name: 'Receptionist',
           voice_provider: 'elevenlabs',
-          voice_id: '9BWtsMINqrJLrRacOk9x',
+          voice_id: 'ZIlrSGI4jZqobxRKprJz',
           business_type: 'salon' // Could be made configurable later
         }
       });
