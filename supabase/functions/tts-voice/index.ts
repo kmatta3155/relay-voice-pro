@@ -111,7 +111,7 @@ serve(async (req) => {
     console.log(`[${requestId}] Request body:`, JSON.stringify(bodyIn, null, 2));
     
     const text = bodyIn?.text;
-    const voiceId = bodyIn?.voiceId || bodyIn?.voice || "EXAVITQu4vr4xnSDxMaL"; // Sarah
+    const voiceId = bodyIn?.voiceId || bodyIn?.voice || "ZIlrSGI4jZqobxRKprJz"; // Sarah
     const modelId = bodyIn?.modelId || bodyIn?.model || "eleven_multilingual_v2";
     const clientFmt = (bodyIn?.output_format || bodyIn?.format || "mp3") as string;
 
