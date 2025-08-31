@@ -16,9 +16,9 @@ const supabase = (supabaseUrl && supabaseKey)
 // Version for tracking deployments
 const VERSION = 'tts-or-convai@2025-08-31-01'
 
-// Feature flag: use ElevenLabs Conversational AI audio stream
-// Set TWILIO_USE_AGENT_AUDIO=false to force TTS-only pipeline
-const USE_CONVAI = (Deno.env.get('TWILIO_USE_AGENT_AUDIO') ?? 'true').toLowerCase() === 'true'
+// Mode: force TTS-only pipeline (no ConvAI WebSocket)
+// To re-enable ConvAI, set this to true and redeploy
+const USE_CONVAI = false
 
 // Standard G.711 μ-law encoding
 function pcmToMulaw(sample: number): number {
