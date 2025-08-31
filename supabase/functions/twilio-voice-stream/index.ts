@@ -12,7 +12,11 @@ const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 // Version for tracking deployments
-const VERSION = 'convai-stream@2025-08-27-01'
+const VERSION = 'tts-or-convai@2025-08-31-01'
+
+// Feature flag: use ElevenLabs Conversational AI audio stream
+// Set TWILIO_USE_AGENT_AUDIO=false to force TTS-only pipeline
+const USE_CONVAI = (Deno.env.get('TWILIO_USE_AGENT_AUDIO') ?? 'true').toLowerCase() === 'true'
 
 // Standard G.711 μ-law encoding
 function pcmToMulaw(sample: number): number {
@@ -353,7 +357,8 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       console.log('[TONE_TEST] Tone test complete, proceeding with greeting...')
     }
 
-    const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || 'ZIlrSGI4jZqobxRKprJz'
+    // Default to a stable public ElevenLabs voice if not provided
+    const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x'
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
 
     // Prefer PCM request to avoid any container/encoding ambiguity
@@ -489,6 +494,169 @@ serve(async (req) => {
   // Fallback buffer for production-ready fallback pipeline
   let fallbackBuffer: Uint8Array[] = [];
   let fallbackActive = false;
+
+  // TTS-only mode state (when USE_CONVAI=false)
+  const ttsOnlyMode = !USE_CONVAI
+  let ttsFramesBuffer: Uint8Array[] = []
+  let ttsProcessing = false
+  let isSpeaking = false
+  let consecutiveSilenceFrames = 0
+
+  function isUlawSilence(frame: Uint8Array, thresholdRms = 500): boolean {
+    // Convert μ-law -> PCM16 and compute RMS to detect silence
+    let sumSq = 0
+    for (let i = 0; i < frame.length; i++) {
+      const s = mulawToPcm(frame[i])
+      sumSq += s * s
+    }
+    const rms = Math.sqrt(sumSq / frame.length)
+    return rms < thresholdRms
+  }
+
+  function ulawFramesToPcm16(frames: Uint8Array[]): Int16Array {
+    const totalSamples = frames.reduce((acc, f) => acc + f.length, 0)
+    const out = new Int16Array(totalSamples)
+    let idx = 0
+    for (const f of frames) {
+      for (let i = 0; i < f.length; i++) {
+        out[idx++] = mulawToPcm(f[i])
+      }
+    }
+    return out
+  }
+
+  function encodeWavFromPcm16(samples: Int16Array, sampleRate = 8000): Uint8Array {
+    const header = new ArrayBuffer(44)
+    const view = new DataView(header)
+    view.setUint32(0, 0x52494646, false) // "RIFF"
+    view.setUint32(4, 36 + samples.length * 2, true)
+    view.setUint32(8, 0x57415645, false) // "WAVE"
+    view.setUint32(12, 0x666d7420, false) // "fmt "
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true) // PCM
+    view.setUint16(22, 1, true) // mono
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, sampleRate * 2, true) // byte rate
+    view.setUint16(32, 2, true) // block align
+    view.setUint16(34, 16, true) // bits per sample
+    view.setUint32(36, 0x64617461, false) // "data"
+    view.setUint32(40, samples.length * 2, true)
+    const wav = new Uint8Array(44 + samples.length * 2)
+    wav.set(new Uint8Array(header), 0)
+    for (let i = 0; i < samples.length; i++) {
+      wav[44 + i * 2] = samples[i] & 0xff
+      wav[44 + i * 2 + 1] = (samples[i] >> 8) & 0xff
+    }
+    return wav
+  }
+
+  async function transcribeWithWhisper(wavBytes: Uint8Array): Promise<string> {
+    const openaiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openaiKey) {
+      console.warn('[WHISPER] OPENAI_API_KEY missing, skipping transcription')
+      return ''
+    }
+    try {
+      const form = new FormData()
+      form.append('file', new Blob([wavBytes], { type: 'audio/wav' }), 'audio.wav')
+      form.append('model', 'whisper-1')
+      const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${openaiKey}` },
+        body: form
+      })
+      if (!resp.ok) {
+        console.error('[WHISPER] Transcription failed:', await resp.text())
+        return ''
+      }
+      const json = await resp.json()
+      const text = json.text || ''
+      console.log('[WHISPER] Transcript:', text)
+      return text
+    } catch (e) {
+      console.error('[WHISPER] Error:', e)
+      return ''
+    }
+  }
+
+  async function generateReplyWithChatGPT(transcript: string, business: string): Promise<string> {
+    const openaiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openaiKey) return ''
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            { role: 'system', content: `You are a helpful AI receptionist for ${business}. Keep replies concise.` },
+            { role: 'user', content: transcript }
+          ]
+        })
+      })
+      if (!resp.ok) {
+        console.error('[CHATGPT] Generation failed:', await resp.text())
+        return ''
+      }
+      const json = await resp.json()
+      const reply = json.choices?.[0]?.message?.content || ''
+      console.log('[CHATGPT] Reply:', reply)
+      return reply
+    } catch (e) {
+      console.error('[CHATGPT] Error:', e)
+      return ''
+    }
+  }
+
+  async function ttsTextToUlawChunks(text: string, voiceIdOverride?: string): Promise<Uint8Array[]> {
+    const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
+    const voiceId = voiceIdOverride || Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x'
+    const chunks: Uint8Array[] = []
+    if (!elevenLabsKey) return chunks
+    try {
+      const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': elevenLabsKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/octet-stream'
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_turbo_v2_5',
+          output_format: 'pcm_16000'
+        })
+      })
+      if (!resp.ok) {
+        console.error('[TTS] ElevenLabs TTS failed:', resp.status, await resp.text())
+        return chunks
+      }
+      const buf = new Uint8Array(await resp.arrayBuffer())
+      // Parse WAV or raw PCM, then downsample and μ-law encode
+      const parsed = parseWavPcm(buf)
+      if (!parsed) return chunks
+      if (parsed.formatCode !== 1 || parsed.bitsPerSample !== 16) return chunks
+      let samples = bytesToInt16LE(parsed.pcmBytes)
+      samples = stereoToMono(samples, parsed.channels)
+      const samples8k = resamplePcm16Linear(samples, parsed.sampleRate, 8000)
+      const ulaw = encodePcm16ToUlaw(samples8k)
+      for (let i = 0; i < ulaw.length; i += 160) {
+        const frame = new Uint8Array(160)
+        const len = Math.min(160, ulaw.length - i)
+        frame.set(ulaw.subarray(i, i + len), 0)
+        if (len < 160) frame.fill(0xff, len)
+        chunks.push(frame)
+      }
+      console.log(`[TTS] Prepared ${chunks.length} μ-law chunks for reply`)
+      return chunks
+    } catch (e) {
+      console.error('[TTS] Error synthesizing:', e)
+      return chunks
+    }
+  }
   
   socket.onopen = () => {
     console.log('[WS] WebSocket connected to Twilio')
@@ -512,11 +680,10 @@ serve(async (req) => {
         
         const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
         const agentId = Deno.env.get('ELEVENLABS_AGENT_ID')
+        console.log(`[CONFIG] ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}, USE_CONVAI=${USE_CONVAI}`)
         
-        console.log(`[CONFIG] ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}`)
-        
-        if (!elevenLabsKey || !agentId) {
-          console.error('[ERROR] Missing ElevenLabs credentials, activating fallback')
+        if (!elevenLabsKey) {
+          console.error('[ERROR] Missing ELEVENLABS_API_KEY, activating fallback')
           fallbackActive = true;
           return;
         }
@@ -532,107 +699,81 @@ serve(async (req) => {
         // Step 3: Wait for greeting to complete
         await waitForQueueDrain(10000)
         
-        // Step 3: Connect to ElevenLabs Conversational AI
-        console.log('[CONVAI] Connecting to ElevenLabs Conversational AI...')
-        const signedUrl = await getSignedConvAIUrl(agentId, elevenLabsKey)
-        
-        if (!signedUrl) {
-          console.error('[ERROR] Failed to get ConvAI signed URL')
-          return
-        }
-        
-        try {
-          elevenLabsWs = new WebSocket(signedUrl)
-          
-          elevenLabsWs.onopen = () => {
-            console.log('[SUCCESS] ConvAI WebSocket connected')
-            elevenLabsConnected = true
-            
-            // Configure conversation for PCM16 16kHz output (ConvAI standard)
-            if (elevenLabsWs) {
-              elevenLabsWs.send(JSON.stringify({
-                type: 'conversation_initiation_metadata',
-                conversation_config_override: {
-                  audio_output: {
-                    format: 'pcm_16000',
-                    encoding: 'pcm_s16le'
+        if (USE_CONVAI) {
+          // Step 3: Connect to ElevenLabs Conversational AI
+          console.log('[CONVAI] Connecting to ElevenLabs Conversational AI...')
+          if (!agentId) {
+            console.error('[ERROR] ELEVENLABS_AGENT_ID missing; cannot use ConvAI. Staying in TTS-only mode.')
+          } else {
+            const signedUrl = await getSignedConvAIUrl(agentId, elevenLabsKey)
+            if (!signedUrl) {
+              console.error('[ERROR] Failed to get ConvAI signed URL')
+            } else {
+              try {
+                elevenLabsWs = new WebSocket(signedUrl)
+                elevenLabsWs.onopen = () => {
+                  console.log('[SUCCESS] ConvAI WebSocket connected')
+                  elevenLabsConnected = true
+                  if (elevenLabsWs) {
+                    elevenLabsWs.send(JSON.stringify({
+                      type: 'conversation_initiation_metadata',
+                      conversation_config_override: {
+                        audio_output: { format: 'pcm_16000', encoding: 'pcm_s16le' }
+                      }
+                    }))
+                    console.log('[CONFIG] Sent ConvAI config for PCM16 16kHz output')
                   }
                 }
-              }))
-              console.log('[CONFIG] Sent ConvAI config for PCM16 16kHz output')
-            }
-          }
-          
-          elevenLabsWs.onmessage = async (convaiEvent) => {
-            try {
-              const convaiData = JSON.parse(convaiEvent.data)
-              
-              if (convaiData.type === 'audio') {
-                // Agent audio response - should be PCM16 16kHz, convert to μ-law 8kHz
-                const audioBase64 = convaiData.audio_event?.audio_base_64
-                if (audioBase64) {
-                  console.log(`[CONVAI_AUDIO] Received ConvAI audio: ${audioBase64.length} base64 chars`)
-                  
-                  // Decode PCM16 from base64
-                  const binaryString = atob(audioBase64)
-                  const pcm16Bytes = new Uint8Array(binaryString.length)
-                  for (let i = 0; i < binaryString.length; i++) {
-                    pcm16Bytes[i] = binaryString.charCodeAt(i)
-                  }
-                  
-                  // Convert PCM16 16kHz to Int16Array
-                  const pcm16Samples = new Int16Array(pcm16Bytes.buffer)
-                  
-                  // Downsample from 16kHz to 8kHz (2:1 decimation)
-                  const pcm8kSamples = new Int16Array(Math.floor(pcm16Samples.length / 2))
-                  for (let i = 0; i < pcm8kSamples.length; i++) {
-                    pcm8kSamples[i] = pcm16Samples[i * 2] // Simple decimation
-                  }
-                  
-                  // Convert PCM to μ-law
-                  const ulawBytes = new Uint8Array(pcm8kSamples.length)
-                  for (let i = 0; i < pcm8kSamples.length; i++) {
-                    ulawBytes[i] = pcmToMulaw(pcm8kSamples[i])
-                  }
-                  
-                  // Chunk and send to Twilio
-                  const chunks: Uint8Array[] = []
-                  for (let i = 0; i < ulawBytes.length; i += 160) {
-                    const chunk = new Uint8Array(160)
-                    const len = Math.min(160, ulawBytes.length - i)
-                    chunk.set(ulawBytes.subarray(i, i + len), 0)
-                    if (len < 160) {
-                      for (let j = len; j < 160; j++) chunk[j] = 0xff
+                elevenLabsWs.onmessage = async (convaiEvent) => {
+                  try {
+                    const convaiData = JSON.parse(convaiEvent.data)
+                    if (convaiData.type === 'audio') {
+                      const audioBase64 = convaiData.audio_event?.audio_base_64
+                      if (audioBase64) {
+                        const binaryString = atob(audioBase64)
+                        const pcm16Bytes = new Uint8Array(binaryString.length)
+                        for (let i = 0; i < binaryString.length; i++) pcm16Bytes[i] = binaryString.charCodeAt(i)
+                        const pcm16Samples = new Int16Array(pcm16Bytes.buffer)
+                        const pcm8kSamples = new Int16Array(Math.floor(pcm16Samples.length / 2))
+                        for (let i = 0; i < pcm8kSamples.length; i++) pcm8kSamples[i] = pcm16Samples[i * 2]
+                        const ulawBytes = new Uint8Array(pcm8kSamples.length)
+                        for (let i = 0; i < pcm8kSamples.length; i++) ulawBytes[i] = pcmToMulaw(pcm8kSamples[i])
+                        const chunks: Uint8Array[] = []
+                        for (let i = 0; i < ulawBytes.length; i += 160) {
+                          const chunk = new Uint8Array(160)
+                          const len = Math.min(160, ulawBytes.length - i)
+                          chunk.set(ulawBytes.subarray(i, i + len), 0)
+                          if (len < 160) for (let j = len; j < 160; j++) chunk[j] = 0xff
+                          chunks.push(chunk)
+                        }
+                        await sendAudioToTwilio(chunks, streamSid, socket)
+                        console.log(`[CONVERT] ConvAI ${pcm16Samples.length}->${ulawBytes.length} samples, ${chunks.length} chunks`)
+                      }
+                    } else if (convaiData.type === 'conversation_started') {
+                      console.log('[SUCCESS] ConvAI conversation started')
+                      conversationStarted = true
+                    } else {
+                      console.log(`[CONVAI] ConvAI event: ${convaiData.type}`)
                     }
-                    chunks.push(chunk)
+                  } catch (parseError) {
+                    console.error('[ERROR] Error parsing ConvAI message:', parseError)
                   }
-                  
-                  await sendAudioToTwilio(chunks, streamSid, socket)
-                  console.log(`[CONVERT] Converted ${pcm16Samples.length}->${ulawBytes.length} samples, sent ${chunks.length} chunks`)
                 }
-              } else if (convaiData.type === 'conversation_started') {
-                console.log('[SUCCESS] ConvAI conversation started')
-                conversationStarted = true
-              } else {
-                console.log(`[CONVAI] ConvAI event: ${convaiData.type}`)
+                elevenLabsWs.onerror = (error) => {
+                  console.error('[ERROR] ConvAI WebSocket error:', error)
+                  elevenLabsConnected = false
+                }
+                elevenLabsWs.onclose = (event) => {
+                  console.log(`[WS] ConvAI WebSocket closed: ${event.code} ${event.reason}`)
+                  elevenLabsConnected = false
+                }
+              } catch (wsError) {
+                console.error('[ERROR] Failed to create ConvAI WebSocket:', wsError)
               }
-            } catch (parseError) {
-              console.error('[ERROR] Error parsing ConvAI message:', parseError)
             }
           }
-          
-          elevenLabsWs.onerror = (error) => {
-            console.error('[ERROR] ConvAI WebSocket error:', error)
-            elevenLabsConnected = false
-          }
-          
-          elevenLabsWs.onclose = (event) => {
-            console.log(`[WS] ConvAI WebSocket closed: ${event.code} ${event.reason}`)
-            elevenLabsConnected = false
-          }
-          
-        } catch (wsError) {
-          console.error('[ERROR] Failed to create ConvAI WebSocket:', wsError)
+        } else {
+          console.log('[MODE] TTS-only mode active (TWILIO_USE_AGENT_AUDIO=false)')
         }
       }
       
@@ -647,8 +788,8 @@ serve(async (req) => {
           fallbackBuffer.push(mulawBytes);
           return;
         }
-        // Forward to ConvAI agent
-        if (elevenLabsConnected && conversationStarted && elevenLabsWs) {
+        // Forward to ConvAI agent (if enabled)
+        if (USE_CONVAI && elevenLabsConnected && conversationStarted && elevenLabsWs) {
           try {
             // Convert μ-law 8kHz to PCM16 16kHz for ConvAI
             const pcm16Bytes = convertMulawToPcm16(mulawBytes);
@@ -666,6 +807,51 @@ serve(async (req) => {
             }
           } catch (audioError) {
             console.error('[ERROR] Error forwarding audio to ConvAI:', audioError);
+          }
+        } else if (!USE_CONVAI) {
+          // TTS-only conversational loop: buffer frames, segment on silence, transcribe + reply
+          try {
+            ttsFramesBuffer.push(mulawBytes)
+            if (isUlawSilence(mulawBytes)) {
+              consecutiveSilenceFrames++
+            } else {
+              consecutiveSilenceFrames = 0
+            }
+            const haveSpeech = ttsFramesBuffer.length >= 20 // ~400ms
+            const endOfUtterance = consecutiveSilenceFrames >= 30 // ~600ms silence
+            const maxBufferReached = ttsFramesBuffer.length >= 400 // safety ~8s
+            if (haveSpeech && (endOfUtterance || maxBufferReached) && !ttsProcessing && !isSpeaking) {
+              ttsProcessing = true
+              const framesToProcess = ttsFramesBuffer
+              ttsFramesBuffer = []
+              consecutiveSilenceFrames = 0
+              ;(async () => {
+                try {
+                  const pcm16 = ulawFramesToPcm16(framesToProcess)
+                  const wav = encodeWavFromPcm16(pcm16, 8000)
+                  const transcript = await transcribeWithWhisper(wav)
+                  if (!transcript) {
+                    console.log('[TTS_ONLY] Empty transcript; skipping reply')
+                    return
+                  }
+                  const reply = await generateReplyWithChatGPT(transcript, businessName)
+                  const safeReply = reply?.trim() || "I'm sorry, could you please repeat that?"
+                  isSpeaking = true
+                  const chunks = await ttsTextToUlawChunks(safeReply)
+                  if (chunks.length > 0) {
+                    await sendAudioToTwilio(chunks, streamSid, socket)
+                    await waitForQueueDrain(15000)
+                  }
+                } catch (e) {
+                  console.error('[TTS_ONLY] Error processing speech:', e)
+                } finally {
+                  isSpeaking = false
+                  ttsProcessing = false
+                }
+              })()
+            }
+          } catch (e) {
+            console.error('[TTS_ONLY] Error buffering media:', e)
           }
         }
       }
