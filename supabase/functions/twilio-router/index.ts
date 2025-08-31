@@ -7,23 +7,17 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
 
-/**
- * Escape special XML characters in attribute values and text.
- */
+// Escape special XML characters
 function xmlEscape(val: string | null | undefined): string {
-  return val
-    ? val
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&apos;")
-    : "";
+  return val ? val
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;") : "";
 }
 
-/**
- * Normalize phone numbers to E.164 format (e.g. +19195551234).
- */
+// Normalize a phone number to E.164 (US default)
 function normalizeE164(num: string): string {
   if (!num) return num;
   if (num.startsWith("+")) return num;
@@ -47,43 +41,43 @@ serve(async (req) => {
 
   try {
     // Parse Twilio parameters
-    let callSid = "";
-    let from = "";
-    let to = "";
+    let callSid = "", from = "", to = "";
     const contentType = req.headers.get("content-type") || "";
     if (contentType.includes("application/x-www-form-urlencoded")) {
       const form = await req.formData();
       callSid = (form.get("CallSid") as string) || "";
-      from = (form.get("From") as string) || "";
-      to = (form.get("To") as string) || "";
+      from    = (form.get("From") as string) || "";
+      to      = (form.get("To")   as string) || "";
     } else {
       const url = new URL(req.url);
       callSid = url.searchParams.get("CallSid") || "";
-      from = url.searchParams.get("From") || "";
-      to = url.searchParams.get("To") || "";
+      from    = url.searchParams.get("From")    || "";
+      to      = url.searchParams.get("To")      || "";
     }
 
-    // Normalize number for lookup
+    // Normalize the number for lookup
     const toE164 = normalizeE164(to);
 
-    // Find tenant: first check agent_settings, then numbers
-    let tenantId: string | null | undefined = null;
+    // Look up the tenant: first in agent_settings, then in numbers
+    let tenantId: string | null = null;
     {
-      const { data: agentRow } = await supabase
+      const { data } = await supabase
         .from("agent_settings")
         .select("tenant_id")
         .eq("twilio_number", toE164)
         .maybeSingle();
-      tenantId = agentRow?.tenant_id ?? null;
+      tenantId = data?.tenant_id || null;
     }
     if (!tenantId) {
-      const { data: numberRow } = await supabase
+      const { data } = await supabase
         .from("numbers")
         .select("tenant_id")
         .eq("phone_number", toE164)
         .maybeSingle();
-      tenantId = numberRow?.tenant_id ?? null;
+      tenantId = data?.tenant_id || null;
     }
+
+    // If still not found, return unconfigured
     if (!tenantId) {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -94,17 +88,15 @@ serve(async (req) => {
     }
 
     // Check agent readiness
-    const { data: agentStatus } = await supabase
+    const { data: agentRow } = await supabase
       .from("ai_agents")
       .select("mode, status")
       .eq("tenant_id", tenantId)
       .maybeSingle();
     const agentIsLive =
-      agentStatus &&
-      agentStatus.mode === "live" &&
-      agentStatus.status === "ready";
+      agentRow && agentRow.mode === "live" && agentRow.status === "ready";
 
-    // Fetch business name for greeting
+    // Fetch business name
     const { data: tenantRow } = await supabase
       .from("tenants")
       .select("name")
@@ -115,22 +107,20 @@ serve(async (req) => {
     // Log the call
     await supabase.from("calls").insert({
       tenant_id: tenantId,
-      from: from,
-      to: to,
+      from,
+      to,
       at: new Date().toISOString(),
       outcome: "incoming",
     });
 
-    // Build the TwiML
-    let twiml: string;
+    // Build TwiML
+    let twiml = "";
     if (agentIsLive) {
-      // Live agent: stream audio to voice-stream function
+      // Live agent: stream to WebSocket
       const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! You're connected to ${xmlEscape(
-    businessName,
-  )}. How can I help you today?</Say>
+  <Say>Hello! You're connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Connect>
     <Stream url="${xmlEscape(streamUrl)}">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
@@ -140,28 +130,23 @@ serve(async (req) => {
   </Connect>
 </Response>`;
     } else {
-      // Fallback: use Twilio Gather with speech recognition
-      const intentUrl = `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(
-        tenantId,
-      )}&business_name=${encodeURIComponent(businessName)}`;
+      // Fallback: Gather speech and post to handle-intent
+      const intentUrl = `https://${projectRef}.supabase.co/functions/v1/handle-intent?tenant_id=${xmlEscape(tenantId)}&business_name=${encodeURIComponent(businessName)}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! I'm the AI receptionist for ${xmlEscape(
-    businessName,
-  )}. How can I help you today?</Say>
+  <Say>Hello! I'm the AI receptionist for ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Gather input="speech" language="en-US" speechTimeout="auto"
           action="${xmlEscape(intentUrl)}" method="POST">
-    <Say>I’m listening…</Say>
+    <Say>I'm listening…</Say>
   </Gather>
 </Response>`;
     }
-
     return new Response(twiml, { headers: { "Content-Type": "text/xml" } });
   } catch (err) {
-    console.error("router error:", err);
+    console.error(err);
     const fallback = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Sorry, we’re experiencing technical difficulties. Please try again later.</Say>
+  <Say>Sorry, we're experiencing technical difficulties. Please try again later.</Say>
   <Hangup/>
 </Response>`;
     return new Response(fallback, { headers: { "Content-Type": "text/xml" } });
