@@ -116,18 +116,18 @@ serve(async (req) => {
     // Build TwiML
     let twiml = "";
     if (agentIsLive) {
-      // Live agent: stream to WebSocket
+      // Live agent: two-way media stream using <Start><Stream track="both_tracks">
       const streamUrl = `wss://${projectRef}.functions.supabase.co/twilio-voice-stream?tenant_id=${tenantId}&call_sid=${callSid}`;
       twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello! You're connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
-  <Connect>
-    <Stream url="${xmlEscape(streamUrl)}">
+  <Start>
+    <Stream url="${xmlEscape(streamUrl)}" track="both_tracks">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
       <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
       <Parameter name="phoneNumber" value="${xmlEscape(from)}"/>
     </Stream>
-  </Connect>
+  </Start>
+  <Pause length="600"/>
 </Response>`;
     } else {
       // Fallback: Gather speech and post to handle-intent
