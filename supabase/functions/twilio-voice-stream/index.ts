@@ -369,7 +369,17 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
     console.log('[TTS] Generating reliable TTS greeting (PCM->μ-law)...')
     const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
     if (!elevenLabsKey) {
-      console.error('[ERROR] ELEVENLABS_API_KEY missing for greeting')
+      console.warn('[WARN] ELEVENLABS_API_KEY missing for greeting; sending short tone instead')
+      const toneData = generateUlawTone(800, 880)
+      const toneChunks: Uint8Array[] = []
+      for (let i = 0; i < toneData.length; i += 160) {
+        const chunk = new Uint8Array(160)
+        const len = Math.min(160, toneData.length - i)
+        chunk.set(toneData.subarray(i, i + len), 0)
+        if (len < 160) chunk.fill(0xff, len)
+        toneChunks.push(chunk)
+      }
+      await sendAudioToTwilioV2(toneChunks, streamSid, socket)
       return
     }
 
@@ -778,11 +788,8 @@ serve(async (req) => {
         const agentId = Deno.env.get('ELEVENLABS_AGENT_ID')
         const openaiKeyPresent = !!Deno.env.get('OPENAI_API_KEY')
         console.log(`[CONFIG] ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}, USE_CONVAI=${USE_CONVAI}, OPENAI=${openaiKeyPresent}`)
-        
         if (!elevenLabsKey) {
-          console.error('[ERROR] Missing ELEVENLABS_API_KEY, activating fallback')
-          fallbackActive = true;
-          return;
+          console.warn('[WARN] ELEVENLABS_API_KEY missing; greeting will skip TTS and only send tone prelude if configured')
         }
         
         // Prelude + Greeting
@@ -917,10 +924,7 @@ serve(async (req) => {
             }
           })()
         }
-        if (fallbackActive) {
-          fallbackBuffer.push(mulawBytes);
-          return;
-        }
+        // no-op: do not buffer in fallback; continue normal flow
         // Forward to ConvAI agent (if enabled)
         if (USE_CONVAI && elevenLabsConnected && conversationStarted && elevenLabsWs) {
           try {
