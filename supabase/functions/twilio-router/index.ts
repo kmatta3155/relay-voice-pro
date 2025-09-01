@@ -122,7 +122,7 @@ serve(async (req) => {
 <Response>
   <Say>Hello! You're connected to ${xmlEscape(businessName)}. How can I help you today?</Say>
   <Connect>
-    <Stream url="${xmlEscape(streamUrl)}" track="both_tracks">
+    <Stream url="${xmlEscape(streamUrl)}">
       <Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>
       <Parameter name="businessName" value="${xmlEscape(businessName)}"/>
       <Parameter name="phoneNumber" value="${xmlEscape(from)}"/>
