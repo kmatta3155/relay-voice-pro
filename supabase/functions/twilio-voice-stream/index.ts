@@ -117,6 +117,7 @@ async function sendAudioToTwilioV2(chunks: Uint8Array[], streamSid: string, sock
       let binary = ''
       for (let j = 0; j < chunk.length; j++) binary += String.fromCharCode(chunk[j])
       const base64Payload = btoa(binary)
+      // Twilio outbound media: omit `track` for maximum compatibility
       const message = { event: 'media', streamSid, media: { payload: base64Payload } } as const
       socket.send(JSON.stringify(message))
       await new Promise((resolve) => setTimeout(resolve, 20))
@@ -582,11 +583,13 @@ serve(async (req) => {
   const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
   const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
   console.log('[WS] Requested WS protocols:', protocols)
-  // Force 'audio' subprotocol in the response so Twilio treats this as bidirectional audio
-  // Some edge environments strip Sec-WebSocket-Protocol from the request headers.
-  const selectedProtocol = 'audio'
+  // Echo back a requested subprotocol only if Twilio provided one; otherwise omit
+  const preferredOrder = ['audio', 'audio.stream.v1']
+  const selectedProtocol = protocols.find(p => preferredOrder.includes(p)) || (protocols[0] || undefined)
   console.log('[WS] Selected WS protocol:', selectedProtocol)
-  const { socket, response } = Deno.upgradeWebSocket(req, { protocol: selectedProtocol })
+  const { socket, response } = selectedProtocol
+    ? Deno.upgradeWebSocket(req, { protocol: selectedProtocol })
+    : Deno.upgradeWebSocket(req)
   
   let streamSid = ''
   let phoneNumber = ''
