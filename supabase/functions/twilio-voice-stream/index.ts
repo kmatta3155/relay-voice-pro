@@ -14,11 +14,18 @@ const supabase = (supabaseUrl && supabaseKey)
   : null as unknown as ReturnType<typeof createClient>
 
 // Version for tracking deployments
-const VERSION = 'tts-or-convai@2025-08-31-01'
+const VERSION = 'tts-or-convai@2025-09-01-02'
 
 // Mode: force TTS-only pipeline (no ConvAI WebSocket)
 // To re-enable ConvAI, set this to true and redeploy
 const USE_CONVAI = false
+
+// Simple in-memory cache for greetings to avoid repeated TTS calls
+const greetingCache = new Map<string, Uint8Array>()
+
+function sleep(ms: number) {
+  return new Promise((res) => setTimeout(res, ms))
+}
 
 // Standard G.711 μ-law encoding
 function pcmToMulaw(sample: number): number {
@@ -120,10 +127,9 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
           event: 'media',
           streamSid,
           media: {
-            track: 'outbound',
             payload: base64Payload
           }
-        }
+        } as const
         
         socket.send(JSON.stringify(message))
         
@@ -364,59 +370,94 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
     const voiceId = Deno.env.get('ELEVENLABS_VOICE_ID') || '9BWtsMINqrJLrRacOk9x'
     const text = `Hello! Thank you for calling ${businessName}. How can I help you today?`
 
-    // Prefer PCM request to avoid any container/encoding ambiguity
-    let resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': elevenLabsKey,
-        'Content-Type': 'application/json',
-        'Accept': 'application/octet-stream'
-      },
-      body: JSON.stringify({
+    // Use cached μ-law bytes if available
+    const cacheKey = `${voiceId}|${businessName}`
+    let ulawBytes: Uint8Array | null = greetingCache.get(cacheKey) || null
+
+    if (!ulawBytes) {
+      // Prefer PCM request to avoid any container/encoding ambiguity, with basic retry on 429/5xx
+      const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`
+      const payload = JSON.stringify({
         text,
         model_id: 'eleven_turbo_v2_5',
-        output_format: 'pcm_16000' // Request 16k PCM, we will downsample to 8k
+        output_format: 'pcm_16000'
       })
-    })
+      let attempt = 0
+      let raw: Uint8Array | null = null
+      while (attempt < 3 && !raw) {
+        attempt++
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': elevenLabsKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/octet-stream'
+          },
+          body: payload
+        })
+        console.log(`[TTS] TTS response status: ${resp.status} (attempt ${attempt})`)
+        if (resp.ok) {
+          const audioBuffer = await resp.arrayBuffer()
+          raw = new Uint8Array(audioBuffer)
+          console.log(`[TTS] Received ${raw.length} bytes from ElevenLabs (PCM expected)`)          
+          break
+        } else {
+          const bodyText = await resp.text()
+          console.error('[ERROR] TTS greeting failed (pcm_16000):', resp.status, bodyText)
+          if (resp.status === 429 || resp.status >= 500) {
+            const backoff = 250 * attempt + Math.floor(Math.random() * 200)
+            await sleep(backoff)
+            continue
+          }
+          return
+        }
+      }
+      if (!raw) {
+        console.warn('[TTS] Could not fetch greeting after retries; sending brief tone as fallback')
+        const tone = generateUlawTone(500, 880)
+        const toneChunks: Uint8Array[] = []
+        for (let i = 0; i < tone.length; i += 160) {
+          const chunk = new Uint8Array(160)
+          const len = Math.min(160, tone.length - i)
+          chunk.set(tone.subarray(i, i + len), 0)
+          if (len < 160) chunk.fill(0xff, len)
+          toneChunks.push(chunk)
+        }
+        await sendAudioToTwilio(toneChunks, streamSid, socket)
+        return
+      }
 
-    console.log(`[TTS] TTS response status: ${resp.status}`)
-    if (!resp.ok) {
-      const err = await resp.text()
-      console.error('[ERROR] TTS greeting failed (pcm_16000):', resp.status, err)
-      return
+      const parsed = parseWavPcm(raw)
+      if (!parsed) {
+        console.error('[ERROR] Failed to parse WAV PCM from ElevenLabs response')
+        return
+      }
+      if (parsed.formatCode !== 1 || parsed.bitsPerSample !== 16) {
+        console.error(`[ERROR] Unsupported WAV format: code=${parsed.formatCode}, bits=${parsed.bitsPerSample}`)
+        return
+      }
+
+      // Convert bytes -> Int16, deinterleave to mono if needed
+      let samples = bytesToInt16LE(parsed.pcmBytes)
+      samples = stereoToMono(samples, parsed.channels)
+
+      // Resample to 8kHz if needed
+      const samples8k = resamplePcm16Linear(samples, parsed.sampleRate, 8000)
+
+      // μ-law encode and cache
+      ulawBytes = encodePcm16ToUlaw(samples8k)
+      console.log(`[ENCODE] Encoded greeting ${samples8k.length} samples -> ${ulawBytes.length} μ-law bytes`)
+      greetingCache.set(cacheKey, ulawBytes)
+    } else {
+      console.log('[CACHE] Using cached greeting audio')
     }
-
-    const audioBuffer = await resp.arrayBuffer()
-    const raw = new Uint8Array(audioBuffer)
-    console.log(`[TTS] Received ${raw.length} bytes from ElevenLabs (PCM expected)`)
-
-    const parsed = parseWavPcm(raw)
-    if (!parsed) {
-      console.error('[ERROR] Failed to parse WAV PCM from ElevenLabs response')
-      return
-    }
-    if (parsed.formatCode !== 1 || parsed.bitsPerSample !== 16) {
-      console.error(`[ERROR] Unsupported WAV format: code=${parsed.formatCode}, bits=${parsed.bitsPerSample}`)
-      return
-    }
-
-    // Convert bytes -> Int16, deinterleave to mono if needed
-    let samples = bytesToInt16LE(parsed.pcmBytes)
-    samples = stereoToMono(samples, parsed.channels)
-
-    // Resample to 8kHz if needed
-    const samples8k = resamplePcm16Linear(samples, parsed.sampleRate, 8000)
-
-    // μ-law encode
-    const ulawBytes = encodePcm16ToUlaw(samples8k)
-    console.log(`[ENCODE] Encoded greeting ${samples8k.length} samples -> ${ulawBytes.length} μ-law bytes`)
 
     // Chunk into strict 160-byte frames for Twilio
     const chunks: Uint8Array[] = []
-    for (let i = 0; i < ulawBytes.length; i += 160) {
+    for (let i = 0; i < (ulawBytes?.length || 0); i += 160) {
       const chunk = new Uint8Array(160)
-      const len = Math.min(160, ulawBytes.length - i)
-      chunk.set(ulawBytes.subarray(i, i + len), 0)
+      const len = Math.min(160, (ulawBytes!.length) - i)
+      chunk.set(ulawBytes!.subarray(i, i + len), 0)
       if (len < 160) chunk.fill(0xff, len)
       chunks.push(chunk)
     }
@@ -495,6 +536,7 @@ serve(async (req) => {
   let elevenLabsConnected = false
   let conversationStarted = false
   let greetingSent = false
+  let initTriggered = false
   // Fallback buffer for production-ready fallback pipeline
   let fallbackBuffer: Uint8Array[] = [];
   let fallbackActive = false;
@@ -702,12 +744,15 @@ serve(async (req) => {
         }
         
         // Prelude + Greeting
-        console.log('[PRELUDE] Sending short μ-law silence prelude...')
-        await sendSilencePrelude(streamSid, socket, 400)
-        console.log('[GREETING] Sending immediate greeting...')
-        await sendReliableGreeting(streamSid, socket, businessName)
-        await waitForQueueDrain(10000)
-        greetingSent = true
+        if (!initTriggered) {
+          initTriggered = true
+          console.log('[PRELUDE] Sending short μ-law silence prelude...')
+          await sendSilencePrelude(streamSid, socket, 400)
+          console.log('[GREETING] Sending immediate greeting...')
+          await sendReliableGreeting(streamSid, socket, businessName)
+          await waitForQueueDrain(10000)
+          greetingSent = true
+        }
         
         if (USE_CONVAI) {
           // Step 3: Connect to ElevenLabs Conversational AI
@@ -807,19 +852,21 @@ serve(async (req) => {
           mulawBytes[i] = binaryString.charCodeAt(i);
         }
         // If we never saw a 'start' event (common with <Start><Stream> timing), do one-time greeting
-        if (!greetingSent) {
+        if (!initTriggered) {
+          initTriggered = true
           if (!streamSid && data.streamSid) streamSid = data.streamSid
-          try {
-            console.log('[PRELUDE] (media-init) Sending μ-law silence prelude...')
-            await sendSilencePrelude(streamSid, socket, 200)
-            console.log('[GREETING] (media-init) Sending greeting...')
-            await sendReliableGreeting(streamSid, socket, businessName || 'this business')
-            await waitForQueueDrain(10000)
-          } catch (e) {
-            console.warn('[INIT] Greeting on media failed:', e)
-          } finally {
-            greetingSent = true
-          }
+          ;(async () => {
+            try {
+              console.log('[PRELUDE] (media-init) Sending μ-law silence prelude...')
+              await sendSilencePrelude(streamSid, socket, 200)
+              console.log('[GREETING] (media-init) Sending greeting...')
+              await sendReliableGreeting(streamSid, socket, businessName || 'this business')
+              await waitForQueueDrain(10000)
+              greetingSent = true
+            } catch (e) {
+              console.warn('[INIT] Greeting on media failed:', e)
+            }
+          })()
         }
         if (fallbackActive) {
           fallbackBuffer.push(mulawBytes);
