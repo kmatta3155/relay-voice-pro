@@ -55,7 +55,7 @@ function mulawToPcm(mu: number): number {
   const sample = ((mantissa << 3) + 0x84) << (exponent + 3)
   return sign ? (0x84 - sample) : (sample - 0x84)
 }
-
+ 
 // Convert Twilio μ-law 8kHz to PCM16 16kHz for ElevenLabs agent
 function convertMulawToPcm16(mulawData: Uint8Array): Uint8Array {
   // Step 1: Convert μ-law to PCM16 at 8kHz
@@ -503,8 +503,15 @@ serve(async (req) => {
   let ttsProcessing = false
   let isSpeaking = false
   let consecutiveSilenceFrames = 0
+  let utteranceActive = false
+  let utteranceFrames = 0
+  let speechLogged = false
+  const VAD_SILENCE_RMS = parseInt(Deno.env.get('VAD_SILENCE_RMS') || '700') // lower -> more sensitive
+  const VAD_MIN_FRAMES = parseInt(Deno.env.get('VAD_MIN_FRAMES') || '15')    // ~300ms minimum
+  const VAD_END_FRAMES = parseInt(Deno.env.get('VAD_END_FRAMES') || '15')    // ~300ms of silence to end
+  const VAD_MAX_FRAMES = parseInt(Deno.env.get('VAD_MAX_FRAMES') || '240')   // ~4.8s utterance cap
 
-  function isUlawSilence(frame: Uint8Array, thresholdRms = 500): boolean {
+  function isUlawSilence(frame: Uint8Array, thresholdRms = VAD_SILENCE_RMS): boolean {
     // Convert μ-law -> PCM16 and compute RMS to detect silence
     let sumSq = 0
     for (let i = 0; i < frame.length; i++) {
@@ -682,7 +689,8 @@ serve(async (req) => {
         
         const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY')
         const agentId = Deno.env.get('ELEVENLABS_AGENT_ID')
-        console.log(`[CONFIG] ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}, USE_CONVAI=${USE_CONVAI}`)
+        const openaiKeyPresent = !!Deno.env.get('OPENAI_API_KEY')
+        console.log(`[CONFIG] ElevenLabs Key: ${!!elevenLabsKey}, Agent ID: ${!!agentId}, USE_CONVAI=${USE_CONVAI}, OPENAI=${openaiKeyPresent}`)
         
         if (!elevenLabsKey) {
           console.error('[ERROR] Missing ELEVENLABS_API_KEY, activating fallback')
@@ -776,6 +784,18 @@ serve(async (req) => {
           }
         } else {
           console.log('[MODE] TTS-only mode active (TWILIO_USE_AGENT_AUDIO=false)')
+          const listeningPrompt = Deno.env.get('ENABLE_LISTENING_PROMPT') !== 'false'
+          if (listeningPrompt) {
+            try {
+              const promptText = 'I\'m listening. Please tell me how I can help.'
+              const promptChunks = await ttsTextToUlawChunks(promptText)
+              if (promptChunks.length > 0) {
+                await sendAudioToTwilio(promptChunks, streamSid, socket)
+              }
+            } catch (e) {
+              console.warn('[TTS_ONLY] Listening prompt failed:', e)
+            }
+          }
         }
       }
       
@@ -813,27 +833,44 @@ serve(async (req) => {
         } else if (!USE_CONVAI) {
           // TTS-only conversational loop: buffer frames, segment on silence, transcribe + reply
           try {
-            ttsFramesBuffer.push(mulawBytes)
-            if (isUlawSilence(mulawBytes)) {
-              consecutiveSilenceFrames++
-            } else {
-              consecutiveSilenceFrames = 0
+            if (isSpeaking) {
+              // Ignore inbound while we are speaking
+              return
             }
-            const haveSpeech = ttsFramesBuffer.length >= 20 // ~400ms
-            const endOfUtterance = consecutiveSilenceFrames >= 30 // ~600ms silence
-            const maxBufferReached = ttsFramesBuffer.length >= 400 // safety ~8s
-            if (haveSpeech && (endOfUtterance || maxBufferReached) && !ttsProcessing && !isSpeaking) {
+            ttsFramesBuffer.push(mulawBytes)
+            const silent = isUlawSilence(mulawBytes)
+            if (!silent) {
+              if (!utteranceActive) {
+                utteranceActive = true
+                utteranceFrames = 0
+                speechLogged = false
+              }
+              if (!speechLogged) { console.log('[TTS_ONLY] Speech detected… capturing utterance') ; speechLogged = true }
+              consecutiveSilenceFrames = 0
+              utteranceFrames++
+            } else {
+              if (utteranceActive) consecutiveSilenceFrames++
+            }
+            const haveEnough = utteranceActive && utteranceFrames >= VAD_MIN_FRAMES
+            const endOfUtterance = utteranceActive && consecutiveSilenceFrames >= VAD_END_FRAMES
+            const maxBufferReached = utteranceActive && utteranceFrames >= VAD_MAX_FRAMES
+            if (haveEnough && (endOfUtterance || maxBufferReached) && !ttsProcessing) {
               ttsProcessing = true
               const framesToProcess = ttsFramesBuffer
               ttsFramesBuffer = []
               consecutiveSilenceFrames = 0
+              utteranceActive = false
+              utteranceFrames = 0
+              speechLogged = false
               ;(async () => {
                 try {
                   const pcm16 = ulawFramesToPcm16(framesToProcess)
                   const wav = encodeWavFromPcm16(pcm16, 8000)
                   const transcript = await transcribeWithWhisper(wav)
                   if (!transcript) {
-                    console.log('[TTS_ONLY] Empty transcript; skipping reply')
+                    console.log('[TTS_ONLY] Empty transcript; sending nudge')
+                    const nudge = await ttsTextToUlawChunks("I didn't catch that. Please repeat.")
+                    if (nudge.length > 0) { await sendAudioToTwilio(nudge, streamSid, socket); await waitForQueueDrain(10000) }
                     return
                   }
                   const reply = await generateReplyWithChatGPT(transcript, businessName)
