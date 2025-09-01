@@ -117,7 +117,7 @@ async function sendAudioToTwilioV2(chunks: Uint8Array[], streamSid: string, sock
       let binary = ''
       for (let j = 0; j < chunk.length; j++) binary += String.fromCharCode(chunk[j])
       const base64Payload = btoa(binary)
-      const message = { event: 'media', streamSid, media: { track: 'outbound', payload: base64Payload } } as const
+      const message = { event: 'media', streamSid, media: { payload: base64Payload } } as const
       socket.send(JSON.stringify(message))
       await new Promise((resolve) => setTimeout(resolve, 20))
     }
@@ -126,6 +126,16 @@ async function sendAudioToTwilioV2(chunks: Uint8Array[], streamSid: string, sock
   } finally {
     state.isSending = false
     if (!state.cancelled && state.queue.length === 0) console.log('[SUCCESS] Outbound queue completed')
+  }
+}
+
+// Send a Twilio mark event to verify Twilio receives our messages
+function sendMark(streamSid: string, socket: WebSocket, name: string) {
+  try {
+    const msg = { event: 'mark', streamSid, mark: { name } } as const
+    socket.send(JSON.stringify(msg))
+  } catch (e) {
+    console.warn('[WARN] Failed to send mark:', name, e)
   }
 }
 
@@ -164,7 +174,6 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
           event: 'media',
           streamSid,
           media: {
-            track: 'outbound',
             payload: base64Payload
           }
         } as const
@@ -573,8 +582,8 @@ serve(async (req) => {
   const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
   const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
   console.log('[WS] Requested WS protocols:', protocols)
-  // Prefer Twilio audio streaming subprotocols if provided
-  const preferredOrder = ['audio.stream.v1', 'audio']
+  // Prefer Twilio's 'audio' subprotocol for Voice Media Streams
+  const preferredOrder = ['audio', 'audio.stream.v1']
   const selectedProtocol = protocols.find(p => preferredOrder.includes(p)) || (protocols[0] || undefined)
   console.log('[WS] Selected WS protocol:', selectedProtocol)
   const { socket, response } = Deno.upgradeWebSocket(
@@ -774,6 +783,9 @@ serve(async (req) => {
     try {
       const data = JSON.parse(event.data)
       console.log('[TWILIO] Twilio event:', data.event)
+      if (data.event === 'mark') {
+        console.log('[TWILIO] Mark ack:', data?.mark?.name)
+      }
       
       if (data.event === 'start') {
         console.log('[START] Stream started - initializing ConvAI connection')
@@ -800,9 +812,11 @@ serve(async (req) => {
           console.log('[PRELUDE] Sending short μ-law silence prelude...')
           isSpeaking = true
           await sendSilencePrelude(streamSid, socket, 400)
+          sendMark(streamSid, socket, 'prelude_complete')
           console.log('[GREETING] Sending immediate greeting...')
           await sendReliableGreeting(streamSid, socket, businessName)
       await waitForQueueDrain(socket, 10000)
+          sendMark(streamSid, socket, 'greeting_complete')
           isSpeaking = false
           greetingSent = true
         }
@@ -916,9 +930,11 @@ serve(async (req) => {
               console.log('[PRELUDE] (media-init) Sending μ-law silence prelude...')
               isSpeaking = true
               await sendSilencePrelude(streamSid, socket, 200)
+              sendMark(streamSid, socket, 'prelude_complete_media')
               console.log('[GREETING] (media-init) Sending greeting...')
               await sendReliableGreeting(streamSid, socket, businessName || 'this business')
               await waitForQueueDrain(socket, 10000)
+              sendMark(streamSid, socket, 'greeting_complete_media')
               isSpeaking = false
               greetingSent = true
             } catch (e) {
