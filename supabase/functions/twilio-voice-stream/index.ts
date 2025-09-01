@@ -120,6 +120,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
           event: 'media',
           streamSid,
           media: {
+            track: 'outbound',
             payload: base64Payload
           }
         }
