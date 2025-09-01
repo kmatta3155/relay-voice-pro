@@ -117,7 +117,7 @@ async function sendAudioToTwilioV2(chunks: Uint8Array[], streamSid: string, sock
       let binary = ''
       for (let j = 0; j < chunk.length; j++) binary += String.fromCharCode(chunk[j])
       const base64Payload = btoa(binary)
-      const message = { event: 'media', streamSid, media: { payload: base64Payload } } as const
+      const message = { event: 'media', streamSid, media: { track: 'outbound', payload: base64Payload } } as const
       socket.send(JSON.stringify(message))
       await new Promise((resolve) => setTimeout(resolve, 20))
     }
@@ -164,6 +164,7 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
           event: 'media',
           streamSid,
           media: {
+            track: 'outbound',
             payload: base64Payload
           }
         } as const
@@ -572,9 +573,10 @@ serve(async (req) => {
   const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
   const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
   console.log('[WS] Requested WS protocols:', protocols)
-  const selectedProtocol = protocols.includes('audio')
-    ? 'audio'
-    : (protocols[0] || undefined)
+  // Prefer Twilio audio streaming subprotocols if provided
+  const preferredOrder = ['audio.stream.v1', 'audio']
+  const selectedProtocol = protocols.find(p => preferredOrder.includes(p)) || (protocols[0] || undefined)
+  console.log('[WS] Selected WS protocol:', selectedProtocol)
   const { socket, response } = Deno.upgradeWebSocket(
     req,
     selectedProtocol ? { protocol: selectedProtocol } : {}
