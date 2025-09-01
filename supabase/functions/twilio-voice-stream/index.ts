@@ -500,7 +500,8 @@ serve(async (req) => {
 
   // TTS-only mode state (when USE_CONVAI=false)
   const ttsOnlyMode = !USE_CONVAI
-  let ttsFramesBuffer: Uint8Array[] = []
+  let ttsFramesBuffer: Uint8Array[] = [] // legacy buffer (not used for processing now)
+  let currentUtteranceFrames: Uint8Array[] = []
   let ttsProcessing = false
   let isSpeaking = false
   let consecutiveSilenceFrames = 0
@@ -845,26 +846,31 @@ serve(async (req) => {
                 utteranceActive = true
                 utteranceFrames = 0
                 speechLogged = false
+                currentUtteranceFrames = []
               }
               if (!speechLogged) { console.log('[TTS_ONLY] Speech detected… capturing utterance') ; speechLogged = true }
               consecutiveSilenceFrames = 0
               utteranceFrames++
+              currentUtteranceFrames.push(mulawBytes)
             } else {
-              if (utteranceActive) consecutiveSilenceFrames++
+              if (utteranceActive) {
+                consecutiveSilenceFrames++
+              }
             }
             const haveEnough = utteranceActive && utteranceFrames >= VAD_MIN_FRAMES
             const endOfUtterance = utteranceActive && consecutiveSilenceFrames >= VAD_END_FRAMES
             const maxBufferReached = utteranceActive && utteranceFrames >= VAD_MAX_FRAMES
             if (haveEnough && (endOfUtterance || maxBufferReached) && !ttsProcessing) {
               ttsProcessing = true
-              const framesToProcess = ttsFramesBuffer
-              ttsFramesBuffer = []
+              const framesToProcess = currentUtteranceFrames
+              currentUtteranceFrames = []
               consecutiveSilenceFrames = 0
               utteranceActive = false
               utteranceFrames = 0
               speechLogged = false
               ;(async () => {
                 try {
+                  console.log(`[TTS_ONLY] Finalizing utterance: ${framesToProcess.length} frames (~${Math.round(framesToProcess.length*20)}ms)`) 
                   const pcm16 = ulawFramesToPcm16(framesToProcess)
                   const wav = encodeWavFromPcm16(pcm16, 8000)
                   const transcript = await transcribeWithWhisper(wav)
