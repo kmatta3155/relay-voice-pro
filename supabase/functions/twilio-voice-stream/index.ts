@@ -494,6 +494,7 @@ serve(async (req) => {
   let elevenLabsWs: WebSocket | null = null
   let elevenLabsConnected = false
   let conversationStarted = false
+  let greetingSent = false
   // Fallback buffer for production-ready fallback pipeline
   let fallbackBuffer: Uint8Array[] = [];
   let fallbackActive = false;
@@ -700,16 +701,13 @@ serve(async (req) => {
           return;
         }
         
-        // Step 1: Send short μ-law silence prelude
+        // Prelude + Greeting
         console.log('[PRELUDE] Sending short μ-law silence prelude...')
         await sendSilencePrelude(streamSid, socket, 400)
-
-        // Step 2: Send immediate reliable greeting
         console.log('[GREETING] Sending immediate greeting...')
         await sendReliableGreeting(streamSid, socket, businessName)
-        
-        // Step 3: Wait for greeting to complete
         await waitForQueueDrain(10000)
+        greetingSent = true
         
         if (USE_CONVAI) {
           // Step 3: Connect to ElevenLabs Conversational AI
@@ -807,6 +805,21 @@ serve(async (req) => {
         const mulawBytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           mulawBytes[i] = binaryString.charCodeAt(i);
+        }
+        // If we never saw a 'start' event (common with <Start><Stream> timing), do one-time greeting
+        if (!greetingSent) {
+          if (!streamSid && data.streamSid) streamSid = data.streamSid
+          try {
+            console.log('[PRELUDE] (media-init) Sending μ-law silence prelude...')
+            await sendSilencePrelude(streamSid, socket, 200)
+            console.log('[GREETING] (media-init) Sending greeting...')
+            await sendReliableGreeting(streamSid, socket, businessName || 'this business')
+            await waitForQueueDrain(10000)
+          } catch (e) {
+            console.warn('[INIT] Greeting on media failed:', e)
+          } finally {
+            greetingSent = true
+          }
         }
         if (fallbackActive) {
           fallbackBuffer.push(mulawBytes);
