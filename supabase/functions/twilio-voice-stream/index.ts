@@ -582,14 +582,11 @@ serve(async (req) => {
   const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
   const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
   console.log('[WS] Requested WS protocols:', protocols)
-  // Prefer Twilio's 'audio' subprotocol for Voice Media Streams
-  const preferredOrder = ['audio', 'audio.stream.v1']
-  const selectedProtocol = protocols.find(p => preferredOrder.includes(p)) || (protocols[0] || undefined)
+  // Force 'audio' subprotocol in the response so Twilio treats this as bidirectional audio
+  // Some edge environments strip Sec-WebSocket-Protocol from the request headers.
+  const selectedProtocol = 'audio'
   console.log('[WS] Selected WS protocol:', selectedProtocol)
-  const { socket, response } = Deno.upgradeWebSocket(
-    req,
-    selectedProtocol ? { protocol: selectedProtocol } : {}
-  )
+  const { socket, response } = Deno.upgradeWebSocket(req, { protocol: selectedProtocol })
   
   let streamSid = ''
   let phoneNumber = ''
