@@ -14,7 +14,7 @@ const supabase = (supabaseUrl && supabaseKey)
   : null as unknown as ReturnType<typeof createClient>
 
 // Version for tracking deployments
-const VERSION = 'tts-or-convai@2025-09-01-02'
+const VERSION = 'tts-or-convai@2025-09-01-03'
 
 // Mode: force TTS-only pipeline (no ConvAI WebSocket)
 // To re-enable ConvAI, set this to true and redeploy
@@ -92,6 +92,43 @@ function convertMulawToPcm16(mulawData: Uint8Array): Uint8Array {
   return bytes
 }
 
+// Per-socket outbound audio sender state (isolates concurrent calls)
+const outboundState = new WeakMap<WebSocket, { queue: Uint8Array[]; isSending: boolean; cancelled: boolean }>()
+
+// New sender that uses per-socket queues instead of globals
+async function sendAudioToTwilioV2(chunks: Uint8Array[], streamSid: string, socket: WebSocket) {
+  let state = outboundState.get(socket)
+  if (!state) {
+    state = { queue: [], isSending: false, cancelled: false }
+    outboundState.set(socket, state)
+  }
+  if (state.cancelled) return
+  for (const chunk of chunks) state.queue.push(chunk)
+
+  if (state.isSending || socket.readyState !== WebSocket.OPEN) return
+  state.isSending = true
+  console.log(`[OUTBOUND] Starting queue with ${state.queue.length} chunks`)
+  try {
+    while (!state.cancelled && state.queue.length > 0 && socket.readyState === WebSocket.OPEN) {
+      const chunk = state.queue.shift()!
+      if (chunk.length !== 160) {
+        console.warn(`[WARN] Chunk size mismatch: ${chunk.length} bytes (expected 160)`)
+      }
+      let binary = ''
+      for (let j = 0; j < chunk.length; j++) binary += String.fromCharCode(chunk[j])
+      const base64Payload = btoa(binary)
+      const message = { event: 'media', streamSid, media: { payload: base64Payload } } as const
+      socket.send(JSON.stringify(message))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+  } catch (e) {
+    console.error('[ERROR] Error in outbound queue:', e)
+  } finally {
+    state.isSending = false
+    if (!state.cancelled && state.queue.length === 0) console.log('[SUCCESS] Outbound queue completed')
+  }
+}
+
 // Outbound audio queue for strict 20ms pacing
 const twilioOutboundQueue: Uint8Array[] = []
 let twilioIsSending = false
@@ -146,11 +183,16 @@ async function sendAudioToTwilio(chunks: Uint8Array[], streamSid: string, socket
 }
 
 // Wait until the outbound queue fully drains
-async function waitForQueueDrain(timeoutMs = 5000): Promise<boolean> {
+async function waitForQueueDrain(socket: WebSocket, timeoutMs = 5000): Promise<boolean> {
+  // Adapted to per-socket state if available; fallback to legacy globals
+  const state = (outboundState as any)?.get?.(socket)
   const start = Date.now()
-  while (twilioIsSending || twilioOutboundQueue.length > 0) {
+  while (true) {
+    const sending = state ? state.isSending : (typeof twilioIsSending !== 'undefined' && twilioIsSending)
+    const remaining = state ? state.queue.length : (typeof twilioOutboundQueue !== 'undefined' ? twilioOutboundQueue.length : 0)
+    if (!sending && remaining === 0) break
     if (Date.now() - start > timeoutMs) {
-      console.warn(`[TIMEOUT] Queue drain timeout after ${timeoutMs}ms (remaining: ${twilioOutboundQueue.length})`)
+      console.warn(`[TIMEOUT] Queue drain timeout after ${timeoutMs}ms (remaining: ${remaining})`)
       return false
     }
     await new Promise(r => setTimeout(r, 25))
@@ -185,7 +227,7 @@ async function sendSilencePrelude(streamSid: string, socket: WebSocket, duration
     chunk.fill(0xff) // μ-law silence
     chunks.push(chunk)
   }
-  await sendAudioToTwilio(chunks, streamSid, socket)
+  await sendAudioToTwilioV2(chunks, streamSid, socket)
 }
 
 // Robust WAV PCM parser + converters for Twilio-compatible μ-law 8kHz
@@ -344,7 +386,7 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
         if (len < 160) chunk.fill(0xff, len)
         toneChunks.push(chunk)
       }
-      await sendAudioToTwilio(toneChunks, streamSid, socket)
+      await sendAudioToTwilioV2(toneChunks, streamSid, socket)
       console.log('[TONE_TEST_ONLY] Tone test complete - call should stay open with tone')
       return
     }
@@ -362,7 +404,7 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
         if (len < 160) chunk.fill(0xff, len)
         toneChunks.push(chunk)
       }
-      await sendAudioToTwilio(toneChunks, streamSid, socket)
+      await sendAudioToTwilioV2(toneChunks, streamSid, socket)
       console.log('[TONE_TEST] Tone test complete, proceeding with greeting...')
     }
 
@@ -423,7 +465,7 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
           if (len < 160) chunk.fill(0xff, len)
           toneChunks.push(chunk)
         }
-        await sendAudioToTwilio(toneChunks, streamSid, socket)
+        await sendAudioToTwilioV2(toneChunks, streamSid, socket)
         return
       }
 
@@ -462,7 +504,7 @@ async function sendReliableGreeting(streamSid: string, socket: WebSocket, busine
       chunks.push(chunk)
     }
     console.log(`[CHUNK] Created ${chunks.length} greeting chunks`)
-    await sendAudioToTwilio(chunks, streamSid, socket)
+    await sendAudioToTwilioV2(chunks, streamSid, socket)
     console.log('[SUCCESS] Reliable greeting sent to Twilio')
   } catch (e) {
     console.error('[ERROR] Error in reliable greeting:', e)
@@ -520,8 +562,8 @@ serve(async (req) => {
   const protocolHeader = req.headers.get('sec-websocket-protocol') || ''
   const protocols = protocolHeader.split(',').map(p => p.trim()).filter(Boolean)
   console.log('[WS] Requested WS protocols:', protocols)
-  const selectedProtocol = protocols.includes('audio.stream.v1')
-    ? 'audio.stream.v1'
+  const selectedProtocol = protocols.includes('audio')
+    ? 'audio'
     : (protocols[0] || undefined)
   const { socket, response } = Deno.upgradeWebSocket(
     req,
@@ -613,7 +655,7 @@ serve(async (req) => {
     try {
       const form = new FormData()
       form.append('file', new Blob([wavBytes], { type: 'audio/wav' }), 'audio.wav')
-      form.append('model', 'whisper-1')
+      form.append('model', Deno.env.get('OPENAI_TRANSCRIBE_MODEL') || 'whisper-1')
       const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${openaiKey}` },
@@ -644,7 +686,7 @@ serve(async (req) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
+          model: Deno.env.get('OPENAI_CHAT_MODEL') || 'gpt-4o-mini',
           messages: [
             { role: 'system', content: `You are a helpful AI receptionist for ${business}. Keep replies concise.` },
             { role: 'user', content: transcript }
@@ -747,10 +789,12 @@ serve(async (req) => {
         if (!initTriggered) {
           initTriggered = true
           console.log('[PRELUDE] Sending short μ-law silence prelude...')
+          isSpeaking = true
           await sendSilencePrelude(streamSid, socket, 400)
           console.log('[GREETING] Sending immediate greeting...')
           await sendReliableGreeting(streamSid, socket, businessName)
-          await waitForQueueDrain(10000)
+      await waitForQueueDrain(socket, 10000)
+          isSpeaking = false
           greetingSent = true
         }
         
@@ -801,7 +845,7 @@ serve(async (req) => {
                           if (len < 160) for (let j = len; j < 160; j++) chunk[j] = 0xff
                           chunks.push(chunk)
                         }
-                        await sendAudioToTwilio(chunks, streamSid, socket)
+                        await sendAudioToTwilioV2(chunks, streamSid, socket)
                         console.log(`[CONVERT] ConvAI ${pcm16Samples.length}->${ulawBytes.length} samples, ${chunks.length} chunks`)
                       }
                     } else if (convaiData.type === 'conversation_started') {
@@ -835,7 +879,10 @@ serve(async (req) => {
               const promptText = 'I\'m listening. Please tell me how I can help.'
               const promptChunks = await ttsTextToUlawChunks(promptText)
               if (promptChunks.length > 0) {
-                await sendAudioToTwilio(promptChunks, streamSid, socket)
+                isSpeaking = true
+                await sendAudioToTwilioV2(promptChunks, streamSid, socket)
+                await waitForQueueDrain(socket, 10000)
+                isSpeaking = false
               }
             } catch (e) {
               console.warn('[TTS_ONLY] Listening prompt failed:', e)
@@ -858,10 +905,12 @@ serve(async (req) => {
           ;(async () => {
             try {
               console.log('[PRELUDE] (media-init) Sending μ-law silence prelude...')
+              isSpeaking = true
               await sendSilencePrelude(streamSid, socket, 200)
               console.log('[GREETING] (media-init) Sending greeting...')
               await sendReliableGreeting(streamSid, socket, businessName || 'this business')
-              await waitForQueueDrain(10000)
+              await waitForQueueDrain(socket, 10000)
+              isSpeaking = false
               greetingSent = true
             } catch (e) {
               console.warn('[INIT] Greeting on media failed:', e)
@@ -937,7 +986,7 @@ serve(async (req) => {
                   if (!transcript) {
                     console.log('[TTS_ONLY] Empty transcript; sending nudge')
                     const nudge = await ttsTextToUlawChunks("I didn't catch that. Please repeat.")
-                    if (nudge.length > 0) { await sendAudioToTwilio(nudge, streamSid, socket); await waitForQueueDrain(10000) }
+                    if (nudge.length > 0) { await sendAudioToTwilioV2(nudge, streamSid, socket); await waitForQueueDrain(socket, 10000) }
                     return
                   }
                   const reply = await generateReplyWithChatGPT(transcript, businessName)
@@ -945,8 +994,8 @@ serve(async (req) => {
                   isSpeaking = true
                   const chunks = await ttsTextToUlawChunks(safeReply)
                   if (chunks.length > 0) {
-                    await sendAudioToTwilio(chunks, streamSid, socket)
-                    await waitForQueueDrain(15000)
+                    await sendAudioToTwilioV2(chunks, streamSid, socket)
+                    await waitForQueueDrain(socket, 15000)
                   }
                 } catch (e) {
                   console.error('[TTS_ONLY] Error processing speech:', e)
@@ -970,8 +1019,13 @@ serve(async (req) => {
         }
         elevenLabsConnected = false
         conversationStarted = false
+        // Cancel any remaining outbound media for this socket
+        try {
+          const st = (outboundState as any)?.get?.(socket)
+          if (st) { st.cancelled = true; if (Array.isArray(st.queue)) st.queue.length = 0 }
+        } catch {}
         // Fallback pipeline
-        if (fallbackActive && fallbackBuffer.length > 0) {
+        if (false && fallbackActive && fallbackBuffer.length > 0) {
           try {
             // 1. Concatenate all μ-law audio
             const allMulaw = new Uint8Array(fallbackBuffer.reduce((acc, arr) => acc + arr.length, 0));
@@ -1096,7 +1150,7 @@ serve(async (req) => {
                 if (len < 160) chunk.fill(0xff, len);
                 chunks.push(chunk);
               }
-              await sendAudioToTwilio(chunks, streamSid, socket);
+              await sendAudioToTwilioV2(chunks, streamSid, socket);
               console.log('[FALLBACK] Sent TTS audio to Twilio');
             } else if (reply) {
               socket.send(JSON.stringify({ event: 'say', text: reply }));
@@ -1125,6 +1179,11 @@ serve(async (req) => {
     }
     elevenLabsConnected = false
     conversationStarted = false
+    // Cancel any remaining outbound media for this socket
+    try {
+      const st = (outboundState as any)?.get?.(socket)
+      if (st) { st.cancelled = true; if (Array.isArray(st.queue)) st.queue.length = 0 }
+    } catch {}
   }
   
   return response
