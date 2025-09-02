@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.twilio-router]
 verify_jwt = false
 
+[functions.v1]
+verify_jwt = false
+
 [functions.twilio-voice-stream]
 verify_jwt = false
 

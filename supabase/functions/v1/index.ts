@@ -12,27 +12,28 @@ function xml(strings: TemplateStringsArray, ...values: unknown[]) {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  // Basic CORS
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   const url = new URL(req.url)
-  const search = url.searchParams
+  const pathname = url.pathname || ''
+
+  // Only handle /v1/twilio-router here; otherwise 404 to avoid confusion
+  if (!pathname.endsWith('/twilio-router')) {
+    return new Response('Not Found', { status: 404 })
+  }
 
   // Parse Twilio form body if present
   let form: FormData | null = null
-  try {
-    if (req.method === 'POST') {
-      form = await req.formData()
-    }
-  } catch {}
+  try { if (req.method === 'POST') form = await req.formData() } catch {}
 
+  const search = url.searchParams
   const from = (form?.get('From') as string) || search.get('From') || search.get('from') || ''
   const phoneNumber = search.get('phoneNumber') || from || ''
   const tenantId = (search.get('tenantId') || (form?.get('tenantId') as string) || '').trim()
   const businessName = (search.get('businessName') || (form?.get('businessName') as string) || 'this business').trim()
 
-  // Allow overriding the Stream URL via env. Otherwise derive from this request's host.
+  // Build WS URL (default to top-level twilio-voice-stream function)
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
   const wsUrl = streamUrlEnv || `wss://${host}/twilio-voice-stream`
@@ -49,7 +50,7 @@ serve(async (req) => {
 </Response>`
 
   const headers = new Headers({ 'Content-Type': 'text/xml; charset=utf-8' })
-  // Twilio does not require CORS, but these don't hurt on browsers/tools
   for (const [k, v] of Object.entries(corsHeaders)) headers.set(k, v)
   return new Response(twiml, { headers })
 })
+
