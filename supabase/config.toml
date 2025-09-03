@@ -21,6 +21,9 @@ verify_jwt = false
 [functions.twilio-voice-stream]
 verify_jwt = false
 
+[functions.vapi-hook]
+verify_jwt = false
+
 [functions.twilio-sms-incoming]
 verify_jwt = false
 
