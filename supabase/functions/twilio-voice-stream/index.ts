@@ -98,6 +98,8 @@ serve(async (req)=>{
                   const frames: Uint8Array[] = []
                   for (let i=0;i<bytes.length;i+=160){ const f=new Uint8Array(160); const len=Math.min(160,bytes.length-i); f.set(bytes.subarray(i,i+len),0); if(len<160)f.fill(0xff,len); frames.push(f) }
                   await sendToTwilio(frames,sid,socket)
+                  // mark as greeted on first audio
+                  if(!(socket as any)._greeted){ (socket as any)._greeted = true }
                 }
                 return
               }
@@ -119,12 +121,27 @@ serve(async (req)=>{
           console.error('[VAPI] Failed to connect realtime', err)
         }
       }
-      // Prelude + greeting: send prelude; if Vapi connected it will TTS greeting; otherwise fallback to ElevenLabs
+      // Prelude + greeting orchestration
       speaking=true;await sendPrelude(sid,socket,400);sendMark(sid,socket,'prelude');
+      // mark greeting as not yet satisfied; will flip true on first Vapi audio or when we send fallback
+      ;(socket as any)._greeted = false
       const vapiOpen = (socket as any)._vapi && ((socket as any)._vapi as WebSocket).readyState===WebSocket.OPEN
       if (!vapiOpen) {
         const greet=await elevenlabsTtsToUlawFrames(((socket as any)._greeting || `Hello! Thank you for calling ${biz}. How can I help you today?`), (socket as any)._voiceId || undefined);
-        if(greet.length){await sendToTwilio(greet,sid,socket);await waitDrain(socket,10000)}
+        if(greet.length){await sendToTwilio(greet,sid,socket);await waitDrain(socket,10000);(socket as any)._greeted=true}
+      } else {
+        // If Vapi is connected but doesn't produce audio quickly, fall back
+        const delay = parseInt(Deno.env.get('GREETING_FALLBACK_MS')||'1500')
+        setTimeout(async ()=>{
+          try{
+            if(!(socket as any) || (socket as any).readyState===WebSocket.CLOSED) return
+            if(!(socket as any)._greeted){
+              const text=(socket as any)._greeting || `Hello! Thank you for calling ${biz}. How can I help you today?`
+              const frames=await elevenlabsTtsToUlawFrames(text,(socket as any)._voiceId||undefined)
+              if(frames.length){await sendToTwilio(frames,sid,socket);await waitDrain(socket,10000);(socket as any)._greeted=true}
+            }
+          }catch(err){console.error('[GREETING_FALLBACK]',err)}
+        }, delay)
       }
       sendMark(sid,socket,'greeting');speaking=false;const prompt=Deno.env.get('ENABLE_LISTENING_PROMPT')!=='false';if(prompt){const p=await elevenlabsTtsToUlawFrames("I'm listening. Please tell me how I can help.",(socket as any)._voiceId||undefined); if(p.length){speaking=true;await sendToTwilio(p,sid,socket);await waitDrain(socket,8000);speaking=false}}}
     else if(d.event==='media'&&d.media?.payload){const bin=atob(d.media.payload);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
