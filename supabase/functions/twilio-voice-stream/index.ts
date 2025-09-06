@@ -5,9 +5,10 @@ const corsHeaders={ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Head
 const supabaseUrl=Deno.env.get('SUPABASE_URL')||''
 const supabaseKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
 const supabase=(supabaseUrl&&supabaseKey)?createClient(supabaseUrl,supabaseKey):null as unknown as ReturnType<typeof createClient>
-const VERSION='vapi-realtime@2025-09-05-uniquebiz-01'
+const VERSION='receptionist-rag@2025-09-06'
 const USE_CONVAI=false
-const USE_VAPI=true
+// Only use Vapi realtime when explicitly enabled via env
+const USE_VAPI=(Deno.env.get('USE_VAPI')||'false').toLowerCase()==='true'
 
 function sleep(ms:number){return new Promise(r=>setTimeout(r,ms))}
 function pcmToMulaw(s:number){const B=0x84,C=32635;let g=0;if(s<0){g=0x80;s=-s}if(s>C)s=C;s+=B;let e=7,m=0x4000;while((s&m)===0&&e>0){e--;m>>=1}const sh=(e===0)?4:(e+3),t=(s>>sh)&0x0f;return(~(g|(e<<4)|t))&0xff}
@@ -30,7 +31,33 @@ async function sendPrelude(sid:string,ws:WebSocket,ms=300){const n=Math.max(1,Ma
 async function elevenlabsTtsToUlawFrames(text:string,voiceId?:string){const key=Deno.env.get('ELEVENLABS_API_KEY');if(!key)return[];const id=voiceId||Deno.env.get('ELEVENLABS_VOICE_ID')||'9BWtsMINqrJLrRacOk9x';const r=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${id}`,{method:'POST',headers:{'xi-api-key':key,'Content-Type':'application/json','Accept':'application/octet-stream'},body:JSON.stringify({text,model_id:'eleven_turbo_v2_5',output_format:'pcm_16000'})});if(!r.ok){console.error('[TTS]',r.status,await r.text());return[]}const buf=new Uint8Array(await r.arrayBuffer());const wav=parseWavPcm(buf);if(!wav||wav.formatCode!==1||wav.bitsPerSample!==16)return[];let s=bytesToInt16LE(wav.pcmBytes);s=stereoToMono(s,wav.channels);const s8=resampleLin(s,wav.sampleRate,8000);const u=encPcm16ToUlaw(s8);const frames:Uint8Array[]=[];for(let i=0;i<u.length;i+=160){const f=new Uint8Array(160);const len=Math.min(160,u.length-i);f.set(u.subarray(i,i+len));if(len<160)f.fill(0xff,len);frames.push(f)}return frames}
 
 async function whisper(wav:Uint8Array){const key=Deno.env.get('OPENAI_API_KEY');if(!key)return'';const form=new FormData();form.append('file',new Blob([wav],{type:'audio/wav'}),'audio.wav');form.append('model',Deno.env.get('OPENAI_TRANSCRIBE_MODEL')||'whisper-1');const r=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${key}`},body:form});if(!r.ok){console.error('[WHISPER]',await r.text());return''}const j=await r.json();return j.text||''}
-async function chatReply(text:string,biz:string){const key=Deno.env.get('OPENAI_API_KEY');if(!key)return'';const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:Deno.env.get('OPENAI_CHAT_MODEL')||'gpt-4o-mini',messages:[{role:'system',content:`You are a helpful AI receptionist for ${biz}. Keep replies concise.`},{role:'user',content:text}]})});if(!r.ok){console.error('[CHATGPT]',await r.text());return''}const j=await r.json();return j.choices?.[0]?.message?.content||''}
+
+async function kbSearch(tenantId:string, query:string){
+  try{
+    if(!tenantId||!query) return ''
+    const base=supabaseUrl.replace(/\/$/,'')
+    const url=`${base}/functions/v1/search`
+    const body={tenant_id:tenantId,query,k:6,min_score:0.25}
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${supabaseKey}`,'apikey':supabaseKey},body:JSON.stringify(body)})
+    if(!r.ok){console.warn('[KB]',r.status,await r.text());return''}
+    const j=await r.json() as any
+    const rows=(j.results||j||[])
+    if(!Array.isArray(rows)) return ''
+    const pieces=rows.map((x:any)=>x.content||x.answer||'').filter(Boolean).slice(0,6)
+    return pieces.join('\n---\n')
+  }catch(e){console.warn('[KB] err',e);return''}
+}
+
+async function chatReply(text:string,biz:string,tenantId?:string){
+  const key=Deno.env.get('OPENAI_API_KEY');if(!key)return'';
+  const model=Deno.env.get('OPENAI_CHAT_MODEL')||'gpt-4o-mini'
+  const context=await kbSearch(tenantId||'', text)
+  const system=`You are the AI receptionist for ${biz}. Use ONLY the provided Business Context when relevant. If info is missing, ask a brief follow-up or say you can take a message. Keep replies to 1–2 sentences.`
+  const user=`Question: ${text}\n\nBusiness Context (may be empty):\n${context}`
+  const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:0.4,messages:[{role:'system',content:system},{role:'user',content:user}]})});
+  if(!r.ok){console.error('[CHATGPT]',await r.text());return''}
+  const j=await r.json();return j.choices?.[0]?.message?.content||''
+}
 
 serve(async (req)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:corsHeaders})
@@ -59,11 +86,12 @@ serve(async (req)=>{
           if (t.data?.name) biz = t.data.name
           ;(socket as any)._voiceId = a.data?.elevenlabs_voice_id || (socket as any)._voiceId
           ;(socket as any)._greeting = a.data?.greeting || (socket as any)._greeting
+          ;(socket as any)._tenantId = tenantParam
         }
       } catch (err) {
         console.warn('[WS] hydrate biz failed', err)
       }
-      // Connect to Vapi realtime if configured
+      // Connect to Vapi realtime only if explicitly enabled
       let vapiWs: WebSocket | null = null
       const vapiKey = Deno.env.get('VAPI_API_KEY') || ''
       const vapiUrl = (Deno.env.get('VAPI_REALTIME_URL') || '').trim()
@@ -79,10 +107,7 @@ serve(async (req)=>{
           ;(socket as any)._vapi = vapiWs
           vapiWs.onopen = ()=>{
             console.log('[VAPI] Realtime connected')
-            try {
-              const greetText = (socket as any)._greeting || `Hello! Thank you for calling ${biz}. How can I help you today?`
-              vapiWs!.send(JSON.stringify({ type:'response', text: greetText, voice_id: vapiVoice }))
-            } catch {}
+            // We do NOT ask Vapi to speak; we handle TTS locally.
           }
           vapiWs.onerror = (err)=>{ console.error('[VAPI] WS error',err) }
           vapiWs.onclose = (ev)=>{ console.log('[VAPI] WS closed',ev.code,ev.reason) }
@@ -106,16 +131,7 @@ serve(async (req)=>{
                 }
                 return
               }
-              // Text request from Vapi -> run our LLM pipeline
-              const shouldRespond = (type==='request' || type==='response_required' || type==='text_request')
-              if (shouldRespond) {
-                const transcript = data.transcript || data.text || ''
-                const reply = (await chatReply(transcript||'', biz)).trim()
-                // Send text back for TTS with our voice
-                const out = { type: 'response', text: reply, voice_id: vapiVoice }
-                vapiWs!.send(JSON.stringify(out))
-                return
-              }
+              // Ignore Vapi agent messages; we only pass audio back to Twilio.
             } catch (err) {
               console.error('[VAPI] onmessage error',err)
             }
@@ -161,7 +177,7 @@ serve(async (req)=>{
         } catch(err) { console.error('[VAPI] forward audio error',err) }
         return
       }
-      if(speaking)return;const silent=isSilent(u);if(!silent){if(!inUtter){inUtter=true;count=0;utterFrames=[]}sil=0;count++;utterFrames.push(u)}else{if(inUtter)sil++}const have=count>=MIN;const end=inUtter&&sil>=END;const cap=inUtter&&count>=MAX;if(have&&(end||cap)){const frames=utterFrames;inUtter=false;count=0;sil=0;utterFrames=[];(async()=>{try{const pcm=ulawFramesToPcm16(frames);const wav=wavFromPcm16(pcm,8000);const text=await whisper(wav);if(!text){const n=await elevenlabsTtsToUlawFrames("I didn't catch that. Please repeat.",(socket as any)._voiceId||undefined);if(n.length){speaking=true;await sendToTwilio(n,sid,socket);await waitDrain(socket,8000);speaking=false}return}const reply=(await chatReply(text,biz)).trim()||"I'm sorry, could you please repeat that?";const out=await elevenlabsTtsToUlawFrames(reply,(socket as any)._voiceId||undefined);if(out.length){speaking=true;await sendToTwilio(out,sid,socket);await waitDrain(socket,15000);speaking=false}}catch(err){console.error('[LOOP]',err);speaking=false}})()}}
+      if(speaking)return;const silent=isSilent(u);if(!silent){if(!inUtter){inUtter=true;count=0;utterFrames=[]}sil=0;count++;utterFrames.push(u)}else{if(inUtter)sil++}const have=count>=MIN;const end=inUtter&&sil>=END;const cap=inUtter&&count>=MAX;if(have&&(end||cap)){const frames=utterFrames;inUtter=false;count=0;sil=0;utterFrames=[];(async()=>{try{const pcm=ulawFramesToPcm16(frames);const wav=wavFromPcm16(pcm,8000);const text=await whisper(wav);if(!text){const n=await elevenlabsTtsToUlawFrames("I didn't catch that. Please repeat.",(socket as any)._voiceId||undefined);if(n.length){speaking=true;await sendToTwilio(n,sid,socket);await waitDrain(socket,8000);speaking=false}return}const reply=(await chatReply(text,biz,(socket as any)._tenantId)).trim()||"I'm sorry, could you please repeat that?";const out=await elevenlabsTtsToUlawFrames(reply,(socket as any)._voiceId||undefined);if(out.length){speaking=true;await sendToTwilio(out,sid,socket);await waitDrain(socket,15000);speaking=false}}catch(err){console.error('[LOOP]',err);speaking=false}})()}}
     else if(d.event==='stop'){try{const st=(outbound as any).get?.(socket);if(st){st.cancel=true;st.q.length=0}}catch{}}}catch(err){console.error('[ERR]',err)}}
   socket.onerror=(e)=>console.error('[WSERR]',e)
   socket.onclose=()=>{try{const st=(outbound as any).get?.(socket);if(st){st.cancel=true;st.q.length=0}}
