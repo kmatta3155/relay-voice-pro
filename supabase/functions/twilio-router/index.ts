@@ -82,7 +82,7 @@ serve(async (req) => {
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${wsUrl}" track="inbound_track">
+    <Stream url="${wsUrl}" track="both_tracks">
       ${phoneNumber ? `<Parameter name="phoneNumber" value="${phoneNumber.replace(/"/g, '')}"/>` : ''}
       ${to ? `<Parameter name="toNumber" value="${to.replace(/"/g, '')}"/>` : ''}
       ${tenantId ? `<Parameter name="tenantId" value="${tenantId.replace(/"/g, '')}"/>` : ''}

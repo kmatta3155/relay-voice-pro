@@ -50,7 +50,8 @@ async function kbSearch(tenantId:string, query:string){
 
 async function chatReply(text:string,biz:string,tenantId?:string){
   const key=Deno.env.get('OPENAI_API_KEY');if(!key)return'';
-  const model=Deno.env.get('OPENAI_CHAT_MODEL')||'gpt-4o-mini'
+  const rawModel=Deno.env.get('OPENAI_CHAT_MODEL')||'gpt-4o-mini'
+  const model=rawModel.replace('gpt-40','gpt-4o')
   const context=await kbSearch(tenantId||'', text)
   const system=`You are the AI receptionist for ${biz}. Use ONLY the provided Business Context when relevant. If info is missing, ask a brief follow-up or say you can take a message. Keep replies to 1–2 sentences.`
   const user=`Question: ${text}\n\nBusiness Context (may be empty):\n${context}`
