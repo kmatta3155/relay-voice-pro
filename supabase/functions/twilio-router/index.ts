@@ -12,6 +12,15 @@ function xml(strings: TemplateStringsArray, ...values: unknown[]) {
   return out
 }
 
+function xmlEscape(s: string){
+  return s
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&apos;')
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -33,6 +42,8 @@ serve(async (req) => {
   const phoneNumber = search.get('phoneNumber') || from || ''
   let tenantId = (search.get('tenantId') || (form?.get('tenantId') as string) || '').trim()
   let businessName = (search.get('businessName') || (form?.get('businessName') as string) || 'this business').trim()
+  let voiceId = (search.get('voiceId') || (form?.get('voiceId') as string) || '').trim()
+  let greeting = ''
 
   // Resolve tenant + business by the called number if missing
   try {
@@ -43,11 +54,13 @@ serve(async (req) => {
         const sb = createClient(SB_URL, SB_KEY)
         const { data: agent } = await sb
           .from('agent_settings')
-          .select('tenant_id')
+          .select('tenant_id,greeting,elevenlabs_voice_id')
           .eq('twilio_number', to)
           .maybeSingle()
         if (agent?.tenant_id) {
           if (!tenantId) tenantId = agent.tenant_id
+          if (!voiceId && agent.elevenlabs_voice_id) voiceId = agent.elevenlabs_voice_id as string
+          if (!greeting && (agent as any).greeting) greeting = String((agent as any).greeting)
           const { data: t } = await sb
             .from('tenants')
             .select('name')
@@ -65,15 +78,20 @@ serve(async (req) => {
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
   const wsUrl = streamUrlEnv || `wss://${host}/twilio-voice-stream`
+  const defaultGreeting = `Thank you for calling ${businessName}. Please hold while I connect you.`
+  const greetText = (greeting && greeting.trim().length > 0) ? greeting : defaultGreeting
 
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say voice="alice">${xmlEscape(greetText)}</Say>
   <Connect>
-    <Stream url="${wsUrl}" track="inbound_track">
+    <Stream url="${wsUrl}" track="both_tracks">
       ${phoneNumber ? `<Parameter name="phoneNumber" value="${phoneNumber.replace(/"/g, '')}"/>` : ''}
+      <Parameter name="playedGreeting" value="1"/>
       ${to ? `<Parameter name="toNumber" value="${to.replace(/"/g, '')}"/>` : ''}
       ${tenantId ? `<Parameter name="tenantId" value="${tenantId.replace(/"/g, '')}"/>` : ''}
       ${businessName ? `<Parameter name="businessName" value="${businessName.replace(/"/g, '')}"/>` : ''}
+      ${voiceId ? `<Parameter name="voiceId" value="${voiceId.replace(/"/g, '')}"/>` : ''}
     </Stream>
   </Connect>
 </Response>`

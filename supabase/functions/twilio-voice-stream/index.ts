@@ -21,7 +21,7 @@ function resampleLin(inp:Int16Array,fr:number,tr:number){if(fr===tr)return inp;c
 function encPcm16ToUlaw(s:Int16Array){const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=pcmToMulaw(s[i]);return u}
 
 const outbound=new WeakMap<WebSocket,{q:Uint8Array[];sending:boolean;cancel:boolean}>()
-async function sendToTwilio(frames:Uint8Array[],sid:string,ws:WebSocket){let st=outbound.get(ws);if(!st){st={q:[],sending:false,cancel:false};outbound.set(ws,st)}if(st.cancel)return;for(const f of frames)st.q.push(f);if(st.sending||ws.readyState!==WebSocket.OPEN)return;st.sending=true;try{while(!st.cancel&&st.q.length>0&&ws.readyState===WebSocket.OPEN){const f=st.q.shift()!;let bin='';for(let i=0;i<f.length;i++)bin+=String.fromCharCode(f[i]);const payload=btoa(bin);ws.send(JSON.stringify({event:'media',streamSid:sid,media:{payload}}));await sleep(20)}}catch(e){console.error('[OUTBOUND]',e)}finally{st.sending=false}}
+async function sendToTwilio(frames:Uint8Array[],sid:string,ws:WebSocket){let st=outbound.get(ws);if(!st){st={q:[],sending:false,cancel:false};outbound.set(ws,st)}if(st.cancel)return;for(const f of frames)st.q.push(f);if(st.sending||ws.readyState!==WebSocket.OPEN)return;st.sending=true;try{while(!st.cancel&&st.q.length>0&&ws.readyState===WebSocket.OPEN){const f=st.q.shift()!;let bin='';for(let i=0;i<f.length;i++)bin+=String.fromCharCode(f[i]);const payload=btoa(bin);ws.send(JSON.stringify({event:'media',streamSid:sid,track:'outbound',media:{payload}}));await sleep(20)}}catch(e){console.error('[OUTBOUND]',e)}finally{st.sending=false}}
 async function waitDrain(ws:WebSocket,ms=8000){const st=(outbound as any).get?.(ws);const s=Date.now();while(true){const sending=st?st.sending:false,remain=st?st.q.length:0;if(!sending&&remain===0)break;if(Date.now()-s>ms)return false;await sleep(25)}return true}
 function sendMark(sid:string,ws:WebSocket,name:string){try{ws.send(JSON.stringify({event:'mark',streamSid:sid,mark:{name}}))}catch{}}
 function genTone(ms:number,f=1000){const sr=8000,n=Math.round(ms*sr/1000),u=new Uint8Array(n);for(let i=0;i<n;i++){const x=Math.sin(2*Math.PI*f*i/sr);u[i]=pcmToMulaw(Math.round(x*32767))}return u}
@@ -45,6 +45,9 @@ serve(async (req)=>{
   function isSilent(f:Uint8Array){let ss=0;for(let i=0;i<f.length;i++){const s=mulawToPcm(f[i]);ss+=s*s}return Math.sqrt(ss/f.length)<RMS}
   socket.onopen=()=>console.log('[WS] up',VERSION)
   socket.onmessage=async (e)=>{try{const d=JSON.parse(e.data);if(d.event==='start'){sid=d.start?.streamSid||d.streamSid||sid;biz=d.start?.customParameters?.businessName||biz;init=true; 
+      if (d.start?.customParameters?.playedGreeting) { (socket as any)._greeted = true }
+      // Use voiceId from custom parameters if provided
+      try { const vParam = d.start?.customParameters?.voiceId || d.start?.customParameters?.voice_id; if (vParam) (socket as any)._voiceId = vParam } catch {}
       // Try to hydrate business context from tenant if provided
       try {
         const tenantParam = d.start?.customParameters?.tenantId || d.start?.customParameters?.tenant_id || ''
@@ -123,13 +126,13 @@ serve(async (req)=>{
       }
       // Prelude + greeting orchestration
       speaking=true;await sendPrelude(sid,socket,400);sendMark(sid,socket,'prelude');
-      // mark greeting as not yet satisfied; will flip true on first Vapi audio or when we send fallback
-      ;(socket as any)._greeted = false
+      // mark greeting as not yet satisfied only if not already greeted via <Say>
+      if ((socket as any)._greeted !== true) (socket as any)._greeted = false
       const vapiOpen = (socket as any)._vapi && ((socket as any)._vapi as WebSocket).readyState===WebSocket.OPEN
-      if (!vapiOpen) {
+      if (!vapiOpen && !(socket as any)._greeted) {
         const greet=await elevenlabsTtsToUlawFrames(((socket as any)._greeting || `Hello! Thank you for calling ${biz}. How can I help you today?`), (socket as any)._voiceId || undefined);
         if(greet.length){await sendToTwilio(greet,sid,socket);await waitDrain(socket,10000);(socket as any)._greeted=true}
-      } else {
+      } else if (! (socket as any)._greeted) {
         // If Vapi is connected but doesn't produce audio quickly, fall back
         const delay = parseInt(Deno.env.get('GREETING_FALLBACK_MS')||'1500')
         setTimeout(async ()=>{
