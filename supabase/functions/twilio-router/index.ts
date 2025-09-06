@@ -78,16 +78,12 @@ serve(async (req) => {
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
   const wsUrl = streamUrlEnv || `wss://${host}/twilio-voice-stream`
-  const defaultGreeting = `Thank you for calling ${businessName}. Please hold while I connect you.`
-  const greetText = (greeting && greeting.trim().length > 0) ? greeting : defaultGreeting
 
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">${xmlEscape(greetText)}</Say>
   <Connect>
-    <Stream url="${wsUrl}" track="both_tracks">
+    <Stream url="${wsUrl}" track="inbound_track">
       ${phoneNumber ? `<Parameter name="phoneNumber" value="${phoneNumber.replace(/"/g, '')}"/>` : ''}
-      <Parameter name="playedGreeting" value="1"/>
       ${to ? `<Parameter name="toNumber" value="${to.replace(/"/g, '')}"/>` : ''}
       ${tenantId ? `<Parameter name="tenantId" value="${tenantId.replace(/"/g, '')}"/>` : ''}
       ${businessName ? `<Parameter name="businessName" value="${businessName.replace(/"/g, '')}"/>` : ''}
