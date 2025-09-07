@@ -95,7 +95,10 @@ serve(async (req)=>{
       // Connect to Vapi realtime only if explicitly enabled
       let vapiWs: WebSocket | null = null
       const vapiKey = Deno.env.get('VAPI_API_KEY') || ''
-      const vapiUrl = (Deno.env.get('VAPI_REALTIME_URL') || '').trim()
+      // Prefer per-call WebSocket Transport URL from router if provided; fallback to env if configured by account
+      const vapiUrlFromRouter = (d.start?.customParameters?.vapiUrl || '').trim()
+      const vapiUrlEnv = (Deno.env.get('VAPI_REALTIME_URL') || '').trim()
+      const vapiUrl = vapiUrlFromRouter || vapiUrlEnv
       let vapiVoice = (socket as any)._voiceId || Deno.env.get('ELEVENLABS_VOICE_ID') || ''
       if (USE_VAPI && vapiKey && vapiUrl) {
         try {
@@ -118,29 +121,35 @@ serve(async (req)=>{
           vapiWs.onclose = (ev)=>{ console.log('[VAPI] WS closed',ev.code,ev.reason) }
           vapiWs.onmessage = async (msg)=>{
             try {
-              const data = JSON.parse(msg.data)
-              // Handle audio from Vapi (various schemas)
-              let b64 = data?.audio_base_64 || data?.audio_base64 || data?.audio || data?.chunk
-              const type = data?.type || data?.event
-              if (type==='audio' || type==='serverMessage' || b64) {
-                if (b64 && typeof b64 === 'string') {
-                  const bin = atob(b64)
-                  const bytes = new Uint8Array(bin.length)
-                  for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i)
-                  // bytes are expected mulaw 8kHz. Chunk and send to Twilio.
-                  const frames: Uint8Array[] = []
-                  for (let i=0;i<bytes.length;i+=160){ const f=new Uint8Array(160); const len=Math.min(160,bytes.length-i); f.set(bytes.subarray(i,i+len),0); if(len<160)f.fill(0xff,len); frames.push(f) }
-                  await sendToTwilio(frames,sid,socket)
-                  // mark as greeted on first audio
-                  if(!(socket as any)._greeted){ (socket as any)._greeted = true }
-                  // speaking lifecycle based on Vapi audio
-                  speaking = true
-                  if (ttsEndTimer) clearTimeout(ttsEndTimer)
-                  ttsEndTimer = setTimeout(()=>{ speaking = false }, 300) as unknown as number
-                }
+              // If binary audio, treat as PCM16 16kHz directly
+              if (typeof msg.data !== 'string') {
+                let buf: ArrayBuffer
+                if (msg.data instanceof ArrayBuffer) buf = msg.data
+                else if ((msg.data as any)?.arrayBuffer) buf = await (msg.data as any).arrayBuffer()
+                else return
+                const pcm16 = new Int16Array(buf)
+                // Downsample 16k -> 8k for Twilio
+                const pcm8 = resampleLin(pcm16, 16000, 8000)
+                // Encode to μ-law and frame into 160-byte (20ms) chunks
+                const ulaw = encPcm16ToUlaw(pcm8)
+                const frames: Uint8Array[] = []
+                for (let i=0;i<ulaw.length;i+=160){ const f=new Uint8Array(160); const len=Math.min(160,ulaw.length-i); f.set(ulaw.subarray(i,i+len)); if(len<160) f.fill(0xff, len); frames.push(f) }
+                await sendToTwilio(frames, sid, socket)
+                if(!(socket as any)._greeted){ (socket as any)._greeted = true }
+                speaking = true
+                if (ttsEndTimer) clearTimeout(ttsEndTimer)
+                ttsEndTimer = setTimeout(()=>{ speaking = false }, 300) as unknown as number
                 return
               }
-              // Ignore other messages; this function owns ASR/LLM
+              // Otherwise try JSON control messages (if any)
+              try {
+                const data = JSON.parse(msg.data)
+                const type = data?.type || data?.event
+                if (type==='hangup') {
+                  try{ socket.close() }catch{}
+                  return
+                }
+              } catch {}
             } catch (err) {
               console.error('[VAPI] onmessage error',err)
             }
@@ -158,12 +167,11 @@ serve(async (req)=>{
       const vapiWs = (socket as any)._vapi as WebSocket | undefined
       if (vapiWs && vapiWs.readyState===WebSocket.OPEN) {
         try {
-          // Send as compact message that many realtime APIs accept
-          let b=''; for(let i=0;i<u.length;i++) b+=String.fromCharCode(u[i])
-          const chunk = btoa(b)
-          const evtName = Deno.env.get('VAPI_AUDIO_IN_EVENT')||'user_audio_chunk'
-          const msg: any = { type: evtName, chunk, encoding:'mulaw', sample_rate:8000 }
-          vapiWs.send(JSON.stringify(msg))
+          // Convert ulaw(8k) -> pcm16(8k) -> upsample to 16k -> send binary PCM
+          const pcm8 = new Int16Array(u.length)
+          for (let i=0;i<u.length;i++) pcm8[i] = mulawToPcm(u[i])
+          const pcm16 = resampleLin(pcm8, 8000, 16000)
+          vapiWs.send(pcm16.buffer)
         } catch(err) { console.error('[VAPI] forward audio error',err) }
         return
       }

@@ -44,6 +44,7 @@ serve(async (req) => {
   let businessName = (search.get('businessName') || (form?.get('businessName') as string) || 'this business').trim()
   let voiceId = (search.get('voiceId') || (form?.get('voiceId') as string) || '').trim()
   let greeting = ''
+  let vapiUrlParam = ''
 
   // Resolve tenant + business by the called number if missing
   try {
@@ -74,6 +75,37 @@ serve(async (req) => {
     console.warn('[twilio-router] tenant lookup failed', e)
   }
 
+  // Initiate Vapi WebSocket Transport call per docs to get per-call websocketCallUrl
+  try {
+    const vapiKey = Deno.env.get('VAPI_API_KEY') || ''
+    const vapiAssistant = Deno.env.get('VAPI_ASSISTANT_ID') || ''
+    if (vapiKey && vapiAssistant) {
+      const resp = await fetch('https://api.vapi.ai/call', {
+        method: 'POST',
+        headers: {
+          'authorization': `Bearer ${vapiKey}`,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          assistantId: vapiAssistant,
+          transport: {
+            provider: 'vapi.websocket',
+            audioFormat: { format: 'pcm_s16le', container: 'raw', sampleRate: 16000 }
+          }
+        })
+      })
+      if (resp.ok) {
+        const j = await resp.json()
+        const wsUrl: string | undefined = j?.transport?.websocketCallUrl || j?.websocketCallUrl
+        if (wsUrl) vapiUrlParam = wsUrl
+      } else {
+        console.warn('[twilio-router] Vapi /call failed', resp.status, await resp.text())
+      }
+    }
+  } catch (err) {
+    console.warn('[twilio-router] Vapi /call exception', err)
+  }
+
   // Allow overriding the Stream URL via env. Otherwise derive from this request's host.
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
@@ -82,12 +114,13 @@ serve(async (req) => {
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${wsUrl}" track="both_tracks">
+    <Stream url="${wsUrl}" track="inbound_track">
       ${phoneNumber ? `<Parameter name="phoneNumber" value="${phoneNumber.replace(/"/g, '')}"/>` : ''}
       ${to ? `<Parameter name="toNumber" value="${to.replace(/"/g, '')}"/>` : ''}
       ${tenantId ? `<Parameter name="tenantId" value="${tenantId.replace(/"/g, '')}"/>` : ''}
       ${businessName ? `<Parameter name="businessName" value="${businessName.replace(/"/g, '')}"/>` : ''}
       ${voiceId ? `<Parameter name="voiceId" value="${voiceId.replace(/"/g, '')}"/>` : ''}
+      ${vapiUrlParam ? `<Parameter name="vapiUrl" value="${vapiUrlParam.replace(/"/g, '')}"/>` : ''}
     </Stream>
   </Connect>
 </Response>`
