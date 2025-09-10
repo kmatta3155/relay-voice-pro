@@ -112,13 +112,13 @@ serve(async (req) => {
           body: JSON.stringify({
             assistantId: vapiAssistant,
             transport: { provider: 'vapi.websocket', audioFormat: { format: 'pcm_s16le', container: 'raw', sampleRate: 16000 }},
-            variables: { businessName, tenantId },
             assistantOverrides: {
-              // Let assistant greet first. If your assistant already has defaults, these act as per-call overrides.
-              firstMessageMode: 'assistant',
+              // Valid values: assistant-speaks-first, assistant-speaks-first-with-model-generated-message, assistant-waits-for-user
+              firstMessageMode: 'assistant-speaks-first',
               ...(greeting ? { firstMessage: greeting } : {}),
               ...(voiceId ? { voice: { provider: 'elevenlabs', voiceId } } : {})
             },
+            // Keep context in metadata for observability/debugging
             metadata: { source: 'twilio', tenantId, to, from, businessName }
           }),
           signal: ctrl.signal
