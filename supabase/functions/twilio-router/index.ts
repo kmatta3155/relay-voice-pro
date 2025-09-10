@@ -112,6 +112,13 @@ serve(async (req) => {
           body: JSON.stringify({
             assistantId: vapiAssistant,
             transport: { provider: 'vapi.websocket', audioFormat: { format: 'pcm_s16le', container: 'raw', sampleRate: 16000 }},
+            variables: { businessName, tenantId },
+            assistantOverrides: {
+              // Let assistant greet first. If your assistant already has defaults, these act as per-call overrides.
+              firstMessageMode: 'assistant',
+              ...(greeting ? { firstMessage: greeting } : {}),
+              ...(voiceId ? { voice: { provider: 'elevenlabs', voiceId } } : {})
+            },
             metadata: { source: 'twilio', tenantId, to, from, businessName }
           }),
           signal: ctrl.signal
@@ -155,4 +162,3 @@ serve(async (req) => {
   for (const [k, v] of Object.entries(corsHeaders)) headers.set(k, v)
   return new Response(twiml, { headers })
 })
-

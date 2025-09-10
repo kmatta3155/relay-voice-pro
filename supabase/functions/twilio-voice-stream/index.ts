@@ -136,10 +136,7 @@ serve(async (req)=>{
           let ttsEndTimer: number | undefined
           vapiWs.onopen = ()=>{
             console.log('[VAPI] Realtime connected')
-            try {
-              const greetText = (socket as any)._greeting || `Hello! Thank you for calling ${biz}. How can I help you today?`
-              vapiWs!.send(JSON.stringify({ type:'tts', text: greetText, voiceId: vapiVoice }))
-            } catch {}
+            // Option A: Let the Vapi Assistant greet itself.
           }
           vapiWs.onerror = (err)=>{ console.error('[VAPI] WS error',err) }
           vapiWs.onclose = (ev)=>{ console.log('[VAPI] WS closed',ev.code,ev.reason) }
