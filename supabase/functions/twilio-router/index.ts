@@ -1,5 +1,4 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,65 +45,9 @@ serve(async (req) => {
   let greeting = ''
   let vapiUrlParam = ''
 
-  // Resolve tenant + business by the called number if missing
-  try {
-    if ((!tenantId || businessName === 'this business') && to) {
-      const SB_URL = Deno.env.get('SUPABASE_URL')
-      const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-      if (SB_URL && SB_KEY) {
-        const sb = createClient(SB_URL, SB_KEY)
-        const { data: agent } = await sb
-          .from('agent_settings')
-          .select('tenant_id,greeting,elevenlabs_voice_id')
-          .eq('twilio_number', to)
-          .maybeSingle()
-        if (agent?.tenant_id) {
-          if (!tenantId) tenantId = agent.tenant_id
-          if (!voiceId && agent.elevenlabs_voice_id) voiceId = agent.elevenlabs_voice_id as string
-          if (!greeting && (agent as any).greeting) greeting = String((agent as any).greeting)
-          const { data: t } = await sb
-            .from('tenants')
-            .select('name')
-            .eq('id', agent.tenant_id)
-            .maybeSingle()
-          if (t?.name) businessName = t.name
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[twilio-router] tenant lookup failed', e)
-  }
-
-  // Initiate Vapi WebSocket Transport call per docs to get per-call websocketCallUrl
-  try {
-    const vapiKey = Deno.env.get('VAPI_API_KEY') || ''
-    const vapiAssistant = Deno.env.get('VAPI_ASSISTANT_ID') || ''
-    if (vapiKey && vapiAssistant) {
-      const resp = await fetch('https://api.vapi.ai/call', {
-        method: 'POST',
-        headers: {
-          'authorization': `Bearer ${vapiKey}`,
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-          assistantId: vapiAssistant,
-          transport: {
-            provider: 'vapi.websocket',
-            audioFormat: { format: 'pcm_s16le', container: 'raw', sampleRate: 16000 }
-          }
-        })
-      })
-      if (resp.ok) {
-        const j = await resp.json()
-        const wsUrl: string | undefined = j?.transport?.websocketCallUrl || j?.websocketCallUrl
-        if (wsUrl) vapiUrlParam = wsUrl
-      } else {
-        console.warn('[twilio-router] Vapi /call failed', resp.status, await resp.text())
-      }
-    }
-  } catch (err) {
-    console.warn('[twilio-router] Vapi /call exception', err)
-  }
+  // Intentionally avoid network calls here to keep Twilio webhook under 1–2s.
+  // The WebSocket handler (twilio-voice-stream) hydrates tenant/business/voice
+  // and will open Vapi realtime using env `VAPI_REALTIME_URL`.
 
   // Allow overriding the Stream URL via env. Otherwise derive from this request's host.
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
