@@ -7,8 +7,7 @@ const supabaseKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
 const supabase=(supabaseUrl&&supabaseKey)?createClient(supabaseUrl,supabaseKey):null as unknown as ReturnType<typeof createClient>
 const VERSION='receptionist-rag@2025-09-06'
 const USE_CONVAI=false
-// Use Vapi realtime as the primary transport by default
-const USE_VAPI=(Deno.env.get('USE_VAPI')||'true').toLowerCase()==='true'
+// Vapi realtime is driven by per-call websocketCallUrl (from router)
 
 function sleep(ms:number){return new Promise(r=>setTimeout(r,ms))}
 function pcmToMulaw(s:number){const B=0x84,C=32635;let g=0;if(s<0){g=0x80;s=-s}if(s>C)s=C;s+=B;let e=7,m=0x4000;while((s&m)===0&&e>0){e--;m>>=1}const sh=(e===0)?4:(e+3),t=(s>>sh)&0x0f;return(~(g|(e<<4)|t))&0xff}
@@ -36,8 +35,10 @@ async function sendToTwilio(frames:Uint8Array[],sid:string,ws:WebSocket){
       let bin='';
       for(let i=0;i<f.length;i++)bin+=String.fromCharCode(f[i]);
       const payload=btoa(bin);
-      // Per Twilio Media Streams, only send event, streamSid, and media.payload
-      ws.send(JSON.stringify({event:'media',streamSid:sid,media:{payload}}));
+      // Per Twilio Media Streams, send minimal schema; optionally include track fallback
+      const includeTrack=(ws as any)._includeOutboundTrack===true
+      const msg= includeTrack ? {event:'media',streamSid:sid,track:'outbound',media:{payload}} : {event:'media',streamSid:sid,media:{payload}}
+      ws.send(JSON.stringify(msg));
       await sleep(20)
     }
   }catch(e){
@@ -99,6 +100,14 @@ serve(async (req)=>{
       if (d.start?.customParameters?.playedGreeting) { (socket as any)._greeted = true }
       // Use voiceId from custom parameters if provided
       try { const vParam = d.start?.customParameters?.voiceId || d.start?.customParameters?.voice_id; if (vParam) (socket as any)._voiceId = vParam } catch {}
+      try { const gParam = d.start?.customParameters?.greeting; if (gParam) (socket as any)._greeting = gParam } catch {}
+      try {
+        const trackInfo = (d.start?.tracks||'') as string
+        const forceEnv = (Deno.env.get('TWILIO_FORCE_OUTBOUND_TRACK')||'false').toLowerCase()==='true'
+        if (forceEnv || trackInfo==='both' || trackInfo==='outbound' || d.start?.customParameters?.forceOutboundTrack) {
+          (socket as any)._includeOutboundTrack = true
+        }
+      } catch {}
       // Try to hydrate business context from tenant if provided
       try {
         const tenantParam = d.start?.customParameters?.tenantId || d.start?.customParameters?.tenant_id || ''
@@ -115,21 +124,13 @@ serve(async (req)=>{
       } catch (err) {
         console.warn('[WS] hydrate biz failed', err)
       }
-      // Connect to Vapi realtime only if explicitly enabled
+      // Connect to Vapi realtime using per-call websocket URL from router
       let vapiWs: WebSocket | null = null
-      const vapiKey = Deno.env.get('VAPI_API_KEY') || ''
-      // Prefer per-call WebSocket Transport URL from router if provided; fallback to env if configured by account
-      const vapiUrlFromRouter = (d.start?.customParameters?.vapiUrl || '').trim()
-      const vapiUrlEnv = (Deno.env.get('VAPI_REALTIME_URL') || '').trim()
-      const vapiUrl = vapiUrlFromRouter || vapiUrlEnv
+      const vapiUrl = (d.start?.customParameters?.vapiUrl || '').trim()
       let vapiVoice = (socket as any)._voiceId || Deno.env.get('ELEVENLABS_VOICE_ID') || ''
-      if (USE_VAPI && vapiKey && vapiUrl) {
+      if (vapiUrl) {
         try {
           const url = new URL(vapiUrl)
-          if (vapiVoice) url.searchParams.set('voice_id', vapiVoice)
-          url.searchParams.set('format', 'mulaw_8000')
-          // Many providers accept api key in query for WS
-          if (!url.searchParams.has('api_key')) url.searchParams.set('api_key', vapiKey)
           vapiWs = new WebSocket(url.toString())
           ;(socket as any)._vapi = vapiWs
           let ttsEndTimer: number | undefined
@@ -137,7 +138,7 @@ serve(async (req)=>{
             console.log('[VAPI] Realtime connected')
             try {
               const greetText = (socket as any)._greeting || `Hello! Thank you for calling ${biz}. How can I help you today?`
-              vapiWs!.send(JSON.stringify({ type:'response', text: greetText, voice_id: vapiVoice }))
+              vapiWs!.send(JSON.stringify({ type:'tts', text: greetText, voiceId: vapiVoice }))
             } catch {}
           }
           vapiWs.onerror = (err)=>{ console.error('[VAPI] WS error',err) }
@@ -198,7 +199,7 @@ serve(async (req)=>{
         } catch(err) { console.error('[VAPI] forward audio error',err) }
         return
       }
-      if(speaking)return;const silent=isSilent(u);if(!silent){if(!inUtter){inUtter=true;count=0;utterFrames=[]}sil=0;count++;utterFrames.push(u)}else{if(inUtter)sil++}const have=count>=MIN;const end=inUtter&&sil>=END;const cap=inUtter&&count>=MAX;if(have&&(end||cap)){const frames=utterFrames;inUtter=false;count=0;sil=0;utterFrames=[];(async()=>{try{const pcm=ulawFramesToPcm16(frames);const wav=wavFromPcm16(pcm,8000);const text=await whisper(wav);if(!text){const v=(socket as any)._voiceId||'';const vapi=(socket as any)._vapi as WebSocket|undefined; if(vapi&&vapi.readyState===WebSocket.OPEN){vapi.send(JSON.stringify({type:'response', text:"I didn't catch that. Please repeat.", voice_id:v}))}return}const reply=(await chatReply(text,biz,(socket as any)._tenantId)).trim()||"I'm sorry, could you please repeat that?";const vapi=(socket as any)._vapi as WebSocket|undefined; if(vapi&&vapi.readyState===WebSocket.OPEN){vapi.send(JSON.stringify({type:'response', text:reply, voice_id:((socket as any)._voiceId||'')}))}}catch(err){console.error('[LOOP]',err);speaking=false}})()}}
+      if(speaking)return;const silent=isSilent(u);if(!silent){if(!inUtter){inUtter=true;count=0;utterFrames=[]}sil=0;count++;utterFrames.push(u)}else{if(inUtter)sil++}const have=count>=MIN;const end=inUtter&&sil>=END;const cap=inUtter&&count>=MAX;if(have&&(end||cap)){const frames=utterFrames;inUtter=false;count=0;sil=0;utterFrames=[];(async()=>{try{const pcm=ulawFramesToPcm16(frames);const wav=wavFromPcm16(pcm,8000);const text=await whisper(wav);if(!text){const v=(socket as any)._voiceId||'';const vapi=(socket as any)._vapi as WebSocket|undefined; if(vapi&&vapi.readyState===WebSocket.OPEN){vapi.send(JSON.stringify({type:'tts', text:"I didn't catch that. Please repeat.", voiceId:v}))}return}const reply=(await chatReply(text,biz,(socket as any)._tenantId)).trim()||"I'm sorry, could you please repeat that?";const vapi=(socket as any)._vapi as WebSocket|undefined; if(vapi&&vapi.readyState===WebSocket.OPEN){vapi.send(JSON.stringify({type:'tts', text:reply, voiceId:((socket as any)._voiceId||'')}))}}catch(err){console.error('[LOOP]',err);speaking=false}})()}}
     else if(d.event==='stop'){try{const st=(outbound as any).get?.(socket);if(st){st.cancel=true;st.q.length=0}}catch{}}}catch(err){console.error('[ERR]',err)}}
   socket.onerror=(e)=>console.error('[WSERR]',e)
   socket.onclose=()=>{try{const st=(outbound as any).get?.(socket);if(st){st.cancel=true;st.q.length=0}}
