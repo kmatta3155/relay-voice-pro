@@ -94,6 +94,7 @@ serve(async (req)=>{
   const selectedProtocol = protocols.find(p=>preferredOrder.includes(p)) || (protocols[0]||undefined)
   const {socket, response}= selectedProtocol ? Deno.upgradeWebSocket(req,{protocol:selectedProtocol}) : Deno.upgradeWebSocket(req)
   let sid='';let biz='this business';let speaking=false;let init=false;let utterFrames:Uint8Array[]=[];let inUtter=false;let sil=0;let count=0;const RMS=parseInt(Deno.env.get('VAD_SILENCE_RMS')||'700');const MIN=parseInt(Deno.env.get('VAD_MIN_FRAMES')||'15');const END=parseInt(Deno.env.get('VAD_END_FRAMES')||'15');const MAX=parseInt(Deno.env.get('VAD_MAX_FRAMES')||'240')
+  let keepAliveTimer: number | undefined
   function isSilent(f:Uint8Array){let ss=0;for(let i=0;i<f.length;i++){const s=mulawToPcm(f[i]);ss+=s*s}return Math.sqrt(ss/f.length)<RMS}
   socket.onopen=()=>console.log('[WS] up',VERSION)
   socket.onmessage=async (e)=>{try{const d=JSON.parse(e.data);if(d.event==='start'){sid=d.start?.streamSid||d.streamSid||sid;biz=d.start?.customParameters?.businessName||biz;init=true; 
@@ -167,7 +168,10 @@ serve(async (req)=>{
                 const data = JSON.parse(msg.data)
                 const type = data?.type || data?.event
                 if (type==='hangup') {
-                  try{ socket.close() }catch{}
+                  // Do not actively close Twilio WS; let Twilio end the call.
+                  // Just stop forwarding and allow graceful drain.
+                  try{ const v=(socket as any)._vapi as WebSocket|undefined; if(v){ try{ v.close() }catch{} } }catch{}
+                  ;(socket as any)._vapi = null
                   return
                 }
               } catch {}
@@ -181,6 +185,9 @@ serve(async (req)=>{
       }
       // Prelude frames to prime Twilio stream
       await sendPrelude(sid,socket,300);sendMark(sid,socket,'prelude');
+      // Lightweight keepalive: periodic mark to keep intermediaries happy
+      try { if (keepAliveTimer) clearInterval(keepAliveTimer) } catch {}
+      keepAliveTimer = setInterval(()=>{ try { if (sid) sendMark(sid, socket, 'ka') } catch {} }, 10000) as unknown as number
       if ((socket as any)._greeted !== true) (socket as any)._greeted = false
       sendMark(sid,socket,'greeting')}
     else if(d.event==='media'&&d.media?.payload){const bin=atob(d.media.payload);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
@@ -201,6 +208,7 @@ serve(async (req)=>{
   socket.onerror=(e)=>console.error('[WSERR]',e)
   socket.onclose=()=>{try{const st=(outbound as any).get?.(socket);if(st){st.cancel=true;st.q.length=0}}
     catch{} try{ const v=(socket as any)._vapi as WebSocket|undefined; if(v){ try{ v.close() }catch{} (socket as any)._vapi=null } }catch{}
+    try { if (keepAliveTimer) clearInterval(keepAliveTimer) } catch {}
   }
   return response
 })
