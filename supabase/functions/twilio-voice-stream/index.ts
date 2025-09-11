@@ -7,11 +7,20 @@ const supabaseKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
 const supabase=(supabaseUrl&&supabaseKey)?createClient(supabaseUrl,supabaseKey):null as unknown as ReturnType<typeof createClient>
 const VERSION='receptionist-rag@2025-09-06'
 const USE_CONVAI=false
+const ECHO_GUARD=(Deno.env.get('TWILIO_ECHO_GUARD')||'true').toLowerCase()==='true'
 // Vapi realtime is driven by per-call websocketCallUrl (from router)
 
 function sleep(ms:number){return new Promise(r=>setTimeout(r,ms))}
 function pcmToMulaw(s:number){const B=0x84,C=32635;let g=0;if(s<0){g=0x80;s=-s}if(s>C)s=C;s+=B;let e=7,m=0x4000;while((s&m)===0&&e>0){e--;m>>=1}const sh=(e===0)?4:(e+3),t=(s>>sh)&0x0f;return(~(g|(e<<4)|t))&0xff}
-function mulawToPcm(mu:number){mu=(~mu)&0xff;const g=mu&0x80,e=(mu>>4)&0x07,t=mu&0x0f,x=((t<<3)+0x84)<<(e+3);return g?(0x84-x):(x-0x84)}
+function mulawToPcm(mu:number){
+  // Correct μ-law decode per ITU G.711
+  mu=(~mu)&0xff;
+  const sign=mu&0x80;
+  const exponent=(mu>>4)&0x07;
+  const mantissa=mu&0x0f;
+  const sample=((mantissa|0x10)<<(exponent+3)) - 0x84;
+  return sign ? -sample : sample;
+}
 function ulawFramesToPcm16(frames:Uint8Array[]):Int16Array{const n=frames.reduce((a,f)=>a+f.length,0);const out=new Int16Array(n);let i=0;for(const f of frames)for(let j=0;j<f.length;j++)out[i++]=mulawToPcm(f[j]);return out}
 function wavFromPcm16(s:Int16Array,rate=8000){const h=new ArrayBuffer(44),v=new DataView(h);v.setUint32(0,0x52494646,false);v.setUint32(4,36+s.length*2,true);v.setUint32(8,0x57415645,false);v.setUint32(12,0x666d7420,false);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);v.setUint32(36,0x64617461,false);v.setUint32(40,s.length*2,true);const w=new Uint8Array(44+s.length*2);w.set(new Uint8Array(h),0);for(let i=0;i<s.length;i++){w[44+i*2]=s[i]&0xff;w[44+i*2+1]=(s[i]>>8)&0xff}return w}
 function parseWavPcm(b:Uint8Array){if(b.length<12)return{formatCode:1,channels:1,sampleRate:16000,bitsPerSample:16,pcmBytes:b};const H=String.fromCharCode(...b.slice(0,4)),W=String.fromCharCode(...b.slice(8,12));if(H!=='RIFF'||W!=='WAVE')return{formatCode:1,channels:1,sampleRate:16000,bitsPerSample:16,pcmBytes:b};let fmt=false,data=false,fc=1,ch=1,sr=16000,bps=16,pcm:Uint8Array|null=null,off=12;while(off+8<=b.length){const id=String.fromCharCode(...b.slice(off,off+4));const sz=new DataView(b.buffer).getUint32(off+4,true);const next=off+8+sz;if(id==='fmt '){fmt=true;const v=new DataView(b.buffer,off+8,sz);fc=v.getUint16(0,true);ch=v.getUint16(2,true);sr=v.getUint32(4,true);bps=v.getUint16(14,true)} else if(id==='data'){data=true;const s=off+8;e:s+sz;pcm=b.slice(s,e as any)}off=next}if(!data||!pcm)return null;if(!fmt)return{formatCode:1,channels:1,sampleRate:16000,bitsPerSample:16,pcmBytes:pcm};return{formatCode:fc,channels:ch,sampleRate:sr,bitsPerSample:bps,pcmBytes:pcm}}
@@ -160,7 +169,7 @@ serve(async (req)=>{
                 if(!(socket as any)._greeted){ (socket as any)._greeted = true }
                 speaking = true
                 if (ttsEndTimer) clearTimeout(ttsEndTimer)
-                ttsEndTimer = setTimeout(()=>{ speaking = false }, 300) as unknown as number
+                ttsEndTimer = setTimeout(()=>{ speaking = false }, 500) as unknown as number
                 return
               }
               // Otherwise try JSON control messages (if any)
@@ -194,6 +203,8 @@ serve(async (req)=>{
       // If Vapi WS is open, forward user audio directly; else use local VAD+LLM pipeline
       const vapiWs = (socket as any)._vapi as WebSocket | undefined
       if (vapiWs && vapiWs.readyState===WebSocket.OPEN) {
+        // Optional simple echo-guard: if we're actively sending TTS, skip forwarding low-level noise
+        if (ECHO_GUARD && speaking) return
         try {
           // Convert ulaw(8k) -> pcm16(8k) -> upsample to 16k -> send binary PCM
           const pcm8 = new Int16Array(u.length)
