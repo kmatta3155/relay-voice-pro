@@ -7,6 +7,10 @@ const supabaseKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
 const supabase=(supabaseUrl&&supabaseKey)?createClient(supabaseUrl,supabaseKey):null as unknown as ReturnType<typeof createClient>
 const VERSION='receptionist-rag@2025-09-06'
 const USE_CONVAI=false
+// Vapi input event wiring (see README: VAPI_AUDIO_IN_EVENT)
+const VAPI_AUDIO_IN_EVENT=(Deno.env.get('VAPI_AUDIO_IN_EVENT')||'user_audio_chunk').trim()
+const VAPI_AUDIO_END_EVENT=(Deno.env.get('VAPI_AUDIO_END_EVENT')||'end_of_user_audio').trim()
+const VAPI_BINARY_IN=(Deno.env.get('VAPI_BINARY_IN')||'false').toLowerCase()==='true'
 const ECHO_GUARD=(Deno.env.get('TWILIO_ECHO_GUARD')||'true').toLowerCase()==='true'
 // Vapi realtime is driven by per-call websocketCallUrl (from router)
 
@@ -206,11 +210,31 @@ serve(async (req)=>{
         // Optional simple echo-guard: if we're actively sending TTS, skip forwarding low-level noise
         if (ECHO_GUARD && speaking) return
         try {
-          // Convert ulaw(8k) -> pcm16(8k) -> upsample to 16k -> send binary PCM
+          const silent=isSilent(u)
+          // Convert ulaw(8k) -> pcm16(8k) -> upsample to 16k
           const pcm8 = new Int16Array(u.length)
           for (let i=0;i<u.length;i++) pcm8[i] = mulawToPcm(u[i])
           const pcm16 = resampleLin(pcm8, 8000, 16000)
-          vapiWs.send(pcm16.buffer)
+          if (!silent) {
+            if (!inUtter) { inUtter=true; count=0 }
+            count++
+            if (VAPI_BINARY_IN) {
+              vapiWs.send(pcm16.buffer)
+            } else {
+              const bytes = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength)
+              let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i])
+              const b64=btoa(bin)
+              vapiWs.send(JSON.stringify({ type: VAPI_AUDIO_IN_EVENT, data: b64 }))
+            }
+            sil=0
+          } else if (inUtter) {
+            sil++
+          }
+          const have=count>=MIN; const end=inUtter&&sil>=END; const cap=inUtter&&count>=MAX
+          if (have && (end||cap)) {
+            try { vapiWs.send(JSON.stringify({ type: VAPI_AUDIO_END_EVENT })) } catch {}
+            inUtter=false; count=0; sil=0
+          }
         } catch(err) { console.error('[VAPI] forward audio error',err) }
         return
       }
