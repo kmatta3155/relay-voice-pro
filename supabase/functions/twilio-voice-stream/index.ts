@@ -213,17 +213,35 @@ serve(async (req)=>{
         // Optional echo-guard: briefly suppress user audio while TTS is still flowing
         if (ECHO_GUARD && speaking && (Date.now()-lastTtsAt) < 200) return
         try {
-          // Convert ulaw(8k) -> pcm16(8k) -> upsample to 16k -> forward immediately
+          const silent=isSilent(u)
+          // Convert ulaw(8k) -> pcm16(8k) -> upsample to 16k
           const pcm8 = new Int16Array(u.length)
           for (let i=0;i<u.length;i++) pcm8[i] = mulawToPcm(u[i])
           const pcm16 = resampleLin(pcm8, 8000, 16000)
-          if (VAPI_BINARY_IN) {
-            vapiWs.send(pcm16.buffer)
-          } else {
-            const bytes = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength)
-            let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i])
-            const b64=btoa(bin)
-            vapiWs.send(JSON.stringify({ type: VAPI_AUDIO_IN_EVENT, data: b64 }))
+          if (!silent) {
+            if (!inUtter) { inUtter = true; count = 0; sil = 0 }
+            count++
+            if (VAPI_BINARY_IN) {
+              vapiWs.send(pcm16.buffer)
+            } else {
+              const bytes = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength)
+              let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i])
+              const b64=btoa(bin)
+              vapiWs.send(JSON.stringify({ type: VAPI_AUDIO_IN_EVENT, data: b64 }))
+            }
+          } else if (inUtter) {
+            sil++
+          }
+          // End of utterance detection -> notify Vapi so it can respond
+          const have = count >= MIN
+          const end = inUtter && sil >= END
+          const cap = inUtter && count >= MAX
+          if (have && (end || cap)) {
+            try { 
+              vapiWs.send(JSON.stringify({ type: VAPI_AUDIO_END_EVENT }))
+              if (DEBUG_AUDIO) console.log('[VAPI] sent end-of-user')
+            } catch {}
+            inUtter = false; count = 0; sil = 0
           }
           if (DEBUG_AUDIO) { try { (socket as any)._dbg = ((socket as any)._dbg||0) + pcm16.length } catch {} }
         } catch(err) { console.error('[VAPI] forward audio error',err) }
