@@ -10,7 +10,9 @@ const USE_CONVAI=false
 // Vapi input transport: default to binary raw PCM16 for maximum compatibility.
 const VAPI_AUDIO_IN_EVENT=(Deno.env.get('VAPI_AUDIO_IN_EVENT')||'user_audio_chunk').trim()
 const VAPI_AUDIO_END_EVENT=(Deno.env.get('VAPI_AUDIO_END_EVENT')||'end_of_user_audio').trim()
-const VAPI_BINARY_IN=(Deno.env.get('VAPI_BINARY_IN')||'true').toLowerCase()==='true'
+// Default to JSON chunks; some Vapi orgs require control messages for audio.
+const VAPI_BINARY_IN=(Deno.env.get('VAPI_BINARY_IN')||'false').toLowerCase()==='true'
+const DEBUG_VAPI=(Deno.env.get('DEBUG_VAPI')||'false').toLowerCase()==='true'
 const ECHO_GUARD=(Deno.env.get('TWILIO_ECHO_GUARD')||'true').toLowerCase()==='true'
 const DEBUG_AUDIO=(Deno.env.get('DEBUG_AUDIO')||'false').toLowerCase()==='true'
 // Vapi realtime is driven by per-call websocketCallUrl (from router)
@@ -113,6 +115,7 @@ serve(async (req)=>{
   function isSilent(f:Uint8Array){let ss=0;for(let i=0;i<f.length;i++){const s=mulawToPcm(f[i]);ss+=s*s}return Math.sqrt(ss/f.length)<RMS}
   socket.onopen=()=>console.log('[WS] up',VERSION)
   socket.onmessage=async (e)=>{try{const d=JSON.parse(e.data);if(d.event==='start'){sid=d.start?.streamSid||d.streamSid||sid;biz=d.start?.customParameters?.businessName||biz;init=true; 
+      try { if (DEBUG_VAPI) console.log('[TWILIO start] customParameters', d.start?.customParameters||{}) } catch {}
       if (d.start?.customParameters?.playedGreeting) { (socket as any)._greeted = true }
       // Use voiceId from custom parameters if provided
       try { const vParam = d.start?.customParameters?.voiceId || d.start?.customParameters?.voice_id; if (vParam) (socket as any)._voiceId = vParam } catch {}
@@ -179,10 +182,11 @@ serve(async (req)=>{
                 ttsEndTimer = setTimeout(()=>{ speaking = false }, 500) as unknown as number
                 return
               }
-              // Otherwise try JSON control messages (if any)
+              // Otherwise try JSON control/messages (debug unexpected types)
               try {
                 const data = JSON.parse(msg.data)
                 const type = data?.type || data?.event
+                if (DEBUG_VAPI) console.log('[VAPI<-]', type, Object.keys(data||{}))
                 if (type==='hangup') {
                   // Do not actively close Twilio WS; let Twilio end the call.
                   // Just stop forwarding and allow graceful drain.
@@ -218,17 +222,23 @@ serve(async (req)=>{
           const pcm8 = new Int16Array(u.length)
           for (let i=0;i<u.length;i++) pcm8[i] = mulawToPcm(u[i])
           const pcm16 = resampleLin(pcm8, 8000, 16000)
+          // Always forward audio to Vapi (server VAD handles pauses)
+          if (VAPI_BINARY_IN) {
+            if (DEBUG_VAPI) console.log('[VAPI->] binary chunk', pcm16.byteLength)
+            vapiWs.send(pcm16.buffer)
+          } else {
+            const bytes = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength)
+            let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i])
+            const b64=btoa(bin)
+            const msg = { type: VAPI_AUDIO_IN_EVENT, data: b64 }
+            if (DEBUG_VAPI) console.log('[VAPI->]', msg.type, 'len', bytes.length)
+            vapiWs.send(JSON.stringify(msg))
+          }
+
+          // Local VAD for explicit end-of-user signal
           if (!silent) {
             if (!inUtter) { inUtter = true; count = 0; sil = 0 }
             count++
-            if (VAPI_BINARY_IN) {
-              vapiWs.send(pcm16.buffer)
-            } else {
-              const bytes = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength)
-              let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i])
-              const b64=btoa(bin)
-              vapiWs.send(JSON.stringify({ type: VAPI_AUDIO_IN_EVENT, data: b64 }))
-            }
           } else if (inUtter) {
             sil++
           }
@@ -238,7 +248,9 @@ serve(async (req)=>{
           const cap = inUtter && count >= MAX
           if (have && (end || cap)) {
             try { 
-              vapiWs.send(JSON.stringify({ type: VAPI_AUDIO_END_EVENT }))
+              const endMsg = { type: VAPI_AUDIO_END_EVENT }
+              if (DEBUG_VAPI) console.log('[VAPI->]', endMsg.type)
+              vapiWs.send(JSON.stringify(endMsg))
               if (DEBUG_AUDIO) console.log('[VAPI] sent end-of-user')
             } catch {}
             inUtter = false; count = 0; sil = 0
