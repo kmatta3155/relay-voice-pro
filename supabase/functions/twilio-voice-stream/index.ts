@@ -12,9 +12,9 @@ const VAPI_AUDIO_IN_EVENT=(Deno.env.get('VAPI_AUDIO_IN_EVENT')||'user_audio_chun
 const VAPI_AUDIO_END_EVENT=(Deno.env.get('VAPI_AUDIO_END_EVENT')||'end_of_user_audio').trim()
 // Default to JSON chunks; some Vapi orgs require control messages for audio.
 const VAPI_BINARY_IN=(Deno.env.get('VAPI_BINARY_IN')||'false').toLowerCase()==='true'
-const DEBUG_VAPI=(Deno.env.get('DEBUG_VAPI')||'false').toLowerCase()==='true'
+const DEBUG_VAPI=(Deno.env.get('DEBUG_VAPI')||'true').toLowerCase()==='true'
 const ECHO_GUARD=(Deno.env.get('TWILIO_ECHO_GUARD')||'true').toLowerCase()==='true'
-const DEBUG_AUDIO=(Deno.env.get('DEBUG_AUDIO')||'false').toLowerCase()==='true'
+const DEBUG_AUDIO=(Deno.env.get('DEBUG_AUDIO')||'true').toLowerCase()==='true'
 // Vapi realtime is driven by per-call websocketCallUrl (from router)
 
 function sleep(ms:number){return new Promise(r=>setTimeout(r,ms))}
