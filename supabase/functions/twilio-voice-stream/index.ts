@@ -7,11 +7,13 @@ const supabaseKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||''
 const supabase=(supabaseUrl&&supabaseKey)?createClient(supabaseUrl,supabaseKey):null as unknown as ReturnType<typeof createClient>
 const VERSION='receptionist-rag@2025-09-06'
 const USE_CONVAI=false
-// Vapi input transport: default to binary raw PCM16 for maximum compatibility.
+// Vapi input transport: default to binary raw PCM16 per WebSocket Transport docs
 const VAPI_AUDIO_IN_EVENT=(Deno.env.get('VAPI_AUDIO_IN_EVENT')||'user_audio_chunk').trim()
 const VAPI_AUDIO_END_EVENT=(Deno.env.get('VAPI_AUDIO_END_EVENT')||'end_of_user_audio').trim()
-// Default to JSON chunks; some Vapi orgs require control messages for audio.
-const VAPI_BINARY_IN=(Deno.env.get('VAPI_BINARY_IN')||'false').toLowerCase()==='true'
+// Prefer binary by default; toggle to false only if your org requires JSON chunks
+const VAPI_BINARY_IN=(Deno.env.get('VAPI_BINARY_IN')||'true').toLowerCase()==='true'
+// By default, do NOT send an explicit end-of-user JSON control message; rely on Vapi VAD
+const VAPI_SEND_END=(Deno.env.get('VAPI_SEND_END')||'false').toLowerCase()==='true'
 const DEBUG_VAPI=(Deno.env.get('DEBUG_VAPI')||'true').toLowerCase()==='true'
 const ECHO_GUARD=(Deno.env.get('TWILIO_ECHO_GUARD')||'true').toLowerCase()==='true'
 const DEBUG_AUDIO=(Deno.env.get('DEBUG_AUDIO')||'true').toLowerCase()==='true'
