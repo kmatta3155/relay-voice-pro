@@ -1,5 +1,6 @@
 {
   "files": [],
+  "exclude": ["supabase/functions/**/*"],
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
