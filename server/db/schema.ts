@@ -1,5 +1,5 @@
-import { pgTable, uuid, text, timestamptz, integer, boolean, time, date, numeric, jsonb, varchar, serial, check, sql, index } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { pgTable, uuid, text, timestamp, integer, boolean, time, date, numeric, jsonb, varchar, serial, check, index } from 'drizzle-orm/pg-core';
+import { relations, sql } from 'drizzle-orm';
 
 // ========== CORE TABLES ==========
 
@@ -10,8 +10,8 @@ export const profiles = pgTable('profiles', {
   full_name: text('full_name'),
   image_url: text('image_url'),
   active_tenant_id: uuid('active_tenant_id'),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Tenants
@@ -23,9 +23,9 @@ export const tenants = pgTable('tenants', {
   stripe_customer_id: text('stripe_customer_id'),
   subscription_status: text('subscription_status'),
   price_id: text('price_id'),
-  current_period_end: timestamptz('current_period_end'),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  current_period_end: timestamp('current_period_end', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Memberships
@@ -34,8 +34,8 @@ export const memberships = pgTable('memberships', {
   user_id: uuid('user_id').notNull(),
   tenant_id: uuid('tenant_id').notNull(),
   role: text('role').notNull().default('AGENT'),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Tenant Users (alternative membership table)
@@ -43,7 +43,7 @@ export const tenant_users = pgTable('tenant_users', {
   tenant_id: uuid('tenant_id').notNull(),
   user_id: uuid('user_id').notNull(),
   role: text('role').notNull(),
-  created_at: timestamptz('created_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 }, (table) => ({
   pk: [table.tenant_id, table.user_id]
 }));
@@ -59,8 +59,8 @@ export const services = pgTable('services', {
   duration_minutes: integer('duration_minutes').notNull().default(30),
   price: numeric('price'),
   active: boolean('active').default(true),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Business Hours
@@ -70,7 +70,7 @@ export const business_hours = pgTable('business_hours', {
   open_time: time('open_time').notNull(),
   close_time: time('close_time').notNull(),
   is_closed: boolean('is_closed').default(false),
-  updated_at: timestamptz('updated_at').defaultNow()
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 }, (table) => ({
   pk: [table.tenant_id, table.dow]
 }));
@@ -89,7 +89,7 @@ export const tenant_branding = pgTable('tenant_branding', {
   tenant_id: uuid('tenant_id').primaryKey(),
   logo_url: text('logo_url'),
   brand_color: text('brand_color').default('#6d28d9'),
-  updated_at: timestamptz('updated_at').defaultNow()
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // ========== COMMUNICATION TABLES ==========
@@ -109,8 +109,8 @@ export const leads = pgTable('leads', {
   score_tier: text('score_tier'),
   intent: text('intent'),
   owner_id: uuid('owner_id'),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Threads
@@ -119,8 +119,8 @@ export const threads = pgTable('threads', {
   tenant_id: uuid('tenant_id').notNull(),
   with: text('with').notNull(),
   channel: text('channel').notNull(), // sms, web, instagram, facebook
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Messages
@@ -130,7 +130,7 @@ export const messages = pgTable('messages', {
   thread_id: uuid('thread_id').notNull(),
   from: text('from').notNull(), // lead | agent | system
   text: text('text').notNull(),
-  at: timestamptz('at').defaultNow()
+  at: timestamp('at', { withTimezone: true }).defaultNow()
 });
 
 // Calls
@@ -143,7 +143,7 @@ export const calls = pgTable('calls', {
   duration: integer('duration'),
   summary: text('summary'),
   csat_score: integer('csat_score'),
-  at: timestamptz('at').defaultNow()
+  at: timestamp('at', { withTimezone: true }).defaultNow()
 });
 
 // ========== AI & KNOWLEDGE TABLES ==========
@@ -179,7 +179,7 @@ export const business_quick_answers = pgTable('business_quick_answers', {
   question_pattern: text('question_pattern').notNull(),
   answer: text('answer').notNull(),
   confidence: numeric('confidence').notNull(),
-  created_at: timestamptz('created_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 });
 
 // Unresolved Questions
@@ -208,8 +208,8 @@ export const ai_agents = pgTable('ai_agents', {
   version: integer('version').default(1),
   model: text('model').default('gpt-4o-mini'),
   mode: text('mode').notNull().default('simulation'), // simulation|live
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Agent Training Jobs
@@ -220,8 +220,8 @@ export const agent_training_jobs = pgTable('agent_training_jobs', {
   status: text('status').default('pending'), // pending|running|completed|failed
   progress: integer('progress').default(0),
   error_message: text('error_message'),
-  created_at: timestamptz('created_at').defaultNow(),
-  completed_at: timestamptz('completed_at')
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  completed_at: timestamp('completed_at', { withTimezone: true })
 });
 
 // Agent Runtimes  
@@ -231,7 +231,7 @@ export const agent_runtimes = pgTable('agent_runtimes', {
   agent_id: uuid('agent_id').notNull(),
   provider: text('provider').notNull(),
   settings: jsonb('settings').default(sql`'{}'::jsonb`),
-  created_at: timestamptz('created_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 });
 
 // Agent Settings
@@ -245,8 +245,8 @@ export const agent_settings = pgTable('agent_settings', {
   website_url: text('website_url'),
   ai_sms_autoreplies: boolean('ai_sms_autoreplies').default(false),
   agent_ws_url: text('agent_ws_url'),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // ========== MISC TABLES ==========
@@ -257,10 +257,10 @@ export const appointments = pgTable('appointments', {
   tenant_id: uuid('tenant_id').notNull(),
   title: text('title').notNull(),
   customer: text('customer').notNull(),
-  start_at: timestamptz('start_at').notNull(),
-  end_at: timestamptz('end_at').notNull(),
+  start_at: timestamp('start_at', { withTimezone: true }).notNull(),
+  end_at: timestamp('end_at', { withTimezone: true }).notNull(),
   staff: text('staff'),
-  created_at: timestamptz('created_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 });
 
 // Automations
@@ -271,8 +271,8 @@ export const automations = pgTable('automations', {
   when: text('when'),
   action: text('action'),
   status: text('status'),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Subscriptions
@@ -283,9 +283,9 @@ export const subscriptions = pgTable('subscriptions', {
   customer_id: text('customer_id').notNull(),
   status: text('status').notNull(),
   price_id: text('price_id'),
-  current_period_end: timestamptz('current_period_end'),
-  created_at: timestamptz('created_at').defaultNow(),
-  updated_at: timestamptz('updated_at').defaultNow()
+  current_period_end: timestamp('current_period_end', { withTimezone: true }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
 // Invites
@@ -296,8 +296,8 @@ export const invites = pgTable('invites', {
   role: text('role').notNull(),
   status: text('status').notNull().default('pending'),
   token: uuid('token').default(sql`gen_random_uuid()`),
-  expires_at: timestamptz('expires_at').default(sql`now() + interval '14 days'`),
-  created_at: timestamptz('created_at').defaultNow()
+  expires_at: timestamp('expires_at', { withTimezone: true }).default(sql`now() + interval '14 days'`),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 });
 
 // Numbers (Twilio phone numbers)
@@ -307,7 +307,7 @@ export const numbers = pgTable('numbers', {
   phone_number: text('phone_number').notNull(),
   twilio_sid: text('twilio_sid').notNull(),
   status: text('status').default('active'),
-  created_at: timestamptz('created_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 });
 
 // Logs
@@ -317,7 +317,7 @@ export const logs = pgTable('logs', {
   level: text('level').notNull(), // info|warn|error|debug
   message: text('message').notNull(),
   meta: jsonb('meta').default(sql`'{}'::jsonb`),
-  created_at: timestamptz('created_at').defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 });
 
 // ========== RELATIONS ==========
