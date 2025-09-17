@@ -1,0 +1,68 @@
+# Voice Relay Pro - AI Voice Receptionist & Call Management
+
+## Overview
+
+Voice Relay Pro is a comprehensive AI-powered voice receptionist and call management system built for businesses. The application provides 24/7 AI voice reception, intelligent call routing, appointment booking, lead management, and real-time analytics. It's designed as a multi-tenant SaaS platform with robust knowledge management capabilities and integrations with popular booking systems.
+
+The system features a modern React-based dashboard for managing calls, leads, appointments, messages, and business analytics. It includes advanced AI capabilities for conversation intelligence, automated follow-ups, and business knowledge extraction from websites and documents.
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend Architecture
+- **Framework**: React 18 with TypeScript and Vite for fast development
+- **UI Library**: shadcn/ui components built on Radix UI primitives
+- **Styling**: Tailwind CSS with custom design system and HSL color tokens
+- **State Management**: React hooks with @tanstack/react-query for server state
+- **Routing**: React Router with hash-based navigation for SPA structure
+- **Animation**: Framer Motion for smooth transitions and interactions
+
+### Backend Architecture
+- **Database**: Supabase (PostgreSQL) with Row Level Security (RLS)
+- **Authentication**: Supabase Auth with multiple providers (email, OAuth, SMS)
+- **Real-time**: Supabase Realtime for live updates
+- **Edge Functions**: Serverless functions for complex operations (billing, notifications, admin)
+- **File Storage**: Supabase Storage for document and media handling
+
+### Data Storage Solutions
+- **Primary Database**: PostgreSQL via Supabase with comprehensive schema
+- **Core Tables**: profiles, tenants, memberships, leads, appointments, calls, messages, threads
+- **Knowledge System**: Specialized tables for RAG (Retrieval-Augmented Generation) including knowledge_sources, knowledge_chunks
+- **Multi-tenancy**: Tenant-based data isolation with RLS policies
+- **Caching**: Browser storage for session state and query caching via TanStack Query
+
+### Authentication and Authorization
+- **Multi-factor Authentication**: TOTP support via Supabase
+- **Role-based Access**: Owner, Manager, Agent, Viewer roles with different permissions
+- **Session Management**: Persistent sessions with automatic token refresh
+- **Tenant Switching**: Users can belong to multiple tenants with active tenant selection
+- **Admin System**: Site-wide admin capabilities for platform management
+
+### External Dependencies
+
+#### Third-party Services
+- **Supabase**: Backend-as-a-Service providing database, auth, storage, and edge functions
+- **Stripe**: Payment processing and subscription billing management
+- **Twilio**: Voice calls, SMS messaging, and phone number provisioning
+- **ElevenLabs**: AI voice synthesis for realistic call interactions
+- **OpenAI**: Conversation intelligence and natural language processing
+- **Resend**: Transactional email delivery service
+- **Sentry**: Error monitoring and performance tracking
+
+#### APIs and Integrations
+- **Booking Systems**: Integrations with Fresha, Square, Vagaro, Acuity, Calendly, Google Calendar, Outlook
+- **Firecrawl**: Website crawling and content extraction for knowledge base building
+- **PDF.js**: Client-side PDF parsing for document knowledge extraction
+- **WebRTC**: Real-time audio communication for voice testing and demos
+
+#### Development Tools
+- **Vite**: Fast build tool and development server
+- **ESLint**: Code linting with TypeScript support
+- **Tailwind CSS**: Utility-first CSS framework
+- **Drizzle ORM**: Type-safe database queries (server-side)
+- **Lovable Tagger**: Development-time component identification
+
+The architecture supports horizontal scaling through Supabase's infrastructure while maintaining data isolation and security through comprehensive RLS policies. The system is designed for high availability with real-time features and can handle multiple concurrent voice calls and conversations.
