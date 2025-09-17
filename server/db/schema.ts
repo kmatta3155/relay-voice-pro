@@ -156,7 +156,7 @@ export const knowledge_sources = pgTable('knowledge_sources', {
   source_type: text('source_type').notNull().default('web'), // web|gmb|manual|file
   title: text('title'),
   meta: jsonb('meta').notNull().default(sql`'{}'::jsonb`),
-  created_at: timestamptz('created_at').notNull().defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
 
 // Knowledge Chunks (with vector embeddings)
@@ -166,9 +166,9 @@ export const knowledge_chunks = pgTable('knowledge_chunks', {
   source_id: uuid('source_id'),
   content: text('content').notNull(),
   token_count: integer('token_count').notNull().default(0),
-  embedding: sql`vector(3072)`, // OpenAI text-embedding-3-large
+  embedding: text('embedding'), // OpenAI text-embedding-3-large vector stored as text
   meta: jsonb('meta').default(sql`'{}'::jsonb`),
-  created_at: timestamptz('created_at').notNull().defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
 
 // Business Quick Answers
@@ -191,7 +191,7 @@ export const unresolved_questions = pgTable('unresolved_questions', {
   call_id: text('call_id'),
   status: text('status').notNull().default('open'), // open|auto_answered|resolved|ignored
   notes: text('notes'),
-  created_at: timestamptz('created_at').notNull().defaultNow()
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
 
 // AI Agents
