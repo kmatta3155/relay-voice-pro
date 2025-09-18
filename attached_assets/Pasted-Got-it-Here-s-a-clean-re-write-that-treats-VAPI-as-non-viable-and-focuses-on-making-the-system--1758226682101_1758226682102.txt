@@ -1,0 +1,256 @@
+Got it. Here’s a clean re-write that treats **VAPI as non-viable** and focuses on making the system work as it was **originally designed**—Twilio for telephony and media, **OpenAI Whisper** for STT, **OpenAI Chat** for reasoning, **ElevenLabs** for TTS, and your own backend + DB for state and control. I’ve kept the same sections and leaned into a senior-dev handoff style so another team can pick it up and ship.
+
+# Executive summary
+
+* **Goal:** A reliable AI receptionist reachable by phone that answers naturally, follows your business rules, books/schedules, and logs everything to your CRM.
+* **Architecture (original, to be restored):** Twilio `<Connect><Stream>` → your WebSocket media server → inbound audio buffering/Jitter + level normalizer + VAD → **Whisper** (streaming or low-latency chunked) → Dialogue core (**OpenAI Chat**) with your knowledge/policies → **ElevenLabs** streaming **μ-law 8 kHz** back to Twilio → storage/analytics in your DB.
+* **Why it’s failing now:** audio transport + timing issues (framing, μ-law/PCM conversions, clock drift), non-streaming STT paths that add seconds of lag, brittle end-of-turn detection, and too much state inside a single handler.
+* **Remedy:** Fix transport deterministically (buffers, cadence, resampling), switch STT to true streaming, enforce clear turn boundaries, simplify TTS output to μ-law passthrough, and add observability to each hop.
+* **What’s still missing:** production-grade CRM UI/flows, analytics/QA, admin prompt designer, calendar/CRM integrations, and end-to-end tests.
+
+---
+
+# How it was originally supposed to work
+
+## Telephony & media loop
+
+1. **Inbound call → Twilio**: Voice webhook returns **TwiML** with `<Connect><Stream>` that targets your **wss\://…/twilio-voice-stream** endpoint (Twilio sends 20 ms μ-law frames at 8 kHz).
+2. **Your WS media server**:
+
+   * Accepts Twilio’s media messages (base64 μ-law frames + markers).
+   * Maintains a **jitter buffer** to smooth burstiness; outputs stable 20 ms cadence.
+   * Converts μ-law→PCM16 only if needed for STT; otherwise keep μ-law end-to-end.
+3. **STT (Whisper)**:
+
+   * **Streaming** (preferred): feed \~200–300 ms PCM windows continuously; receive partial transcripts + timestamps.
+   * **Chunked low-latency fallback**: rolling 500–800 ms windows when streaming isn’t available.
+4. **Turn detection**: VAD + transcript stall heuristics (“user stopped ≥500–800 ms” + no speech energy) → **commit user turn**.
+5. **Reasoning (OpenAI Chat)**:
+
+   * System prompt assembled from tenant’s profile: hours, services, policies, knowledge snippets, tone.
+   * Tool calls (if you support them): schedule lookup, price lookup, lead create, etc.
+6. **TTS (ElevenLabs)**:
+
+   * Request **streaming TTS**; receive PCM and transcode to μ-law **once**; or ask ElevenLabs directly for μ-law at 8 kHz to avoid transcoding.
+   * Stream back to Twilio via WS as 20 ms μ-law chunks.
+7. **Storage**: Persist call session, turns, transcripts, message metadata, and outcomes (booked, voicemail, transfer).
+
+## Voice settings & agent training/intelligence
+
+* **Per-tenant agents**: DB tables for tenants, agents, runtime bindings (model/voice IDs), knowledge attachments, FAQs/”quick answers”, and business rules.
+* **Prompt assembly**: A builder that composes the system prompt from the tenant’s structured fields + knowledge, plus guardrails (tone, don’ts, data-capture policy).
+* **Runtime toggles**: voice ID, speaking rate, max utterance length, interruption sensitivity (barge-in), and confirmation style.
+
+## Integrations & env
+
+* **Twilio**: Voice webhook, `<Stream>`, status callbacks, optional SMS webhook.
+* **OpenAI**: Whisper (STT) and Chat (reply generation).
+* **ElevenLabs**: voice selection + streaming endpoint.
+* **DB** (e.g., Postgres/Supabase): tenants, agents, messages/turns, contacts, appointments, and config.
+* **Config**: env-driven IDs/keys; debug flags for audio/WS/STT; per-tenant overrides.
+
+---
+
+# What went wrong (without VAPI in the loop)
+
+1. **Audio artifacts & framing drift**
+
+   * μ-law/PCM conversions were happening more than once or on the wrong frame boundaries.
+   * No stable **20 ms clock**: frames batched/lagged, causing crackle and Twilio underruns/overruns.
+   * Missing/weak **jitter buffer** and no wall-clock alignment → audible stutter.
+
+2. **Latency from non-streaming STT**
+
+   * Using file uploads or big (≥2–3 s) chunks to Whisper creates “dead air”.
+   * No partial hypotheses → the agent can’t start thinking until too late.
+
+3. **Brittle end-of-turn detection**
+
+   * Either too sensitive (cutting users off) or too lax (overlong pauses).
+   * Lack of combined **VAD + transcript-stall** logic and no “max utterance timeout”.
+
+4. **TTS pipeline complexity**
+
+   * PCM↔μ-law conversions inside the hot path; inconsistent sample rates (16 kHz vs 8 kHz).
+   * Buffering too much before sending to Twilio → choppy or late audio.
+
+5. **Single giant handler**
+
+   * Media IO, STT, NLU, TTS, and DB writes interleaved → hard to debug and retry.
+   * Backpressure not enforced: when STT lags, everything lags.
+
+6. **Observability gaps**
+
+   * No per-hop timing traces; logs don’t clearly show: media in → STT partials → LLM start/finish → TTS frames out.
+   * Hard to reproduce failures without raw audio/timing snapshots.
+
+---
+
+# Rebuild plan (keep the original stack, make it reliable)
+
+## A. Transport correctness first (Twilio WS)
+
+* **Strict 20 ms framing:** enforce a **scheduler** that emits exactly 160 bytes μ-law per 20 ms (8 kHz).
+* **Jitter buffer:** 120–200 ms depth for inbound Twilio → smooth to fixed cadence.
+* **Single transcode rule:**
+
+  * **Inbound:** μ-law → PCM16 **once** for STT (if Whisper requires PCM).
+  * **Outbound:** prefer requesting **μ-law 8 kHz** from ElevenLabs; if not, transcode PCM16→μ-law exactly once.
+* **Backpressure:** if STT or LLM is behind, **continue sending TTS filler/silence** or a “typing noise” clip to avoid Twilio timeouts (configurable).
+
+## B. True streaming STT (Whisper)
+
+* Implement a **streaming client** that:
+
+  * Sends **rolling 200–300 ms windows** with overlap (e.g., 50 ms) to Whisper;
+  * Receives **partial transcripts** with word-level timestamps;
+  * Emits **interim text** to the dialogue core for early planning.
+* **Timeouts:**
+
+  * “No new words in 600 ms” → candidate end-of-turn;
+  * “Max utterance 6–8 s” → force commit;
+  * “Min utterance 350 ms” → avoid micro-turns.
+* **Text normalization:** apply punctuation+capitalization and phone/email regex extractors before handing to LLM.
+
+## C. Turn management & interruptions
+
+* **Barge-in:** When user speech energy rises > threshold during TTS, **duck TTS** by −12 dB and pause; resume if false alarm.
+* **First-token LLM streaming:** start the ElevenLabs request as soon as the LLM produces the **first chunk**.
+* **Prosody guardrails:** cap per-chunk TTS at \~1.2–1.6 s so interruptions feel natural.
+
+## D. Dialogue core (OpenAI Chat) hardening
+
+* **Prompt contract:** deterministic sections—Profile, Policies, Capabilities/Tools, Safety, Style.
+* **Function/tool calls:** define explicit schemas for: create\_contact, log\_lead, book\_appointment, send\_sms, transfer\_call.
+* **Latency budget:** fail-open strategies (e.g., “I’ll text you details”) when tools exceed 1.5–2 s.
+
+## E. ElevenLabs streaming output
+
+* Request **8 kHz μ-law** stream if supported for your voice; otherwise request **16 kHz PCM** and transcode once.
+* **Chunker:** slice outbound audio into exact 20 ms frames aligned to Twilio’s clock; never buffer >200 ms.
+
+## F. Observability & testability (non-negotiable)
+
+* **Per-hop spans:** MEDIA\_IN → STT\_PARTIAL → STT\_FINAL → LLM\_START/LLM\_TOKEN/LLM\_END → TTS\_START/TTS\_FRAME/TTS\_END → MEDIA\_OUT.
+* **Counters:** frames in/out, drift, dropped frames, STT queue depth, LLM tokens/sec, TTS buffer depth.
+* **Redaction:** phone/email detection before logging text.
+* **Repro harness:** a CLI that replays captured μ-law streams through the whole pipeline offline; stores artifacts.
+
+---
+
+# Production checklist (order of operations)
+
+1. **Refactor into services**
+
+   * `media-io` (Twilio WS, jitter, framing);
+   * `stt-stream` (Whisper client);
+   * `dialogue` (LLM + tools);
+   * `tts-stream` (ElevenLabs client, μ-law out);
+   * `session-store` (DB writes, transcripts).
+     Use queues/channels between them with explicit backpressure.
+
+2. **Replace any non-streaming Whisper code** with streaming or 500–800 ms rolling chunks; emit partials.
+
+3. **Implement end-of-turn FSM**
+
+   * States: LISTENING → THINKING → SPEAKING → (maybe) INTERRUPTED.
+   * Transitions driven by VAD, transcript-stall, and barge-in.
+
+4. **Fix transcoding once** and verify with golden audio:
+
+   * Round-trip test: Twilio μ-law → PCM → μ-law; PESQ or STOI within tolerance; no drift over 10 minutes.
+
+5. **Add tracing + metrics** (OpenTelemetry or similar) and a “Call Debug” UI page that plays back the timeline with audio snippets.
+
+6. **Soak tests**
+
+   * 100 synthetic calls @ 60–180 s; assert p95 STT partial <300 ms, p95 TTS first-audio <350 ms, drop rate <0.1%, barge-in success >95%.
+
+---
+
+# Feature/status checklist (today)
+
+## Working or scaffolded (expected)
+
+* Twilio voice webhook and `<Stream>` plumbing; status & SMS callbacks.
+* Per-tenant agent data model (tenants, agents, runtime/voice bindings, knowledge/FAQs).
+* Basic message storage (inbound/outbound turns, possibly SMS).
+* Prompt assembly server-side.
+
+## Pain points you likely already hit
+
+* μ-law artifacts & framing drift.
+* Latency from file-based Whisper; no partials.
+* Overlapping responsibilities in one handler; no backpressure.
+* Sparse logs—hard to see where time is spent.
+
+## Still incomplete / not fully implemented
+
+* **Customer CRM (UI + workflows):**
+
+  * Contact list & profiles (enrichment), multi-thread inbox (calls + SMS + voicemails), tags/dispositions, tasks/follow-ups, manual notes, simple pipeline.
+  * Conversation detail view with transcript and call timeline.
+* **Analytics & QA:**
+
+  * Per-tenant dashboards: call volume, answer rate, avg hold/silence, barge-ins, containment, bookings, CSAT proxy (sentiment).
+  * Transcript search, redaction, labeling (intent/outcome).
+* **Scheduling/integrations:** calendar booking (Google/Microsoft), CRM sync (HubSpot/Salesforce), ticketing (Zendesk).
+* **Admin controls:** a proper “Prompt Designer” UI for hours, services, FAQs, tone; per-tenant voice controls (speed/pitch), interruption sensitivity.
+* **Testing & ops:** load tests, chaos (drop frames, packet delay), staging playbooks, alerts on drift/drops/latency.
+
+---
+
+# Concrete implementation notes (code-level guardrails)
+
+* **Twilio WS handler**
+
+  * Verify `MediaSampleRateHz == 8000`, enforce `frame.length == 160 bytes`.
+  * Don’t `await` long work in the WS receive loop—push frames onto a bounded channel.
+  * If the outbound queue >200 ms, drop the oldest frames (better to lose a frame than stall).
+
+* **Resampling/transcoding**
+
+  * Use a **single** well-tested μ-law<→PCM routine (e.g., G.711 reference); unit test with sine sweeps and pink noise.
+
+* **Whisper client**
+
+  * Keep a rolling ring-buffer (3–5 s) to allow **retrospective punctuation** but stream partials continuously.
+  * On silence timeout, send a finalization marker and flush remaining frames.
+
+* **Dialogue**
+
+  * Stream tokens to TTS as soon as they appear (no giant concatenated paragraph).
+  * Cap responses to 1–2 sentences unless explicitly asked for more; this reduces late barge-ins.
+
+* **ElevenLabs**
+
+  * Request mono, target 8 kHz; if 16 kHz required, resample to 8 kHz **after** synthesis and before G.711.
+
+* **Persistence**
+
+  * Normalize one “message” schema across channels with fields: `direction`, `channel`, `call_id`, `tenant_id`, `turn_index`, `text`, `audio_ms`, `latency_ms`, `outcome`, `tags`.
+
+---
+
+# Validation plan (how a new vendor can prove it works)
+
+1. **Golden call script** with 10 utterances (names, numbers, dates, email) to test extraction, interruptions, and follow-ups.
+2. **Latency budget dashboard** showing p50/p95 for: first STT partial, end-of-turn to LLM start, first TTS audio.
+3. **Barge-in tests**: talk over the bot mid-sentence 20 times; success if TTS ducks/pause within 150–250 ms.
+4. **Audio integrity**: run PESQ/STOI on 10-minute pass-through; ensure no long-term drift.
+
+---
+
+# Handoff package for the next dev company
+
+* **Architecture doc** with sequence diagrams for: inbound call, turn loop, barge-in, failure modes.
+* **Env matrix**: Twilio keys/SIDs, OpenAI keys/models, ElevenLabs voice IDs, DB DSN; plus a `.env.example`.
+* **Runbook**: local dev with Twilio Media Streams (ngrok), synthetic call generator, fixture audio.
+* **Golden prompts & tools** with JSON schemas and example payloads.
+* **Observability**: dashboard JSON (Grafana or equivalent), OpenTelemetry setup, log redaction rules.
+* **Test suites**: load test script, barge-in tests, audio drift test, transcript extractor tests.
+* **Release checklist**: preflight Twilio number config, healthchecks, alarms, roll-back plan.
+
+---
+
+If you want, I can turn this into a **punch-list** mapped to components (files/services), with story points and success criteria, or draft the **sequence diagrams** so the next team hits the ground running.
