@@ -26,8 +26,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
-waitForPort = 5000
+args = "npm run dev -- --host 0.0.0.0 --port 5000 --allowedHosts=.replit.dev"
 
 [agent]
 integrations = ["javascript_database:1.0.0"]
