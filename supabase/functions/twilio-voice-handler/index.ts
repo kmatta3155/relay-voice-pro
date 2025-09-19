@@ -111,7 +111,7 @@ serve(async (req) => {
 <Response>
   <Say voice="alice">Please wait while we connect you to our AI assistant.</Say>
   <Connect>
-    <Stream url="${escapeXml(wsUrl)}" name="ai-voice-stream" track="both_tracks">
+    <Stream url="${escapeXml(wsUrl)}">
       <Parameter name="businessName" value="${escapeXml(businessName)}" />
       ${tenantId ? `<Parameter name="tenantId" value="${escapeXml(tenantId)}" />` : ''}
       ${voiceId ? `<Parameter name="voiceId" value="${escapeXml(voiceId)}" />` : ''}
