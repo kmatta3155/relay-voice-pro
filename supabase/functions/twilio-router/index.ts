@@ -146,9 +146,7 @@ serve(async (req) => {
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
-    <!-- Use both_tracks for full duplex (Twilio <-> WS) so we can send audio back -->
     <Stream url="${wsUrl}" track="both_tracks">
-      <Parameter name="forceOutboundTrack" value="true"/>
       ${phoneNumber ? `<Parameter name="phoneNumber" value="${xmlEscape(phoneNumber)}"/>` : ''}
       ${to ? `<Parameter name="toNumber" value="${xmlEscape(to)}"/>` : ''}
       ${tenantId ? `<Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>` : ''}
