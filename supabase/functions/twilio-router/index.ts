@@ -64,7 +64,6 @@ serve(async (req) => {
   let businessName = (search.get('businessName') || (form?.get('businessName') as string) || 'this business').trim()
   let voiceId = (search.get('voiceId') || (form?.get('voiceId') as string) || '').trim()
   let greeting = ''
-  let vapiUrlParam = ''
 
   // Resolve tenant + business by the called number if possible (fast lookups)
   try {
@@ -95,65 +94,25 @@ serve(async (req) => {
     console.warn('[twilio-router] tenant lookup failed', e)
   }
 
-  // Create a per-call Vapi WebSocket Transport and capture websocketCallUrl
-  try {
-    const vapiKey = Deno.env.get('VAPI_API_KEY') || ''
-    const vapiAssistant = Deno.env.get('VAPI_ASSISTANT_ID') || ''
-    if (vapiKey && vapiAssistant) {
-      const ctrl = new AbortController()
-      const timer = setTimeout(()=>ctrl.abort('vapi-timeout'), 7000)
-      try {
-        const resp = await fetch('https://api.vapi.ai/call', {
-          method: 'POST',
-          headers: {
-            'authorization': `Bearer ${vapiKey}`,
-            'content-type': 'application/json'
-          },
-          body: JSON.stringify({
-            assistantId: vapiAssistant,
-            transport: { provider: 'vapi.websocket', audioFormat: { format: 'pcm_s16le', container: 'raw', sampleRate: 16000 }},
-            assistantOverrides: {
-              // Valid values: assistant-speaks-first, assistant-speaks-first-with-model-generated-message, assistant-waits-for-user
-              firstMessageMode: 'assistant-speaks-first',
-              ...(greeting ? { firstMessage: greeting } : {}),
-              ...(voiceId ? { voice: { provider: 'elevenlabs', voiceId } } : {})
-            },
-            // Keep context in metadata for observability/debugging
-            metadata: { source: 'twilio', tenantId, to, from, businessName }
-          }),
-          signal: ctrl.signal
-        })
-        if (resp.ok) {
-          const j = await resp.json()
-          const wsUrl: string | undefined = j?.transport?.websocketCallUrl || j?.websocketCallUrl
-          if (wsUrl) vapiUrlParam = wsUrl
-        } else {
-          console.warn('[twilio-router] Vapi /call failed', resp.status, await resp.text())
-        }
-      } finally {
-        clearTimeout(timer)
-      }
-    }
-  } catch (err) {
-    console.warn('[twilio-router] Vapi /call exception', err)
-  }
 
-  // Allow overriding the Stream URL via env. Otherwise derive from this request's host.
+  // Get the WebSocket URL for the twilio-voice-stream function
+  // Allow overriding via environment variable, otherwise derive from request host
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
   const wsUrl = streamUrlEnv || `wss://${host}/twilio-voice-stream`
 
+  // Build clean TwiML response with proper Stream element
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
-    <Stream url="${wsUrl}" track="both_tracks">
-      ${phoneNumber ? `<Parameter name="phoneNumber" value="${xmlEscape(phoneNumber)}"/>` : ''}
-      ${to ? `<Parameter name="toNumber" value="${xmlEscape(to)}"/>` : ''}
-      ${tenantId ? `<Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>` : ''}
-      ${businessName ? `<Parameter name="businessName" value="${xmlEscape(businessName)}"/>` : ''}
-      ${voiceId ? `<Parameter name="voiceId" value="${xmlEscape(voiceId)}"/>` : ''}
-      ${greeting ? `<Parameter name="greeting" value="${xmlEscape(greeting)}"/>` : ''}
-      ${vapiUrlParam ? `<Parameter name="vapiUrl" value="${xmlEscape(vapiUrlParam)}"/>` : ''}
+    <Stream url="${xmlEscape(wsUrl)}" track="both_tracks">
+      ${phoneNumber ? xml`<Parameter name="phoneNumber" value="${xmlEscape(phoneNumber)}"/>` : ''}
+      ${from ? xml`<Parameter name="from" value="${xmlEscape(from)}"/>` : ''}
+      ${to ? xml`<Parameter name="to" value="${xmlEscape(to)}"/>` : ''}
+      ${tenantId ? xml`<Parameter name="tenantId" value="${xmlEscape(tenantId)}"/>` : ''}
+      ${businessName ? xml`<Parameter name="businessName" value="${xmlEscape(businessName)}"/>` : ''}
+      ${voiceId ? xml`<Parameter name="voiceId" value="${xmlEscape(voiceId)}"/>` : ''}
+      ${greeting ? xml`<Parameter name="greeting" value="${xmlEscape(greeting)}"/>` : ''}
     </Stream>
   </Start>
   <Say voice="alice">Please hold while I connect you...</Say>
