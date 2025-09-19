@@ -145,7 +145,7 @@ serve(async (req) => {
 
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Connect>
+  <Start>
     <!-- Use both_tracks for full duplex (Twilio <-> WS) so we can send audio back -->
     <Stream url="${wsUrl}" track="both_tracks">
       <Parameter name="forceOutboundTrack" value="true"/>
@@ -157,7 +157,8 @@ serve(async (req) => {
       ${greeting ? `<Parameter name="greeting" value="${xmlEscape(greeting)}"/>` : ''}
       ${vapiUrlParam ? `<Parameter name="vapiUrl" value="${xmlEscape(vapiUrlParam)}"/>` : ''}
     </Stream>
-  </Connect>
+  </Start>
+  <Say voice="alice">Please hold while I connect you...</Say>
 </Response>`
 
   const headers = new Headers({ 'Content-Type': 'text/xml; charset=utf-8' })
