@@ -104,8 +104,8 @@ serve(async (req) => {
   // Build clean TwiML response with proper Stream element
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Start>
-    <Stream url="${xmlEscape(wsUrl)}" track="both_tracks">
+  <Connect>
+    <Stream url="${xmlEscape(wsUrl)}">
       ${phoneNumber ? xml`<Parameter name="phoneNumber" value="${xmlEscape(phoneNumber)}"/>` : ''}
       ${from ? xml`<Parameter name="from" value="${xmlEscape(from)}"/>` : ''}
       ${to ? xml`<Parameter name="to" value="${xmlEscape(to)}"/>` : ''}
@@ -114,7 +114,7 @@ serve(async (req) => {
       ${voiceId ? xml`<Parameter name="voiceId" value="${xmlEscape(voiceId)}"/>` : ''}
       ${greeting ? xml`<Parameter name="greeting" value="${xmlEscape(greeting)}"/>` : ''}
     </Stream>
-  </Start>
+  </Connect>
   <Say voice="alice">Please hold while I connect you...</Say>
 </Response>`
 
