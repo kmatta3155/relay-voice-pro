@@ -102,6 +102,7 @@ serve(async (req) => {
   const wsUrl = streamUrlEnv || `wss://${host}/twilio-voice-stream`
 
   // Build clean TwiML response with proper Stream element
+  // Note: Greeting is handled in WebSocket, so no <Say> element needed
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
@@ -115,7 +116,6 @@ serve(async (req) => {
       ${greeting ? xml`<Parameter name="greeting" value="${xmlEscape(greeting)}"/>` : ''}
     </Stream>
   </Connect>
-  <Say voice="alice">Please hold while I connect you...</Say>
 </Response>`
 
   const headers = new Headers({ 'Content-Type': 'text/xml; charset=utf-8' })

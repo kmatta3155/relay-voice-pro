@@ -128,6 +128,10 @@ class AIVoiceSession {
   private lastActivityTime = Date.now()
   private isProcessing = false
   
+  // Twilio stream tracking
+  private streamSid: string = ''
+  private sequenceNumber: number = 1
+  
   // Context
   private tenantId: string
   private businessName: string
@@ -141,6 +145,7 @@ class AIVoiceSession {
   // Conversation state
   private conversationHistory: Array<{ role: string; content: string }> = []
   private hasGreeted = false
+  private isReady = false
   
   constructor(
     ws: WebSocket,
@@ -156,7 +161,7 @@ class AIVoiceSession {
     this.elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY') || ''
     
     this.setupEventListeners()
-    this.startGreeting()
+    // Don't start greeting here - wait for 'start' event
   }
   
   private setupEventListeners(): void {
@@ -185,7 +190,22 @@ class AIVoiceSession {
         break
         
       case 'start':
-        console.log('[AIVoiceSession] Call started')
+        console.log('[AIVoiceSession] Call started', message.start)
+        // Capture streamSid from start event
+        if (message.start?.streamSid) {
+          this.streamSid = message.start.streamSid
+        }
+        // Extract custom parameters if provided
+        if (message.start?.customParameters) {
+          const params = message.start.customParameters
+          if (params.tenantId) this.tenantId = params.tenantId
+          if (params.businessName) this.businessName = params.businessName
+          if (params.voiceId) this.voiceId = params.voiceId
+          if (params.greeting) this.greeting = params.greeting
+        }
+        // Now we're ready - start greeting
+        this.isReady = true
+        await this.startGreeting()
         break
         
       case 'media':
@@ -206,7 +226,12 @@ class AIVoiceSession {
     // Decode base64 μ-law audio
     const audioData = Uint8Array.from(atob(media.payload), c => c.charCodeAt(0))
     this.audioBuffer.push(audioData)
-    this.lastActivityTime = Date.now()
+    
+    // VAD: Only update lastActivityTime on voiced frames (not silence)
+    const rms = calculateRMS([audioData])
+    if (rms > VAD_SILENCE_THRESHOLD) {
+      this.lastActivityTime = Date.now()
+    }
     
     // Keep buffer manageable (5 seconds max)
     if (this.audioBuffer.length > 250) { // 250 * 20ms = 5 seconds
@@ -358,7 +383,6 @@ class AIVoiceSession {
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
         method: 'POST',
         headers: {
-          'Accept': 'audio/mpeg',
           'Content-Type': 'application/json',
           'xi-api-key': this.elevenLabsKey
         },
@@ -385,30 +409,35 @@ class AIVoiceSession {
       
       // Stream audio back to Twilio
       const reader = response.body.getReader()
-      let sequenceNumber = 0
+      const audioBuffer: number[] = [] // Buffer for accumulating audio bytes
       
       try {
         while (true) {
           const { done, value } = await reader.read()
-          if (done) break
+          if (done) {
+            // Send any remaining buffered audio
+            while (audioBuffer.length >= FRAME_SIZE) {
+              const frame = audioBuffer.splice(0, FRAME_SIZE)
+              await this.sendAudioFrame(new Uint8Array(frame))
+            }
+            // Pad and send final frame if needed
+            if (audioBuffer.length > 0) {
+              const frame = new Uint8Array(FRAME_SIZE)
+              frame.set(new Uint8Array(audioBuffer))
+              await this.sendAudioFrame(frame)
+            }
+            break
+          }
           
           if (value) {
-            // Convert to base64 and send to Twilio
-            const base64Audio = btoa(String.fromCharCode(...value))
+            // Add incoming audio to buffer
+            audioBuffer.push(...Array.from(value))
             
-            // Send audio frame to Twilio
-            this.ws.send(JSON.stringify({
-              event: 'media',
-              streamSid: 'stream_sid_placeholder',
-              media: {
-                payload: base64Audio
-              }
-            }))
-            
-            sequenceNumber++
-            
-            // Pace frames at 20ms intervals
-            await new Promise(resolve => setTimeout(resolve, FRAME_DURATION_MS))
+            // Send complete 160-byte frames
+            while (audioBuffer.length >= FRAME_SIZE) {
+              const frame = audioBuffer.splice(0, FRAME_SIZE)
+              await this.sendAudioFrame(new Uint8Array(frame))
+            }
           }
         }
       } finally {
@@ -422,15 +451,46 @@ class AIVoiceSession {
     }
   }
   
+  private async sendAudioFrame(frame: Uint8Array): Promise<void> {
+    if (!this.streamSid) {
+      console.warn('[AIVoiceSession] No streamSid available, skipping frame')
+      return
+    }
+    
+    // Ensure frame is exactly 160 bytes
+    if (frame.length !== FRAME_SIZE) {
+      console.warn(`[AIVoiceSession] Frame size mismatch: ${frame.length} bytes (expected ${FRAME_SIZE})`)
+      const paddedFrame = new Uint8Array(FRAME_SIZE)
+      paddedFrame.set(frame.slice(0, FRAME_SIZE))
+      frame = paddedFrame
+    }
+    
+    // Convert to base64
+    const base64Audio = btoa(String.fromCharCode(...frame))
+    
+    // Send properly formatted audio frame to Twilio
+    this.ws.send(JSON.stringify({
+      event: 'media',
+      streamSid: this.streamSid,
+      sequenceNumber: String(this.sequenceNumber++),
+      media: {
+        payload: base64Audio
+      }
+    }))
+    
+    // Pace frames at 20ms intervals
+    await new Promise(resolve => setTimeout(resolve, FRAME_DURATION_MS))
+  }
+  
   private async startGreeting(): Promise<void> {
-    if (this.hasGreeted) return
+    if (this.hasGreeted || !this.isReady) return
     this.hasGreeted = true
     
-    // Small delay to ensure WebSocket is ready
+    // Small delay to ensure stream is fully ready
     setTimeout(async () => {
       const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
       await this.speakResponse(greetingText)
-    }, 500)
+    }, 200)
   }
 }
 
