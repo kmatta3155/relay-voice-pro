@@ -2,6 +2,7 @@ modules = ["nodejs-20", "web"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["supabase-cli"]
 
 [deployment]
 deploymentTarget = "autoscale"
