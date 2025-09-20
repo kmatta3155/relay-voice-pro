@@ -1,112 +1,182 @@
-# Welcome to your Lovable project
+# Supabase CLI (v1)
 
-## Project info
+[![Coverage Status](https://coveralls.io/repos/github/supabase/cli/badge.svg?branch=main)](https://coveralls.io/github/supabase/cli?branch=main)
 
-**URL**: https://lovable.dev/projects/f9ef1427-00f3-47c2-a38e-4b89237ac93c
+[Supabase](https://supabase.io) is an open source Firebase alternative. We're building the features of Firebase using enterprise-grade open source tools.
 
-## How can I edit this code?
+This repository contains all the functionality for Supabase CLI.
 
-There are several ways of editing your application.
+- [x] Running Supabase locally
+- [x] Managing database migrations
+- [x] Creating and deploying Supabase Functions
+- [x] Generating types directly from your database schema
+- [x] Making authenticated HTTP requests to [Management API](https://supabase.com/docs/reference/api/introduction)
 
-**Use Lovable**
+## Getting started
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/f9ef1427-00f3-47c2-a38e-4b89237ac93c) and start prompting.
+### Install the CLI
 
-Changes made via Lovable will be committed automatically to this repo.
+Available via [NPM](https://www.npmjs.com) as dev dependency. To install:
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+npm i supabase --save-dev
 ```
 
-**Edit a file directly in GitHub**
+To install the beta release channel:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+npm i supabase@beta --save-dev
+```
 
-**Use GitHub Codespaces**
+When installing with yarn 4, you need to disable experimental fetch with the following nodejs config.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```
+NODE_OPTIONS=--no-experimental-fetch yarn add supabase
+```
 
-## What technologies are used for this project?
+> **Note**
+For Bun versions below v1.0.17, you must add `supabase` as a [trusted dependency](https://bun.sh/guides/install/trusted) before running `bun add -D supabase`.
 
-This project is built with:
+<details>
+  <summary><b>macOS</b></summary>
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+  Available via [Homebrew](https://brew.sh). To install:
 
-## How can I deploy this project?
+  ```sh
+  brew install supabase/tap/supabase
+  ```
 
-Simply open [Lovable](https://lovable.dev/projects/f9ef1427-00f3-47c2-a38e-4b89237ac93c) and click on Share -> Publish.
+  To install the beta release channel:
+  
+  ```sh
+  brew install supabase/tap/supabase-beta
+  brew link --overwrite supabase-beta
+  ```
+  
+  To upgrade:
 
-## Can I connect a custom domain to my Lovable project?
+  ```sh
+  brew upgrade supabase
+  ```
+</details>
 
-Yes, you can!
+<details>
+  <summary><b>Windows</b></summary>
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+  Available via [Scoop](https://scoop.sh). To install:
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+  ```powershell
+  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+  scoop install supabase
+  ```
 
-## Voice Agent (Twilio + Vapi)
+  To upgrade:
 
-- Twilio webhook (A Call Comes In): `https://<project>.functions.supabase.co/twilio-router`
-- Twilio status callback: `https://<project>.functions.supabase.co/twilio-status`
-- Router returns TwiML `<Connect><Stream>` to `wss://<project>.functions.supabase.co/twilio-voice-stream`
+  ```powershell
+  scoop update supabase
+  ```
+</details>
 
-Environment variables:
+<details>
+  <summary><b>Linux</b></summary>
 
-- `VAPI_API_KEY`: Vapi API key
-- `VAPI_REALTIME_URL`: Vapi realtime WS URL (e.g. `wss://api.vapi.ai/realtime`)
-- `ELEVENLABS_VOICE_ID`: Voice id to synthesize via Vapi/ElevenLabs
-- `OPENAI_API_KEY`: Used for Whisper + ChatGPT fallback/knowledge replies
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: Existing DB access
-- `VAPI_WEBHOOK_SECRET`: Optional shared secret for Vapi Server URL callbacks
+  Available via [Homebrew](https://brew.sh) and Linux packages.
 
-Optional tuning / compatibility:
+  #### via Homebrew
 
-- `VAPI_AUDIO_IN_EVENT` (default `user_audio_chunk`)
-- `ENABLE_TONE_TEST_ONLY`, `ENABLE_TONE_TEST` (outbound path checks)
-- `VAD_SILENCE_RMS`, `VAD_MIN_FRAMES`, `VAD_END_FRAMES`
+  To install:
 
-Notes:
+  ```sh
+  brew install supabase/tap/supabase
+  ```
 
-- Outbound WS frames to Twilio use only `media.payload` with μ-law 8kHz 160-byte chunks every ~20ms.
-- The voice-stream function echoes Twilio's `Sec-WebSocket-Protocol` (e.g. `audio`).
+  To upgrade:
 
-## Using Vapi To Own Audio
+  ```sh
+  brew upgrade supabase
+  ```
 
-If you want Vapi to handle all audio (ingest, formatting, streaming) and only call your backend for text:
+  #### via Linux packages
 
-- Point your Twilio number to Vapi (use Vapi's Twilio integration), not to the router.
-- In your Vapi Assistant → Messaging → Server Settings, set Server URL to:
-  `https://<project>.functions.supabase.co/vapi-hook`
-  - Add header `x-vapi-secret: <value>` and set the same value in env `VAPI_WEBHOOK_SECRET`.
-- Keep your ElevenLabs voice and Deepgram in the Assistant.
-- Our `vapi-hook` function receives Vapi POSTs with the transcript and responds `{ text: "..." }`. Vapi synthesizes and streams audio to the caller.
+  Linux packages are provided in [Releases](https://github.com/supabase/cli/releases). To install, download the `.apk`/`.deb`/`.rpm`/`.pkg.tar.zst` file depending on your package manager and run the respective commands.
 
-You can disable the old WS path by setting `USE_VAPI=false` in `twilio-voice-stream/index.ts` or by routing calls directly to Vapi so the WS function is not used.
+  ```sh
+  sudo apk add --allow-untrusted <...>.apk
+  ```
+
+  ```sh
+  sudo dpkg -i <...>.deb
+  ```
+
+  ```sh
+  sudo rpm -i <...>.rpm
+  ```
+
+  ```sh
+  sudo pacman -U <...>.pkg.tar.zst
+  ```
+</details>
+
+<details>
+  <summary><b>Other Platforms</b></summary>
+
+  You can also install the CLI via [go modules](https://go.dev/ref/mod#go-install) without the help of package managers.
+
+  ```sh
+  go install github.com/supabase/cli@latest
+  ```
+
+  Add a symlink to the binary in `$PATH` for easier access:
+
+  ```sh
+  ln -s "$(go env GOPATH)/cli" /usr/bin/supabase
+  ```
+
+  This works on other non-standard Linux distros.
+</details>
+
+<details>
+  <summary><b>Community Maintained Packages</b></summary>
+
+  Available via [pkgx](https://pkgx.sh/). Package script [here](https://github.com/pkgxdev/pantry/blob/main/projects/supabase.com/cli/package.yml).
+  To install in your working directory:
+
+  ```bash
+  pkgx install supabase
+  ```
+
+  Available via [Nixpkgs](https://nixos.org/). Package script [here](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/supabase-cli/default.nix).
+</details>
+
+### Run the CLI
+
+```bash
+supabase bootstrap
+```
+
+Or using npx:
+
+```bash
+npx supabase bootstrap
+```
+
+The bootstrap command will guide you through the process of setting up a Supabase project using one of the [starter](https://github.com/supabase-community/supabase-samples/blob/main/samples.json) templates.
+
+## Docs
+
+Command & config reference can be found [here](https://supabase.com/docs/reference/cli/about).
+
+## Breaking changes
+
+We follow semantic versioning for changes that directly impact CLI commands, flags, and configurations.
+
+However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
+
+## Developing
+
+To run from source:
+
+```sh
+# Go >= 1.22
+go run . help
+```
