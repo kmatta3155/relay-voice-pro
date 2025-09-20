@@ -147,6 +147,11 @@ class AIVoiceSession {
   private hasGreeted = false
   private isReady = false
   
+  // Audio output queue and pacer
+  private audioQueue: Uint8Array[] = []
+  private pacerInterval: any = null // Using any to avoid type issues with setInterval
+  private isClosed = false
+  
   constructor(
     ws: WebSocket,
     context: { tenantId: string; businessName: string; voiceId: string; greeting: string }
@@ -176,6 +181,7 @@ class AIVoiceSession {
     
     this.ws.onclose = () => {
       console.log('[AIVoiceSession] WebSocket closed')
+      this.cleanup()
     }
     
     this.ws.onerror = (error) => {
@@ -205,6 +211,8 @@ class AIVoiceSession {
           if (params.voiceId) this.voiceId = params.voiceId
           if (params.greeting) this.greeting = params.greeting
         }
+        // Start the continuous audio output pacer FIRST
+        this.startPacer()
         // Now we're ready - start greeting
         this.isReady = true
         await this.startGreeting()
@@ -218,6 +226,7 @@ class AIVoiceSession {
         
       case 'stop':
         console.log('[AIVoiceSession] Call ended')
+        this.cleanup()
         break
     }
   }
@@ -429,7 +438,7 @@ class AIVoiceSession {
             // Send any remaining buffered audio as final frames
             while (audioBuffer.length >= FRAME_SIZE) {
               const frame = audioBuffer.splice(0, FRAME_SIZE)
-              await this.sendAudioFrame(new Uint8Array(frame))
+              this.enqueueAudio(new Uint8Array(frame))
             }
             // Pad final frame with silence if needed
             if (audioBuffer.length > 0) {
@@ -439,7 +448,7 @@ class AIVoiceSession {
               for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
                 frame[i] = 0xFF
               }
-              await this.sendAudioFrame(frame)
+              this.enqueueAudio(frame)
             }
             break
           }
@@ -463,7 +472,7 @@ class AIVoiceSession {
             let framesSent = 0
             while (audioBuffer.length >= FRAME_SIZE) {
               const frame = audioBuffer.splice(0, FRAME_SIZE)
-              await this.sendAudioFrame(new Uint8Array(frame))
+              this.enqueueAudio(new Uint8Array(frame))
               framesSent++
             }
             
@@ -483,15 +492,68 @@ class AIVoiceSession {
     }
   }
   
-  private async sendAudioFrame(frame: Uint8Array): Promise<void> {
-    if (!this.streamSid) {
-      console.warn('[AIVoiceSession] No streamSid available, skipping frame')
-      return
+  // Start the continuous 50Hz audio output pacer
+  private startPacer(): void {
+    if (this.pacerInterval) return // Already running
+    
+    console.log('[AIVoiceSession] Starting audio output pacer at 50Hz')
+    this.sequenceNumber = 1
+    this.isClosed = false
+    
+    // Run every 20ms (50Hz)
+    this.pacerInterval = setInterval(() => {
+      if (this.isClosed || !this.streamSid || this.ws.readyState !== WebSocket.OPEN) {
+        return
+      }
+      
+      // Get next frame from queue or use silence
+      let frame: Uint8Array
+      const queuedFrame = this.audioQueue.shift()
+      
+      if (queuedFrame) {
+        frame = queuedFrame
+      } else {
+        // Send silence when queue is empty
+        frame = new Uint8Array(FRAME_SIZE)
+        frame.fill(0xFF) // μ-law silence
+      }
+      
+      // Send the frame
+      const base64Audio = btoa(String.fromCharCode(...frame))
+      
+      this.ws.send(JSON.stringify({
+        event: 'media',
+        streamSid: this.streamSid,
+        sequenceNumber: String(this.sequenceNumber++),
+        media: {
+          payload: base64Audio,
+          track: 'outbound'
+        }
+      }))
+      
+    }, FRAME_DURATION_MS)
+  }
+  
+  // Stop the pacer and clean up
+  private cleanup(): void {
+    console.log('[AIVoiceSession] Cleaning up session')
+    this.isClosed = true
+    
+    if (this.pacerInterval) {
+      clearInterval(this.pacerInterval)
+      this.pacerInterval = null
     }
+    
+    this.audioQueue = []
+    this.audioBuffer = []
+  }
+  
+  // Add audio frames to the output queue
+  private enqueueAudio(frame: Uint8Array): void {
+    if (this.isClosed) return
     
     // Ensure frame is exactly 160 bytes
     if (frame.length !== FRAME_SIZE) {
-      console.warn(`[AIVoiceSession] Frame size mismatch: ${frame.length} bytes (expected ${FRAME_SIZE})`)
       const paddedFrame = new Uint8Array(FRAME_SIZE)
       paddedFrame.set(frame.slice(0, FRAME_SIZE))
       // Fill rest with proper silence
@@ -501,20 +563,13 @@ class AIVoiceSession {
       frame = paddedFrame
     }
     
-    // Convert to base64
-    const base64Audio = btoa(String.fromCharCode(...frame))
+    this.audioQueue.push(frame)
     
-    // Send with sequence number for proper ordering
-    this.ws.send(JSON.stringify({
-      event: 'media',
-      streamSid: this.streamSid,
-      sequenceNumber: String(this.sequenceNumber++),
-      media: {
-        payload: base64Audio
-      }
-    }))
-    
-    // Don't add extra delay - let Twilio handle timing
+    // Keep queue size reasonable (2 seconds max)
+    if (this.audioQueue.length > 100) {
+      console.warn('[AIVoiceSession] Audio queue overflow, dropping old frames')
+      this.audioQueue = this.audioQueue.slice(-80)
+    }
   }
   
 
@@ -529,7 +584,7 @@ class AIVoiceSession {
         const pcm16 = Math.floor(amplitude * 16384)
         frame[i] = this.pcmToMulaw(pcm16)
       }
-      await this.sendAudioFrame(frame)
+      this.enqueueAudio(frame)
     }
   }
 
@@ -584,7 +639,7 @@ class AIVoiceSession {
             frame[i] = this.pcmToMulaw(pcm16)
           }
           
-          await this.sendAudioFrame(frame)
+          this.enqueueAudio(frame)
           totalFramesSent++
           
           // Maintain 20ms pacing
@@ -599,7 +654,7 @@ class AIVoiceSession {
         for (let i = 0; i < 5; i++) {
           const silentFrame = new Uint8Array(160)
           silentFrame.fill(0xFF)
-          await this.sendAudioFrame(silentFrame)
+          this.enqueueAudio(silentFrame)
           totalFramesSent++
           
           const expectedTime = startTime + (totalFramesSent * 20)
@@ -615,7 +670,7 @@ class AIVoiceSession {
       for (let i = 0; i < 50; i++) {
         const silentFrame = new Uint8Array(160)
         silentFrame.fill(0xFF)
-        await this.sendAudioFrame(silentFrame)
+        this.enqueueAudio(silentFrame)
         totalFramesSent++
         
         const expectedTime = startTime + (totalFramesSent * 20)
@@ -640,7 +695,7 @@ class AIVoiceSession {
     for (let i = 0; i < 50; i++) {
       const frame = new Uint8Array(160)
       frame.fill(0xFF) // μ-law silence
-      await this.sendAudioFrame(frame)
+      this.enqueueAudio(frame)
     }
     
     // Pattern 2: Simple 440Hz tone (A note)
@@ -653,7 +708,7 @@ class AIVoiceSession {
         const pcm16 = Math.floor(amplitude * 16384) // Half amplitude
         frame[i] = this.pcmToMulaw(pcm16)
       }
-      await this.sendAudioFrame(frame)
+      this.enqueueAudio(frame)
     }
     
     // Pattern 3: Square wave using proper μ-law encoding
@@ -666,7 +721,7 @@ class AIVoiceSession {
         const squareValue = ((sampleIndex / 20) % 2) < 1 ? 16384 : -16384
         frame[i] = this.pcmToMulaw(squareValue)
       }
-      await this.sendAudioFrame(frame)
+      this.enqueueAudio(frame)
     }
     
     console.log('[TEST] All patterns sent')
@@ -699,7 +754,7 @@ class AIVoiceSession {
         }
       }
       
-      await this.sendAudioFrame(frame)
+      this.enqueueAudio(frame)
     }
     
     console.log('[AIVoiceSession] Test tone complete')
