@@ -514,6 +514,45 @@ class AIVoiceSession {
   }
   
 
+  private async sendTestPattern(): Promise<void> {
+    console.log('[TEST] Sending diagnostic audio patterns')
+    
+    // Pattern 1: Pure silence (1 second)
+    console.log('[TEST] Pattern 1: Silence')
+    for (let i = 0; i < 50; i++) {
+      const frame = new Uint8Array(160)
+      frame.fill(0xFF) // μ-law silence
+      await this.sendAudioFrame(frame)
+    }
+    
+    // Pattern 2: Simple 440Hz tone (A note)
+    console.log('[TEST] Pattern 2: 440Hz tone')
+    for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
+      const frame = new Uint8Array(160)
+      for (let i = 0; i < 160; i++) {
+        const time = (frameIndex * 160 + i) / 8000
+        const amplitude = Math.sin(2 * Math.PI * 440 * time)
+        const pcm16 = Math.floor(amplitude * 16384) // Half amplitude
+        frame[i] = this.pcmToMulaw(pcm16)
+      }
+      await this.sendAudioFrame(frame)
+    }
+    
+    // Pattern 3: Square wave (should sound buzzy)
+    console.log('[TEST] Pattern 3: Square wave')
+    for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
+      const frame = new Uint8Array(160)
+      for (let i = 0; i < 160; i++) {
+        const sampleIndex = frameIndex * 160 + i
+        // 200Hz square wave
+        frame[i] = ((sampleIndex / 20) % 2) < 1 ? 0x1C : 0xEC
+      }
+      await this.sendAudioFrame(frame)
+    }
+    
+    console.log('[TEST] All patterns sent')
+  }
+
   private async sendTestTone(): Promise<void> {
     console.log('[AIVoiceSession] Sending test tone to verify audio pipeline')
     
@@ -573,14 +612,11 @@ class AIVoiceSession {
     
     console.log('[AIVoiceSession] Starting greeting with streamSid:', this.streamSid)
     
-    // Generate a test tone first to verify audio pipeline
-    await this.sendTestTone()
+    // Send simple test pattern instead of ElevenLabs for debugging
+    await this.sendTestPattern()
     
-    // Then send actual greeting
-    setTimeout(async () => {
-      const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
-      await this.speakResponse(greetingText)
-    }, 1000)
+    // Skip ElevenLabs for now to isolate the issue
+    console.log('[DEBUG] Skipping ElevenLabs TTS to isolate static issue')
   }
 }
 
