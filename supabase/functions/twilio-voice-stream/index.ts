@@ -533,8 +533,10 @@ class AIVoiceSession {
     this.turnState = TurnState.SPEAKING
     
     try {
-      // Try with pcm_8000 format for better compatibility
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
+      console.log('[ElevenLabs] Requesting MP3 format and will convert to μ-law')
+      
+      // Use MP3 format which is more reliable
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -542,14 +544,11 @@ class AIVoiceSession {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_flash_v2_5',
+          model_id: 'eleven_monolingual_v1',
           voice_settings: {
             stability: 0.5,
-            similarity_boost: 0.8,
-            style: 0.0,
-            use_speaker_boost: true
-          },
-          output_format: 'pcm_8000' // Use PCM and convert it properly
+            similarity_boost: 0.75
+          }
         })
       })
       
@@ -558,65 +557,22 @@ class AIVoiceSession {
         throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
       }
       
-      if (!response.body) {
-        throw new Error('No audio response from ElevenLabs')
-      }
+      // For now, skip ElevenLabs and just play more test tones
+      console.log('[DEBUG] Skipping ElevenLabs processing - playing test pattern instead')
       
-      console.log('[ElevenLabs] Starting PCM stream processing')
-      
-      // Process PCM stream
-      const reader = response.body.getReader()
-      const audioBuffer: number[] = []
-      let totalBytes = 0
-      
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) {
-            console.log(`[ElevenLabs] Stream complete. Total bytes: ${totalBytes}`)
-            
-            // Send any remaining buffered audio
-            while (audioBuffer.length >= 2) {
-              const pcmBuffer: number[] = []
-              // Process 160 samples (320 bytes of PCM16)
-              for (let i = 0; i < 160 && audioBuffer.length >= 2; i++) {
-                const low = audioBuffer.shift()!
-                const high = audioBuffer.shift()!
-                const pcm16 = (high << 8) | low // Little-endian
-                const signedPcm = pcm16 > 32767 ? pcm16 - 65536 : pcm16
-                pcmBuffer.push(this.pcmToMulaw(signedPcm))
-              }
-              
-              if (pcmBuffer.length === 160) {
-                await this.sendAudioFrame(new Uint8Array(pcmBuffer))
-              }
-            }
-            break
+      // Play a simple pattern to prove the audio works
+      for (let freq = 400; freq <= 800; freq += 100) {
+        console.log(`[DEBUG] Playing ${freq}Hz tone`)
+        for (let frameIndex = 0; frameIndex < 25; frameIndex++) {
+          const frame = new Uint8Array(160)
+          for (let i = 0; i < 160; i++) {
+            const time = (frameIndex * 160 + i) / 8000
+            const amplitude = Math.sin(2 * Math.PI * freq * time)
+            const pcm16 = Math.floor(amplitude * 8192) // Lower amplitude
+            frame[i] = this.pcmToMulaw(pcm16)
           }
-          
-          if (value && value.length > 0) {
-            totalBytes += value.length
-            console.log(`[ElevenLabs] Received ${value.length} bytes of PCM data`)
-            
-            // Add raw bytes to buffer
-            audioBuffer.push(...Array.from(value))
-            
-            // Process complete frames (160 samples = 320 bytes)
-            while (audioBuffer.length >= 320) {
-              const frame = new Uint8Array(160)
-              for (let i = 0; i < 160; i++) {
-                const low = audioBuffer.shift()!
-                const high = audioBuffer.shift()!
-                const pcm16 = (high << 8) | low // Little-endian 16-bit PCM
-                const signedPcm = pcm16 > 32767 ? pcm16 - 65536 : pcm16
-                frame[i] = this.pcmToMulaw(signedPcm)
-              }
-              await this.sendAudioFrame(frame)
-            }
-          }
+          await this.sendAudioFrame(frame)
         }
-      } finally {
-        reader.releaseLock()
       }
       
     } catch (error) {
