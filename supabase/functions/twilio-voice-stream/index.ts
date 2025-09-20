@@ -525,7 +525,6 @@ serve(async (req) => {
   }
   
   // Extract context from URL parameters
-  const url = new URL(req.url)
   const tenantId = url.searchParams.get('tenantId') || ''
   const businessName = url.searchParams.get('businessName') || 'this business'
   const voiceId = url.searchParams.get('voiceId') || 'Xb7hH8MSUJpSbSDYk0k2'
