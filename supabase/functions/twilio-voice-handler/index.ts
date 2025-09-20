@@ -102,9 +102,9 @@ serve(async (req) => {
       throw new Error('SUPABASE_URL not configured')
     }
     
-    // Convert https://xyz.supabase.co to wss://xyz.functions.supabase.co/twilio-voice-stream
-    const host = new URL(supabaseUrl).host.replace('.supabase.co', '.functions.supabase.co')
-    const wsUrl = `wss://${host}/twilio-voice-stream`
+    // Build correct WebSocket URL for Supabase Functions
+    const host = new URL(supabaseUrl).host
+    const wsUrl = `wss://${host}/functions/v1/twilio-voice-stream`
     
     // Generate TwiML response with proper XML escaping and bidirectional audio
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>

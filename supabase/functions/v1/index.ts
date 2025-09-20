@@ -36,7 +36,7 @@ serve(async (req) => {
   // Build WS URL (default to top-level twilio-voice-stream function)
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
-  const wsUrl = streamUrlEnv || `wss://${host}/twilio-voice-stream`
+  const wsUrl = streamUrlEnv || `wss://${host}/functions/v1/twilio-voice-stream`
 
   const twiml = xml`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
