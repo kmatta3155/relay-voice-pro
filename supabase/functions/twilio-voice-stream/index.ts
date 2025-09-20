@@ -187,13 +187,22 @@ class AIVoiceSession {
     switch (message.event) {
       case 'connected':
         console.log('[AIVoiceSession] Connected to Twilio')
+        // Fallback: if no start event within 1 second, trigger greeting anyway
+        setTimeout(() => {
+          if (!this.isReady && !this.hasGreeted) {
+            console.log('[AIVoiceSession] Starting greeting without start event')
+            this.isReady = true
+            this.startGreeting()
+          }
+        }, 1000)
         break
         
       case 'start':
-        console.log('[AIVoiceSession] Call started', message.start)
+        console.log('[AIVoiceSession] Call started - streamSid:', message.start?.streamSid)
         // Capture streamSid from start event
         if (message.start?.streamSid) {
           this.streamSid = message.start.streamSid
+          console.log('[AIVoiceSession] StreamSid captured:', this.streamSid)
         }
         // Extract custom parameters if provided
         if (message.start?.customParameters) {
@@ -474,7 +483,8 @@ class AIVoiceSession {
       streamSid: this.streamSid,
       sequenceNumber: String(this.sequenceNumber++),
       media: {
-        payload: base64Audio
+        payload: base64Audio,
+        track: 'outbound'
       }
     }))
     
@@ -497,6 +507,18 @@ class AIVoiceSession {
 // ========== MAIN WEBSOCKET HANDLER ==========
 
 serve(async (req) => {
+  // Health check endpoint
+  const url = new URL(req.url)
+  if (url.searchParams.get('health') === '1') {
+    return new Response(JSON.stringify({ 
+      status: 'ok', 
+      version: '2024-09-20-v2',
+      timestamp: new Date().toISOString()
+    }), { 
+      headers: { 'Content-Type': 'application/json' } 
+    })
+  }
+  
   // Handle WebSocket upgrade
   if (req.headers.get('upgrade') !== 'websocket') {
     return new Response('Expected WebSocket', { status: 400 })
