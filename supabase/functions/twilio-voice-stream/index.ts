@@ -397,48 +397,87 @@ class AIVoiceSession {
             style: 0.0,
             use_speaker_boost: true
           },
-          output_format: 'ulaw_8000' // Twilio-compatible format
+          output_format: 'pcm_44100' // Try PCM first, then convert to μ-law
         })
       })
       
       if (!response.ok) {
-        throw new Error(`ElevenLabs API error: ${response.status}`)
+        const errorText = await response.text()
+        throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
       }
       
       if (!response.body) {
         throw new Error('No audio response from ElevenLabs')
       }
       
-      // Stream audio back to Twilio
+      // Log response details for debugging
+      const contentType = response.headers.get('content-type')
+      console.log('[ElevenLabs] Response content-type:', contentType)
+      console.log('[ElevenLabs] Starting audio stream processing')
+      
+      // Process ElevenLabs audio stream
       const reader = response.body.getReader()
-      const audioBuffer: number[] = [] // Buffer for accumulating audio bytes
+      const audioBuffer: number[] = []
+      let totalBytes = 0
       
       try {
         while (true) {
           const { done, value } = await reader.read()
           if (done) {
-            // Send any remaining buffered audio
+            console.log(`[ElevenLabs] Stream complete. Total bytes: ${totalBytes}`)
+            
+            // Send any remaining buffered audio as final frames
             while (audioBuffer.length >= FRAME_SIZE) {
               const frame = audioBuffer.splice(0, FRAME_SIZE)
               await this.sendAudioFrame(new Uint8Array(frame))
             }
-            // Pad and send final frame if needed
+            // Pad final frame with silence if needed
             if (audioBuffer.length > 0) {
               const frame = new Uint8Array(FRAME_SIZE)
               frame.set(new Uint8Array(audioBuffer))
+              // Fill remaining bytes with μ-law silence (127)
+              for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
+                frame[i] = 127
+              }
               await this.sendAudioFrame(frame)
             }
             break
           }
           
-          if (value) {
-            // Add incoming audio to buffer
-            audioBuffer.push(...Array.from(value))
+          if (value && value.length > 0) {
+            totalBytes += value.length
+            console.log(`[ElevenLabs] Received ${value.length} bytes (total: ${totalBytes})`)
             
-            // Send complete 160-byte frames
+            // Convert PCM to μ-law if needed
+            let processedBytes: number[]
+            
+            if (contentType?.includes('audio/wav') || contentType?.includes('audio/pcm')) {
+              console.log('[ElevenLabs] Converting PCM to μ-law')
+              // Convert PCM 16-bit samples to μ-law 8-bit
+              processedBytes = this.convertPcmToMulaw(value)
+            } else {
+              // Assume raw μ-law format
+              console.log('[ElevenLabs] Using raw audio bytes')
+              processedBytes = Array.from(value)
+            }
+            
+            // Sample check for debugging
+            const sampleCheck = processedBytes.slice(0, Math.min(5, processedBytes.length))
+            console.log(`[ElevenLabs] Processed bytes: [${sampleCheck.join(', ')}]`)
+            
+            // Add processed bytes to buffer
+            audioBuffer.push(...processedBytes)
+            
+            // Send complete 160-byte frames immediately
+            let framesSent = 0
             while (audioBuffer.length >= FRAME_SIZE) {
               const frame = audioBuffer.splice(0, FRAME_SIZE)
               await this.sendAudioFrame(new Uint8Array(frame))
+              framesSent++
+            }
+            
+            if (framesSent > 0) {
+              console.log(`[ElevenLabs] Sent ${framesSent} audio frames to Twilio`)
             }
           }
         }
@@ -483,6 +522,35 @@ class AIVoiceSession {
     await new Promise(resolve => setTimeout(resolve, FRAME_DURATION_MS))
   }
   
+  private convertPcmToMulaw(pcmData: Uint8Array): number[] {
+    // Convert PCM 16-bit samples to μ-law 8-bit
+    const mulaw: number[] = []
+    
+    // Process 16-bit PCM samples (2 bytes per sample)
+    for (let i = 0; i < pcmData.length - 1; i += 2) {
+      // Read 16-bit PCM sample (little-endian)
+      const sample = (pcmData[i + 1] << 8) | pcmData[i]
+      
+      // Convert to μ-law using approximation
+      const sign = sample < 0 ? 0x80 : 0x00
+      const magnitude = Math.abs(sample)
+      
+      let muval: number
+      if (magnitude <= 31) muval = (magnitude >> 1) + sign
+      else if (magnitude <= 95) muval = ((magnitude - 31) >> 2) + 16 + sign
+      else if (magnitude <= 223) muval = ((magnitude - 95) >> 3) + 32 + sign
+      else if (magnitude <= 479) muval = ((magnitude - 223) >> 4) + 48 + sign
+      else if (magnitude <= 991) muval = ((magnitude - 479) >> 5) + 64 + sign
+      else if (magnitude <= 2015) muval = ((magnitude - 991) >> 6) + 80 + sign
+      else if (magnitude <= 4063) muval = ((magnitude - 2015) >> 7) + 96 + sign
+      else muval = ((magnitude - 4063) >> 8) + 112 + sign
+      
+      mulaw.push(muval ^ 0xff) // XOR with 0xff as per μ-law standard
+    }
+    
+    return mulaw
+  }
+
   private async sendTestTone(): Promise<void> {
     console.log('[AIVoiceSession] Sending test tone to verify audio pipeline')
     
