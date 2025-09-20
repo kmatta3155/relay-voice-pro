@@ -397,7 +397,7 @@ class AIVoiceSession {
             style: 0.0,
             use_speaker_boost: true
           },
-          output_format: 'pcm_44100' // Try PCM first, then convert to μ-law
+          output_format: 'ulaw_8000' // Direct μ-law for Twilio
         })
       })
       
@@ -435,9 +435,9 @@ class AIVoiceSession {
             if (audioBuffer.length > 0) {
               const frame = new Uint8Array(FRAME_SIZE)
               frame.set(new Uint8Array(audioBuffer))
-              // Fill remaining bytes with μ-law silence (127)
+              // Fill remaining bytes with μ-law silence (0xFF)
               for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
-                frame[i] = 127
+                frame[i] = 0xFF
               }
               await this.sendAudioFrame(frame)
             }
@@ -448,25 +448,16 @@ class AIVoiceSession {
             totalBytes += value.length
             console.log(`[ElevenLabs] Received ${value.length} bytes (total: ${totalBytes})`)
             
-            // Convert PCM to μ-law if needed
-            let processedBytes: number[]
+            // ElevenLabs ulaw_8000 returns raw μ-law bytes - use directly
+            console.log('[ElevenLabs] Using raw μ-law bytes directly')
+            const rawBytes = Array.from(value)
             
-            if (contentType?.includes('audio/wav') || contentType?.includes('audio/pcm')) {
-              console.log('[ElevenLabs] Converting PCM to μ-law')
-              // Convert PCM 16-bit samples to μ-law 8-bit
-              processedBytes = this.convertPcmToMulaw(value)
-            } else {
-              // Assume raw μ-law format
-              console.log('[ElevenLabs] Using raw audio bytes')
-              processedBytes = Array.from(value)
-            }
+            // Sample check for debugging (μ-law should be 0-255 range)
+            const sampleCheck = rawBytes.slice(0, Math.min(5, rawBytes.length))
+            console.log(`[ElevenLabs] μ-law bytes: [${sampleCheck.join(', ')}]`)
             
-            // Sample check for debugging
-            const sampleCheck = processedBytes.slice(0, Math.min(5, processedBytes.length))
-            console.log(`[ElevenLabs] Processed bytes: [${sampleCheck.join(', ')}]`)
-            
-            // Add processed bytes to buffer
-            audioBuffer.push(...processedBytes)
+            // Add raw μ-law bytes to buffer
+            audioBuffer.push(...rawBytes)
             
             // Send complete 160-byte frames immediately
             let framesSent = 0
@@ -522,42 +513,14 @@ class AIVoiceSession {
     await new Promise(resolve => setTimeout(resolve, FRAME_DURATION_MS))
   }
   
-  private convertPcmToMulaw(pcmData: Uint8Array): number[] {
-    // Convert PCM 16-bit samples to μ-law 8-bit
-    const mulaw: number[] = []
-    
-    // Process 16-bit PCM samples (2 bytes per sample)
-    for (let i = 0; i < pcmData.length - 1; i += 2) {
-      // Read 16-bit PCM sample (little-endian)
-      const sample = (pcmData[i + 1] << 8) | pcmData[i]
-      
-      // Convert to μ-law using approximation
-      const sign = sample < 0 ? 0x80 : 0x00
-      const magnitude = Math.abs(sample)
-      
-      let muval: number
-      if (magnitude <= 31) muval = (magnitude >> 1) + sign
-      else if (magnitude <= 95) muval = ((magnitude - 31) >> 2) + 16 + sign
-      else if (magnitude <= 223) muval = ((magnitude - 95) >> 3) + 32 + sign
-      else if (magnitude <= 479) muval = ((magnitude - 223) >> 4) + 48 + sign
-      else if (magnitude <= 991) muval = ((magnitude - 479) >> 5) + 64 + sign
-      else if (magnitude <= 2015) muval = ((magnitude - 991) >> 6) + 80 + sign
-      else if (magnitude <= 4063) muval = ((magnitude - 2015) >> 7) + 96 + sign
-      else muval = ((magnitude - 4063) >> 8) + 112 + sign
-      
-      mulaw.push(muval ^ 0xff) // XOR with 0xff as per μ-law standard
-    }
-    
-    return mulaw
-  }
 
   private async sendTestTone(): Promise<void> {
     console.log('[AIVoiceSession] Sending test tone to verify audio pipeline')
     
-    // Generate 400Hz tone at 8kHz for 2 seconds (160 samples per frame)
+    // Generate 400Hz tone at 8kHz for 1 second
     const sampleRate = 8000
     const frequency = 400
-    const duration = 2 // seconds
+    const duration = 1 // seconds (shorter for quicker test)
     const totalSamples = sampleRate * duration
     const totalFrames = Math.ceil(totalSamples / FRAME_SIZE)
     
@@ -570,11 +533,11 @@ class AIVoiceSession {
           // Generate sine wave sample
           const time = sampleIndex / sampleRate
           const amplitude = Math.sin(2 * Math.PI * frequency * time)
-          // Convert to μ-law (simple approximation)
-          const sample = Math.floor((amplitude + 1) * 127.5)
-          frame[i] = sample
+          // Convert to proper μ-law encoding
+          const pcm16 = Math.floor(amplitude * 32767)
+          frame[i] = this.pcmToMulaw(pcm16)
         } else {
-          frame[i] = 127 // Silence (μ-law zero)
+          frame[i] = 0xFF // Proper μ-law silence
         }
       }
       
@@ -582,6 +545,26 @@ class AIVoiceSession {
     }
     
     console.log('[AIVoiceSession] Test tone complete')
+  }
+  
+  private pcmToMulaw(pcm: number): number {
+    // Standard μ-law encoding algorithm
+    const MULAW_MAX = 0x1FFF
+    const MULAW_BIAS = 132
+    
+    let sign = (pcm >> 8) & 0x80
+    if (sign !== 0) pcm = -pcm
+    if (pcm > MULAW_MAX) pcm = MULAW_MAX
+    
+    pcm += MULAW_BIAS
+    let exponent = 7
+    
+    for (let expMask = 0x4000; (pcm & expMask) === 0 && exponent > 0; exponent--, expMask >>= 1) {}
+    
+    const mantissa = (pcm >> (exponent + 3)) & 0x0F
+    const mulaw = ~(sign | (exponent << 4) | mantissa)
+    
+    return mulaw & 0xFF
   }
   
   private async startGreeting(): Promise<void> {
