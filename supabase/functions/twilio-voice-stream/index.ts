@@ -514,6 +514,118 @@ class AIVoiceSession {
   }
   
 
+  private async sendSimpleTestTone(): Promise<void> {
+    console.log('[TEST] Sending verification tone')
+    // Just a quick 440Hz tone for 0.5 seconds
+    for (let frameIndex = 0; frameIndex < 25; frameIndex++) {
+      const frame = new Uint8Array(160)
+      for (let i = 0; i < 160; i++) {
+        const time = (frameIndex * 160 + i) / 8000
+        const amplitude = Math.sin(2 * Math.PI * 440 * time)
+        const pcm16 = Math.floor(amplitude * 16384)
+        frame[i] = this.pcmToMulaw(pcm16)
+      }
+      await this.sendAudioFrame(frame)
+    }
+  }
+
+  private async speakResponseFixed(text: string): Promise<void> {
+    this.turnState = TurnState.SPEAKING
+    
+    try {
+      // Try with pcm_8000 format for better compatibility
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': this.elevenLabsKey
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_flash_v2_5',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.8,
+            style: 0.0,
+            use_speaker_boost: true
+          },
+          output_format: 'pcm_8000' // Use PCM and convert it properly
+        })
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
+      }
+      
+      if (!response.body) {
+        throw new Error('No audio response from ElevenLabs')
+      }
+      
+      console.log('[ElevenLabs] Starting PCM stream processing')
+      
+      // Process PCM stream
+      const reader = response.body.getReader()
+      const audioBuffer: number[] = []
+      let totalBytes = 0
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            console.log(`[ElevenLabs] Stream complete. Total bytes: ${totalBytes}`)
+            
+            // Send any remaining buffered audio
+            while (audioBuffer.length >= 2) {
+              const pcmBuffer: number[] = []
+              // Process 160 samples (320 bytes of PCM16)
+              for (let i = 0; i < 160 && audioBuffer.length >= 2; i++) {
+                const low = audioBuffer.shift()!
+                const high = audioBuffer.shift()!
+                const pcm16 = (high << 8) | low // Little-endian
+                const signedPcm = pcm16 > 32767 ? pcm16 - 65536 : pcm16
+                pcmBuffer.push(this.pcmToMulaw(signedPcm))
+              }
+              
+              if (pcmBuffer.length === 160) {
+                await this.sendAudioFrame(new Uint8Array(pcmBuffer))
+              }
+            }
+            break
+          }
+          
+          if (value && value.length > 0) {
+            totalBytes += value.length
+            console.log(`[ElevenLabs] Received ${value.length} bytes of PCM data`)
+            
+            // Add raw bytes to buffer
+            audioBuffer.push(...Array.from(value))
+            
+            // Process complete frames (160 samples = 320 bytes)
+            while (audioBuffer.length >= 320) {
+              const frame = new Uint8Array(160)
+              for (let i = 0; i < 160; i++) {
+                const low = audioBuffer.shift()!
+                const high = audioBuffer.shift()!
+                const pcm16 = (high << 8) | low // Little-endian 16-bit PCM
+                const signedPcm = pcm16 > 32767 ? pcm16 - 65536 : pcm16
+                frame[i] = this.pcmToMulaw(signedPcm)
+              }
+              await this.sendAudioFrame(frame)
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock()
+      }
+      
+    } catch (error) {
+      console.error('[AIVoiceSession] Error generating speech:', error)
+    } finally {
+      this.turnState = TurnState.LISTENING
+    }
+  }
+
   private async sendTestPattern(): Promise<void> {
     console.log('[TEST] Sending diagnostic audio patterns')
     
@@ -538,14 +650,15 @@ class AIVoiceSession {
       await this.sendAudioFrame(frame)
     }
     
-    // Pattern 3: Square wave (should sound buzzy)
+    // Pattern 3: Square wave using proper μ-law encoding
     console.log('[TEST] Pattern 3: Square wave')
     for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
       const frame = new Uint8Array(160)
       for (let i = 0; i < 160; i++) {
         const sampleIndex = frameIndex * 160 + i
-        // 200Hz square wave
-        frame[i] = ((sampleIndex / 20) % 2) < 1 ? 0x1C : 0xEC
+        // 200Hz square wave - alternating between +/- amplitude
+        const squareValue = ((sampleIndex / 20) % 2) < 1 ? 16384 : -16384
+        frame[i] = this.pcmToMulaw(squareValue)
       }
       await this.sendAudioFrame(frame)
     }
@@ -612,11 +725,14 @@ class AIVoiceSession {
     
     console.log('[AIVoiceSession] Starting greeting with streamSid:', this.streamSid)
     
-    // Send simple test pattern instead of ElevenLabs for debugging
-    await this.sendTestPattern()
+    // Send test tone first to verify connection
+    await this.sendSimpleTestTone()
     
-    // Skip ElevenLabs for now to isolate the issue
-    console.log('[DEBUG] Skipping ElevenLabs TTS to isolate static issue')
+    // Now try ElevenLabs with proper handling
+    setTimeout(async () => {
+      const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
+      await this.speakResponseFixed(greetingText)
+    }, 1000)
   }
 }
 
