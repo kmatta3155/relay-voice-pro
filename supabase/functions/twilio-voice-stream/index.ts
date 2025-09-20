@@ -211,8 +211,7 @@ class AIVoiceSession {
           if (params.voiceId) this.voiceId = params.voiceId
           if (params.greeting) this.greeting = params.greeting
         }
-        // Start the continuous audio output pacer FIRST
-        this.startPacer()
+        // DO NOT start pacer - just send audio directly
         // Now we're ready - start greeting
         this.isReady = true
         await this.startGreeting()
@@ -619,8 +618,25 @@ class AIVoiceSession {
         const pcm16 = Math.floor(amplitude * 16384)
         frame[i] = this.pcmToMulaw(pcm16)
       }
-      this.enqueueAudio(frame)
+      await this.sendDirectFrame(frame)
     }
+  }
+  
+  private async sendDirectFrame(frame: Uint8Array): Promise<void> {
+    if (!this.streamSid) return
+    
+    const base64Audio = btoa(String.fromCharCode(...frame))
+    
+    this.ws.send(JSON.stringify({
+      event: 'media',
+      streamSid: this.streamSid,
+      media: {
+        payload: base64Audio
+      }
+    }))
+    
+    // Wait 20ms between frames
+    await new Promise(resolve => setTimeout(resolve, 20))
   }
 
   private async speakResponseFixed(text: string): Promise<void> {
@@ -654,12 +670,12 @@ class AIVoiceSession {
       // For now, skip ElevenLabs and just play more test tones
       console.log('[DEBUG] Skipping ElevenLabs processing - playing test pattern instead')
       
-      // Enqueue test tones without any delays - let the pacer handle timing
-      console.log('[DEBUG] Enqueueing test pattern')
+      // Send test tones directly without queueing
+      console.log('[DEBUG] Sending test pattern directly')
       let totalFramesSent = 0
       
       for (let freq = 400; freq <= 800; freq += 100) {
-        console.log(`[DEBUG] Enqueueing ${freq}Hz tone`)
+        console.log(`[DEBUG] Playing ${freq}Hz tone`)
         
         // Use lower amplitude for higher frequencies to avoid clipping
         const ampScale = 1.0 - ((freq - 400) / 800) * 0.5 // Scale from 1.0 to 0.5
@@ -674,7 +690,7 @@ class AIVoiceSession {
             frame[i] = this.pcmToMulaw(pcm16)
           }
           
-          this.enqueueAudio(frame)
+          await this.sendDirectFrame(frame)
           totalFramesSent++
         }
         
@@ -682,13 +698,13 @@ class AIVoiceSession {
         for (let i = 0; i < 5; i++) {
           const silentFrame = new Uint8Array(160)
           silentFrame.fill(0xFF)
-          this.enqueueAudio(silentFrame)
+          await this.sendDirectFrame(silentFrame)
           totalFramesSent++
         }
       }
       
-      console.log(`[DEBUG] Enqueued ${totalFramesSent} frames, queue length: ${this.audioQueue.length}`)
-      // No need to add silence at the end - the pacer will automatically send silence when queue is empty
+      console.log(`[DEBUG] Sent ${totalFramesSent} frames directly`)
+      // Don't send any more silence - just stop
       
     } catch (error) {
       console.error('[AIVoiceSession] Error generating speech:', error)
