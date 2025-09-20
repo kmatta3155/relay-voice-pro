@@ -500,9 +500,19 @@ class AIVoiceSession {
     this.sequenceNumber = 1
     this.isClosed = false
     
+    let silenceCount = 0
+    const maxSilenceFrames = 250 // 5 seconds of silence max before stopping
+    
     // Run every 20ms (50Hz)
     this.pacerInterval = setInterval(() => {
-      if (this.isClosed || !this.streamSid || this.ws.readyState !== WebSocket.OPEN) {
+      if (this.isClosed || !this.streamSid) {
+        return
+      }
+      
+      // Check WebSocket state
+      if (this.ws.readyState !== WebSocket.OPEN) {
+        console.warn('[Pacer] WebSocket not open, stopping pacer')
+        this.cleanup()
         return
       }
       
@@ -512,24 +522,49 @@ class AIVoiceSession {
       
       if (queuedFrame) {
         frame = queuedFrame
+        silenceCount = 0 // Reset silence counter when we have audio
+        
+        // Log every 50th audio frame
+        if (this.sequenceNumber % 50 === 0) {
+          console.log(`[Pacer] Sending audio frame ${this.sequenceNumber}, queue: ${this.audioQueue.length}`)
+        }
       } else {
         // Send silence when queue is empty
         frame = new Uint8Array(FRAME_SIZE)
         frame.fill(0xFF) // μ-law silence
+        silenceCount++
+        
+        // Log every 50th silence frame
+        if (silenceCount % 50 === 0) {
+          console.log(`[Pacer] Sending silence frame ${this.sequenceNumber}, silence count: ${silenceCount}`)
+        }
+        
+        // Stop sending after extended silence
+        if (silenceCount >= maxSilenceFrames) {
+          console.log('[Pacer] Extended silence detected, stopping pacer')
+          this.cleanup()
+          return
+        }
       }
       
-      // Send the frame
+      // Send the frame without track parameter
       const base64Audio = btoa(String.fromCharCode(...frame))
       
-      this.ws.send(JSON.stringify({
+      const mediaMessage = {
         event: 'media',
         streamSid: this.streamSid,
         sequenceNumber: String(this.sequenceNumber++),
         media: {
-          payload: base64Audio,
-          track: 'outbound'
+          payload: base64Audio
         }
-      }))
+      }
+      
+      try {
+        this.ws.send(JSON.stringify(mediaMessage))
+      } catch (error) {
+        console.error('[Pacer] Error sending frame:', error)
+        this.cleanup()
+      }
       
     }, FRAME_DURATION_MS)
   }
@@ -619,12 +654,12 @@ class AIVoiceSession {
       // For now, skip ElevenLabs and just play more test tones
       console.log('[DEBUG] Skipping ElevenLabs processing - playing test pattern instead')
       
-      // Play a simple pattern with proper timing
-      const startTime = Date.now()
+      // Enqueue test tones without any delays - let the pacer handle timing
+      console.log('[DEBUG] Enqueueing test pattern')
       let totalFramesSent = 0
       
       for (let freq = 400; freq <= 800; freq += 100) {
-        console.log(`[DEBUG] Playing ${freq}Hz tone`)
+        console.log(`[DEBUG] Enqueueing ${freq}Hz tone`)
         
         // Use lower amplitude for higher frequencies to avoid clipping
         const ampScale = 1.0 - ((freq - 400) / 800) * 0.5 // Scale from 1.0 to 0.5
@@ -641,44 +676,19 @@ class AIVoiceSession {
           
           this.enqueueAudio(frame)
           totalFramesSent++
-          
-          // Maintain 20ms pacing
-          const expectedTime = startTime + (totalFramesSent * 20)
-          const currentTime = Date.now()
-          if (currentTime < expectedTime) {
-            await new Promise(resolve => setTimeout(resolve, expectedTime - currentTime))
-          }
         }
         
-        // Brief silence between tones
+        // Brief silence between tones (5 frames = 100ms)
         for (let i = 0; i < 5; i++) {
           const silentFrame = new Uint8Array(160)
           silentFrame.fill(0xFF)
           this.enqueueAudio(silentFrame)
           totalFramesSent++
-          
-          const expectedTime = startTime + (totalFramesSent * 20)
-          const currentTime = Date.now()
-          if (currentTime < expectedTime) {
-            await new Promise(resolve => setTimeout(resolve, expectedTime - currentTime))
-          }
         }
       }
       
-      // End with clear silence
-      console.log('[DEBUG] Sending final silence')
-      for (let i = 0; i < 50; i++) {
-        const silentFrame = new Uint8Array(160)
-        silentFrame.fill(0xFF)
-        this.enqueueAudio(silentFrame)
-        totalFramesSent++
-        
-        const expectedTime = startTime + (totalFramesSent * 20)
-        const currentTime = Date.now()
-        if (currentTime < expectedTime) {
-          await new Promise(resolve => setTimeout(resolve, expectedTime - currentTime))
-        }
-      }
+      console.log(`[DEBUG] Enqueued ${totalFramesSent} frames, queue length: ${this.audioQueue.length}`)
+      // No need to add silence at the end - the pacer will automatically send silence when queue is empty
       
     } catch (error) {
       console.error('[AIVoiceSession] Error generating speech:', error)
