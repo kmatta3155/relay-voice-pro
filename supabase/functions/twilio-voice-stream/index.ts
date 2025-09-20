@@ -186,15 +186,8 @@ class AIVoiceSession {
   private async handleTwilioMessage(message: any): Promise<void> {
     switch (message.event) {
       case 'connected':
-        console.log('[AIVoiceSession] Connected to Twilio')
-        // Fallback: if no start event within 1 second, trigger greeting anyway
-        setTimeout(() => {
-          if (!this.isReady && !this.hasGreeted) {
-            console.log('[AIVoiceSession] Starting greeting without start event')
-            this.isReady = true
-            this.startGreeting()
-          }
-        }, 1000)
+        console.log('[AIVoiceSession] Connected to Twilio - waiting for start event')
+        // DO NOT trigger greeting here - wait for streamSid
         break
         
       case 'start':
@@ -477,14 +470,12 @@ class AIVoiceSession {
     // Convert to base64
     const base64Audio = btoa(String.fromCharCode(...frame))
     
-    // Send properly formatted audio frame to Twilio
+    // Send clean Twilio media frame (no track or sequenceNumber)
     this.ws.send(JSON.stringify({
       event: 'media',
       streamSid: this.streamSid,
-      sequenceNumber: String(this.sequenceNumber++),
       media: {
-        payload: base64Audio,
-        track: 'outbound'
+        payload: base64Audio
       }
     }))
     
@@ -492,15 +483,53 @@ class AIVoiceSession {
     await new Promise(resolve => setTimeout(resolve, FRAME_DURATION_MS))
   }
   
+  private async sendTestTone(): Promise<void> {
+    console.log('[AIVoiceSession] Sending test tone to verify audio pipeline')
+    
+    // Generate 400Hz tone at 8kHz for 2 seconds (160 samples per frame)
+    const sampleRate = 8000
+    const frequency = 400
+    const duration = 2 // seconds
+    const totalSamples = sampleRate * duration
+    const totalFrames = Math.ceil(totalSamples / FRAME_SIZE)
+    
+    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+      const frame = new Uint8Array(FRAME_SIZE)
+      
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        const sampleIndex = frameIndex * FRAME_SIZE + i
+        if (sampleIndex < totalSamples) {
+          // Generate sine wave sample
+          const time = sampleIndex / sampleRate
+          const amplitude = Math.sin(2 * Math.PI * frequency * time)
+          // Convert to μ-law (simple approximation)
+          const sample = Math.floor((amplitude + 1) * 127.5)
+          frame[i] = sample
+        } else {
+          frame[i] = 127 // Silence (μ-law zero)
+        }
+      }
+      
+      await this.sendAudioFrame(frame)
+    }
+    
+    console.log('[AIVoiceSession] Test tone complete')
+  }
+  
   private async startGreeting(): Promise<void> {
-    if (this.hasGreeted || !this.isReady) return
+    if (this.hasGreeted || !this.streamSid) return // Only start when streamSid is available
     this.hasGreeted = true
     
-    // Small delay to ensure stream is fully ready
+    console.log('[AIVoiceSession] Starting greeting with streamSid:', this.streamSid)
+    
+    // Generate a test tone first to verify audio pipeline
+    await this.sendTestTone()
+    
+    // Then send actual greeting
     setTimeout(async () => {
       const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
       await this.speakResponse(greetingText)
-    }, 200)
+    }, 1000)
   }
 }
 
