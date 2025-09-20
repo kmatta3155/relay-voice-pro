@@ -494,23 +494,27 @@ class AIVoiceSession {
       console.warn(`[AIVoiceSession] Frame size mismatch: ${frame.length} bytes (expected ${FRAME_SIZE})`)
       const paddedFrame = new Uint8Array(FRAME_SIZE)
       paddedFrame.set(frame.slice(0, FRAME_SIZE))
+      // Fill rest with proper silence
+      for (let i = frame.length; i < FRAME_SIZE; i++) {
+        paddedFrame[i] = 0xFF
+      }
       frame = paddedFrame
     }
     
     // Convert to base64
     const base64Audio = btoa(String.fromCharCode(...frame))
     
-    // Send clean Twilio media frame (no track or sequenceNumber)
+    // Send with sequence number for proper ordering
     this.ws.send(JSON.stringify({
       event: 'media',
       streamSid: this.streamSid,
+      sequenceNumber: String(this.sequenceNumber++),
       media: {
         payload: base64Audio
       }
     }))
     
-    // Pace frames at 20ms intervals
-    await new Promise(resolve => setTimeout(resolve, FRAME_DURATION_MS))
+    // Don't add extra delay - let Twilio handle timing
   }
   
 
@@ -560,18 +564,64 @@ class AIVoiceSession {
       // For now, skip ElevenLabs and just play more test tones
       console.log('[DEBUG] Skipping ElevenLabs processing - playing test pattern instead')
       
-      // Play a simple pattern to prove the audio works
+      // Play a simple pattern with proper timing
+      const startTime = Date.now()
+      let totalFramesSent = 0
+      
       for (let freq = 400; freq <= 800; freq += 100) {
         console.log(`[DEBUG] Playing ${freq}Hz tone`)
+        
+        // Use lower amplitude for higher frequencies to avoid clipping
+        const ampScale = 1.0 - ((freq - 400) / 800) * 0.5 // Scale from 1.0 to 0.5
+        
         for (let frameIndex = 0; frameIndex < 25; frameIndex++) {
           const frame = new Uint8Array(160)
           for (let i = 0; i < 160; i++) {
-            const time = (frameIndex * 160 + i) / 8000
-            const amplitude = Math.sin(2 * Math.PI * freq * time)
-            const pcm16 = Math.floor(amplitude * 8192) // Lower amplitude
+            const sampleIndex = totalFramesSent * 160 + i
+            const time = sampleIndex / 8000
+            const amplitude = Math.sin(2 * Math.PI * freq * time) * ampScale
+            const pcm16 = Math.floor(amplitude * 8192)
             frame[i] = this.pcmToMulaw(pcm16)
           }
+          
           await this.sendAudioFrame(frame)
+          totalFramesSent++
+          
+          // Maintain 20ms pacing
+          const expectedTime = startTime + (totalFramesSent * 20)
+          const currentTime = Date.now()
+          if (currentTime < expectedTime) {
+            await new Promise(resolve => setTimeout(resolve, expectedTime - currentTime))
+          }
+        }
+        
+        // Brief silence between tones
+        for (let i = 0; i < 5; i++) {
+          const silentFrame = new Uint8Array(160)
+          silentFrame.fill(0xFF)
+          await this.sendAudioFrame(silentFrame)
+          totalFramesSent++
+          
+          const expectedTime = startTime + (totalFramesSent * 20)
+          const currentTime = Date.now()
+          if (currentTime < expectedTime) {
+            await new Promise(resolve => setTimeout(resolve, expectedTime - currentTime))
+          }
+        }
+      }
+      
+      // End with clear silence
+      console.log('[DEBUG] Sending final silence')
+      for (let i = 0; i < 50; i++) {
+        const silentFrame = new Uint8Array(160)
+        silentFrame.fill(0xFF)
+        await this.sendAudioFrame(silentFrame)
+        totalFramesSent++
+        
+        const expectedTime = startTime + (totalFramesSent * 20)
+        const currentTime = Date.now()
+        if (currentTime < expectedTime) {
+          await new Promise(resolve => setTimeout(resolve, expectedTime - currentTime))
         }
       }
       
