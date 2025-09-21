@@ -132,6 +132,10 @@ class AIVoiceSession {
   private streamSid: string = ''
   private sequenceNumber: number = 1
   
+  // Outbound audio scheduling (critical for no static)
+  private outboundSeq: number = 0
+  private outboundTsBase: number = 0
+  
   // Context
   private tenantId: string
   private businessName: string
@@ -209,7 +213,11 @@ class AIVoiceSession {
           if (params.voiceId) this.voiceId = params.voiceId
           if (params.greeting) this.greeting = params.greeting
         }
-        // DO NOT start pacer - just send audio directly
+        // Reset outbound audio tracking
+        this.outboundSeq = 0
+        this.outboundTsBase = Date.now()
+        // Send buffer warmup silence frames
+        await this.sendBufferWarmup()
         // Now we're ready - start greeting
         this.isReady = true
         await this.startGreeting()
@@ -506,38 +514,60 @@ class AIVoiceSession {
         const time = (frameIndex * 160 + i) / 8000
         const amplitude = Math.sin(2 * Math.PI * 440 * time)
         const pcm16 = Math.floor(amplitude * 16384)
-        frame[i] = this.pcmToMulaw(pcm16)
+        frame[i] = pcmToMulaw(pcm16)
       }
       await this.sendDirectFrame(frame)
     }
     console.log('[TEST] Test tone complete')
   }
   
-  private async sendDirectFrame(frame: Uint8Array): Promise<void> {
-    if (!this.streamSid) return
+  private async sendBufferWarmup(): Promise<void> {
+    console.log('[AIVoiceSession] Sending buffer warmup silence')
+    // Send 200ms of silence to prime Twilio's jitter buffer
+    const silenceFrame = new Uint8Array(160).fill(0xFF) // μ-law silence
+    for (let i = 0; i < 10; i++) {
+      await this.sendOutboundFrame(silenceFrame)
+    }
+    console.log('[AIVoiceSession] Buffer warmup complete')
+  }
+  
+  private async sendOutboundFrame(frame: Uint8Array): Promise<void> {
+    // Guard against sending after close or without streamSid
+    if (!this.streamSid || this.isClosed || this.ws.readyState !== 1) return
     
-    const base64Audio = btoa(String.fromCharCode(...frame))
+    const payload = btoa(String.fromCharCode(...frame))
+    const timestamp = this.outboundTsBase + (this.outboundSeq * FRAME_DURATION_MS)
     
-    this.ws.send(JSON.stringify({
+    const message = {
       event: 'media',
       streamSid: this.streamSid,
       media: {
-        payload: base64Audio
+        track: 'outbound', // Critical: must specify outbound track
+        timestamp: String(timestamp),
+        sequenceNumber: this.outboundSeq,
+        payload: payload
       }
-    }))
+    }
     
-    // Wait 20ms between frames
-    await new Promise(resolve => setTimeout(resolve, 20))
+    this.ws.send(JSON.stringify(message))
+    this.outboundSeq++
+    
+    // No setTimeout - let timestamp scheduling handle pacing
+  }
+  
+  private async sendDirectFrame(frame: Uint8Array): Promise<void> {
+    // Wrapper for compatibility - uses new sendOutboundFrame
+    await this.sendOutboundFrame(frame)
   }
 
   private async speakResponseFixed(text: string): Promise<void> {
     this.turnState = TurnState.SPEAKING
     
     try {
-      console.log('[ElevenLabs] Getting audio for:', text.substring(0, 50) + '...')
+      console.log('[ElevenLabs] Requesting ulaw_8000 format for:', text.substring(0, 50) + '...')
       
-      // Use standard MP3 format and get complete audio first
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}`, {
+      // Request ulaw_8000 format directly compatible with Twilio
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -545,11 +575,14 @@ class AIVoiceSession {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_monolingual_v1',
+          model_id: 'eleven_turbo_v2',
           voice_settings: {
             stability: 0.5,
-            similarity_boost: 0.75
-          }
+            similarity_boost: 0.8,
+            style: 0.0,
+            use_speaker_boost: true
+          },
+          output_format: 'ulaw_8000'
         })
       })
       
@@ -558,21 +591,77 @@ class AIVoiceSession {
         throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
       }
       
-      console.log('[ElevenLabs] Audio received, for now sending test tones instead')
-      
-      // For now, just send a simple 600Hz tone to test the pipeline
-      for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
-        const frame = new Uint8Array(160)
-        for (let i = 0; i < 160; i++) {
-          const time = (frameIndex * 160 + i) / 8000
-          const amplitude = Math.sin(2 * Math.PI * 600 * time)
-          const pcm16 = Math.floor(amplitude * 8192) // Lower amplitude
-          frame[i] = this.pcmToMulaw(pcm16)
-        }
-        await this.sendDirectFrame(frame)
+      if (!response.body) {
+        throw new Error('No audio response from ElevenLabs')
       }
       
-      console.log('[ElevenLabs] Test tone sent instead of TTS')
+      console.log('[ElevenLabs] Streaming ulaw_8000 audio with timestamp scheduling')
+      
+      // Process the streaming response
+      const reader = response.body.getReader()
+      let audioBuffer: number[] = []
+      let totalFramesSent = 0
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            // Send any remaining buffered audio
+            while (audioBuffer.length >= FRAME_SIZE) {
+              const frame = new Uint8Array(FRAME_SIZE)
+              for (let i = 0; i < FRAME_SIZE; i++) {
+                frame[i] = audioBuffer.shift()!
+              }
+              await this.sendOutboundFrame(frame)
+              totalFramesSent++
+            }
+            
+            // Pad final frame with silence if needed
+            if (audioBuffer.length > 0) {
+              const frame = new Uint8Array(FRAME_SIZE)
+              for (let i = 0; i < audioBuffer.length; i++) {
+                frame[i] = audioBuffer[i]
+              }
+              for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
+                frame[i] = 0xFF // μ-law silence
+              }
+              await this.sendOutboundFrame(frame)
+              totalFramesSent++
+            }
+            
+            console.log(`[ElevenLabs] Stream complete. Total frames sent: ${totalFramesSent}`)
+            break
+          }
+          
+          if (value && value.length > 0) {
+            // Add to buffer
+            audioBuffer.push(...Array.from(value))
+            
+            // Send complete frames (160 bytes each)
+            while (audioBuffer.length >= FRAME_SIZE) {
+              const frame = new Uint8Array(FRAME_SIZE)
+              for (let i = 0; i < FRAME_SIZE; i++) {
+                frame[i] = audioBuffer.shift()!
+              }
+              await this.sendOutboundFrame(frame)
+              totalFramesSent++
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock()
+      }
+      
+      // Send mark event to signal end of speech
+      if (this.streamSid) {
+        this.ws.send(JSON.stringify({ 
+          event: 'mark', 
+          streamSid: this.streamSid, 
+          mark: { name: `speech_end_${this.outboundSeq}` }
+        }))
+      }
+      
+      console.log('[ElevenLabs] Speech complete with timestamp scheduling')
       
     } catch (error) {
       console.error('[AIVoiceSession] Error generating speech:', error)
@@ -600,7 +689,7 @@ class AIVoiceSession {
         const time = (frameIndex * 160 + i) / 8000
         const amplitude = Math.sin(2 * Math.PI * 440 * time)
         const pcm16 = Math.floor(amplitude * 16384) // Half amplitude
-        frame[i] = this.pcmToMulaw(pcm16)
+        frame[i] = pcmToMulaw(pcm16)
       }
       await this.sendDirectFrame(frame)
     }
@@ -613,7 +702,7 @@ class AIVoiceSession {
         const sampleIndex = frameIndex * 160 + i
         // 200Hz square wave - alternating between +/- amplitude
         const squareValue = ((sampleIndex / 20) % 2) < 1 ? 16384 : -16384
-        frame[i] = this.pcmToMulaw(squareValue)
+        frame[i] = pcmToMulaw(squareValue)
       }
       await this.sendDirectFrame(frame)
     }
@@ -642,7 +731,7 @@ class AIVoiceSession {
           const amplitude = Math.sin(2 * Math.PI * frequency * time)
           // Convert to proper μ-law encoding
           const pcm16 = Math.floor(amplitude * 32767)
-          frame[i] = this.pcmToMulaw(pcm16)
+          frame[i] = pcmToMulaw(pcm16)
         } else {
           frame[i] = 0xFF // Proper μ-law silence
         }
@@ -654,25 +743,7 @@ class AIVoiceSession {
     console.log('[AIVoiceSession] Test tone complete')
   }
   
-  private pcmToMulaw(pcm: number): number {
-    // Standard μ-law encoding algorithm
-    const MULAW_MAX = 0x1FFF
-    const MULAW_BIAS = 132
-    
-    let sign = (pcm >> 8) & 0x80
-    if (sign !== 0) pcm = -pcm
-    if (pcm > MULAW_MAX) pcm = MULAW_MAX
-    
-    pcm += MULAW_BIAS
-    let exponent = 7
-    
-    for (let expMask = 0x4000; (pcm & expMask) === 0 && exponent > 0; exponent--, expMask >>= 1) {}
-    
-    const mantissa = (pcm >> (exponent + 3)) & 0x0F
-    const mulaw = ~(sign | (exponent << 4) | mantissa)
-    
-    return mulaw & 0xFF
-  }
+  // Removed duplicate pcmToMulaw - using standard G.711 function
   
   private async startGreeting(): Promise<void> {
     if (this.hasGreeted || !this.streamSid) return // Only start when streamSid is available
@@ -680,14 +751,9 @@ class AIVoiceSession {
     
     console.log('[AIVoiceSession] Starting greeting with streamSid:', this.streamSid)
     
-    // Send test tone first to verify connection
-    await this.sendSimpleTestTone()
-    
-    // Now try ElevenLabs with proper handling
-    setTimeout(async () => {
-      const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
-      await this.speakResponseFixed(greetingText)
-    }, 1000)
+    // Go straight to greeting with proper ElevenLabs integration
+    const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
+    await this.speakResponseFixed(greetingText)
   }
 }
 
