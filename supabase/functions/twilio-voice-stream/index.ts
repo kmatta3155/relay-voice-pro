@@ -147,9 +147,7 @@ class AIVoiceSession {
   private hasGreeted = false
   private isReady = false
   
-  // Audio output queue and pacer
-  private audioQueue: Uint8Array[] = []
-  private pacerInterval: any = null // Using any to avoid type issues with setInterval
+  // Track if session is closed
   private isClosed = false
   
   constructor(
@@ -437,7 +435,7 @@ class AIVoiceSession {
             // Send any remaining buffered audio as final frames
             while (audioBuffer.length >= FRAME_SIZE) {
               const frame = audioBuffer.splice(0, FRAME_SIZE)
-              this.enqueueAudio(new Uint8Array(frame))
+              await this.sendDirectFrame(new Uint8Array(frame))
             }
             // Pad final frame with silence if needed
             if (audioBuffer.length > 0) {
@@ -447,7 +445,7 @@ class AIVoiceSession {
               for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
                 frame[i] = 0xFF
               }
-              this.enqueueAudio(frame)
+              await this.sendDirectFrame(frame)
             }
             break
           }
@@ -471,7 +469,7 @@ class AIVoiceSession {
             let framesSent = 0
             while (audioBuffer.length >= FRAME_SIZE) {
               const frame = audioBuffer.splice(0, FRAME_SIZE)
-              this.enqueueAudio(new Uint8Array(frame))
+              await this.sendDirectFrame(new Uint8Array(frame))
               framesSent++
             }
             
@@ -491,135 +489,17 @@ class AIVoiceSession {
     }
   }
   
-  // Start the continuous 50Hz audio output pacer
-  private startPacer(): void {
-    if (this.pacerInterval) return // Already running
-    
-    console.log('[AIVoiceSession] Starting audio output pacer at 50Hz')
-    this.sequenceNumber = 1
-    this.isClosed = false
-    
-    let silenceCount = 0
-    const maxSilenceFrames = 250 // 5 seconds of silence max before stopping
-    
-    // Run every 20ms (50Hz)
-    this.pacerInterval = setInterval(() => {
-      if (this.isClosed || !this.streamSid) {
-        return
-      }
-      
-      // Check WebSocket state
-      if (this.ws.readyState !== WebSocket.OPEN) {
-        console.warn('[Pacer] WebSocket not open, stopping pacer')
-        this.cleanup()
-        return
-      }
-      
-      // Get next frame from queue or use silence
-      let frame: Uint8Array
-      const queuedFrame = this.audioQueue.shift()
-      
-      if (queuedFrame) {
-        frame = queuedFrame
-        silenceCount = 0 // Reset silence counter when we have audio
-        
-        // Log every 50th audio frame
-        if (this.sequenceNumber % 50 === 0) {
-          console.log(`[Pacer] Sending audio frame ${this.sequenceNumber}, queue: ${this.audioQueue.length}`)
-        }
-      } else {
-        // Send silence when queue is empty
-        frame = new Uint8Array(FRAME_SIZE)
-        frame.fill(0xFF) // μ-law silence
-        silenceCount++
-        
-        // Log every 50th silence frame
-        if (silenceCount % 50 === 0) {
-          console.log(`[Pacer] Sending silence frame ${this.sequenceNumber}, silence count: ${silenceCount}`)
-        }
-        
-        // Stop sending after extended silence
-        if (silenceCount >= maxSilenceFrames) {
-          console.log('[Pacer] Extended silence detected, stopping pacer')
-          this.cleanup()
-          return
-        }
-      }
-      
-      // Send the frame without track parameter
-      const base64Audio = btoa(String.fromCharCode(...frame))
-      
-      const mediaMessage = {
-        event: 'media',
-        streamSid: this.streamSid,
-        sequenceNumber: String(this.sequenceNumber++),
-        media: {
-          payload: base64Audio
-        }
-      }
-      
-      try {
-        this.ws.send(JSON.stringify(mediaMessage))
-      } catch (error) {
-        console.error('[Pacer] Error sending frame:', error)
-        this.cleanup()
-      }
-      
-    }, FRAME_DURATION_MS)
-  }
-  
-  // Stop the pacer and clean up
+  // Stop and clean up
   private cleanup(): void {
     console.log('[AIVoiceSession] Cleaning up session')
     this.isClosed = true
-    
-    if (this.pacerInterval) {
-      clearInterval(this.pacerInterval)
-      this.pacerInterval = null
-    }
-    
-    this.audioQueue = []
     this.audioBuffer = []
-  }
-  
-  // Add audio frames to the output queue
-  private enqueueAudio(frame: Uint8Array): void {
-    if (this.isClosed) return
-    
-    // Ensure frame is exactly 160 bytes
-    if (frame.length !== FRAME_SIZE) {
-      const paddedFrame = new Uint8Array(FRAME_SIZE)
-      paddedFrame.set(frame.slice(0, FRAME_SIZE))
-      // Fill rest with proper silence
-      for (let i = frame.length; i < FRAME_SIZE; i++) {
-        paddedFrame[i] = 0xFF
-      }
-      frame = paddedFrame
-    }
-    
-    this.audioQueue.push(frame)
-    
-    // Keep queue size reasonable (2 seconds max)
-    if (this.audioQueue.length > 100) {
-      console.warn('[AIVoiceSession] Audio queue overflow, dropping old frames')
-      this.audioQueue = this.audioQueue.slice(-80)
-    }
   }
   
 
   private async sendSimpleTestTone(): Promise<void> {
-    console.log('[TEST] Sending verification tone')
-    // Just a quick 440Hz tone for 0.5 seconds
-    for (let frameIndex = 0; frameIndex < 25; frameIndex++) {
-      const frame = new Uint8Array(160)
-      for (let i = 0; i < 160; i++) {
-        const time = (frameIndex * 160 + i) / 8000
-        const amplitude = Math.sin(2 * Math.PI * 440 * time)
-        const pcm16 = Math.floor(amplitude * 16384)
-        frame[i] = this.pcmToMulaw(pcm16)
-      }
-      await this.sendDirectFrame(frame)
-    }
+    // Skip test tone for production - go straight to greeting
+    console.log('[AIVoiceSession] Skipping test tone, moving to greeting')
   }
   
   private async sendDirectFrame(frame: Uint8Array): Promise<void> {
@@ -643,10 +523,10 @@ class AIVoiceSession {
     this.turnState = TurnState.SPEAKING
     
     try {
-      console.log('[ElevenLabs] Requesting MP3 format and will convert to μ-law')
+      console.log('[ElevenLabs] Requesting ulaw_8000 format for direct transmission')
       
-      // Use MP3 format which is more reliable
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}`, {
+      // Use ulaw_8000 format for direct Twilio compatibility
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -654,11 +534,14 @@ class AIVoiceSession {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_monolingual_v1',
+          model_id: 'eleven_flash_v2_5',
           voice_settings: {
             stability: 0.5,
-            similarity_boost: 0.75
-          }
+            similarity_boost: 0.8,
+            style: 0.0,
+            use_speaker_boost: true
+          },
+          output_format: 'ulaw_8000'
         })
       })
       
@@ -667,44 +550,57 @@ class AIVoiceSession {
         throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
       }
       
-      // For now, skip ElevenLabs and just play more test tones
-      console.log('[DEBUG] Skipping ElevenLabs processing - playing test pattern instead')
-      
-      // Send test tones directly without queueing
-      console.log('[DEBUG] Sending test pattern directly')
-      let totalFramesSent = 0
-      
-      for (let freq = 400; freq <= 800; freq += 100) {
-        console.log(`[DEBUG] Playing ${freq}Hz tone`)
-        
-        // Use lower amplitude for higher frequencies to avoid clipping
-        const ampScale = 1.0 - ((freq - 400) / 800) * 0.5 // Scale from 1.0 to 0.5
-        
-        for (let frameIndex = 0; frameIndex < 25; frameIndex++) {
-          const frame = new Uint8Array(160)
-          for (let i = 0; i < 160; i++) {
-            const sampleIndex = totalFramesSent * 160 + i
-            const time = sampleIndex / 8000
-            const amplitude = Math.sin(2 * Math.PI * freq * time) * ampScale
-            const pcm16 = Math.floor(amplitude * 8192)
-            frame[i] = this.pcmToMulaw(pcm16)
-          }
-          
-          await this.sendDirectFrame(frame)
-          totalFramesSent++
-        }
-        
-        // Brief silence between tones (5 frames = 100ms)
-        for (let i = 0; i < 5; i++) {
-          const silentFrame = new Uint8Array(160)
-          silentFrame.fill(0xFF)
-          await this.sendDirectFrame(silentFrame)
-          totalFramesSent++
-        }
+      if (!response.body) {
+        throw new Error('No audio response from ElevenLabs')
       }
       
-      console.log(`[DEBUG] Sent ${totalFramesSent} frames directly`)
-      // Don't send any more silence - just stop
+      console.log('[ElevenLabs] Streaming ulaw_8000 audio directly')
+      
+      // Process the streaming response
+      const reader = response.body.getReader()
+      let audioBuffer: number[] = []
+      let totalFramesSent = 0
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            console.log(`[ElevenLabs] Stream complete. Total frames sent: ${totalFramesSent}`)
+            
+            // Send any remaining buffered audio
+            while (audioBuffer.length >= FRAME_SIZE) {
+              const frame = new Uint8Array(FRAME_SIZE)
+              for (let i = 0; i < FRAME_SIZE; i++) {
+                frame[i] = audioBuffer.shift()!
+              }
+              await this.sendDirectFrame(frame)
+              totalFramesSent++
+            }
+            break
+          }
+          
+          if (value && value.length > 0) {
+            console.log(`[ElevenLabs] Received ${value.length} bytes of μ-law audio`)
+            
+            // Add to buffer
+            audioBuffer.push(...Array.from(value))
+            
+            // Send complete frames (160 bytes each)
+            while (audioBuffer.length >= FRAME_SIZE) {
+              const frame = new Uint8Array(FRAME_SIZE)
+              for (let i = 0; i < FRAME_SIZE; i++) {
+                frame[i] = audioBuffer.shift()!
+              }
+              await this.sendDirectFrame(frame)
+              totalFramesSent++
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock()
+      }
+      
+      console.log('[ElevenLabs] Speech complete - stopping transmission')
       
     } catch (error) {
       console.error('[AIVoiceSession] Error generating speech:', error)
@@ -721,7 +617,7 @@ class AIVoiceSession {
     for (let i = 0; i < 50; i++) {
       const frame = new Uint8Array(160)
       frame.fill(0xFF) // μ-law silence
-      this.enqueueAudio(frame)
+      await this.sendDirectFrame(frame)
     }
     
     // Pattern 2: Simple 440Hz tone (A note)
@@ -734,7 +630,7 @@ class AIVoiceSession {
         const pcm16 = Math.floor(amplitude * 16384) // Half amplitude
         frame[i] = this.pcmToMulaw(pcm16)
       }
-      this.enqueueAudio(frame)
+      await this.sendDirectFrame(frame)
     }
     
     // Pattern 3: Square wave using proper μ-law encoding
@@ -747,7 +643,7 @@ class AIVoiceSession {
         const squareValue = ((sampleIndex / 20) % 2) < 1 ? 16384 : -16384
         frame[i] = this.pcmToMulaw(squareValue)
       }
-      this.enqueueAudio(frame)
+      await this.sendDirectFrame(frame)
     }
     
     console.log('[TEST] All patterns sent')
@@ -780,7 +676,7 @@ class AIVoiceSession {
         }
       }
       
-      this.enqueueAudio(frame)
+      await this.sendDirectFrame(frame)
     }
     
     console.log('[AIVoiceSession] Test tone complete')
