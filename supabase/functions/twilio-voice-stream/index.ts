@@ -498,8 +498,19 @@ class AIVoiceSession {
   
 
   private async sendSimpleTestTone(): Promise<void> {
-    // Skip test tone for production - go straight to greeting
-    console.log('[AIVoiceSession] Skipping test tone, moving to greeting')
+    console.log('[TEST] Sending simple 440Hz test tone')
+    // Just a quick 440Hz tone for 0.5 seconds to verify connection
+    for (let frameIndex = 0; frameIndex < 25; frameIndex++) {
+      const frame = new Uint8Array(160)
+      for (let i = 0; i < 160; i++) {
+        const time = (frameIndex * 160 + i) / 8000
+        const amplitude = Math.sin(2 * Math.PI * 440 * time)
+        const pcm16 = Math.floor(amplitude * 16384)
+        frame[i] = this.pcmToMulaw(pcm16)
+      }
+      await this.sendDirectFrame(frame)
+    }
+    console.log('[TEST] Test tone complete')
   }
   
   private async sendDirectFrame(frame: Uint8Array): Promise<void> {
@@ -523,10 +534,10 @@ class AIVoiceSession {
     this.turnState = TurnState.SPEAKING
     
     try {
-      console.log('[ElevenLabs] Requesting ulaw_8000 format for direct transmission')
+      console.log('[ElevenLabs] Getting audio for:', text.substring(0, 50) + '...')
       
-      // Use ulaw_8000 format for direct Twilio compatibility
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
+      // Use standard MP3 format and get complete audio first
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -534,14 +545,11 @@ class AIVoiceSession {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_flash_v2_5',
+          model_id: 'eleven_monolingual_v1',
           voice_settings: {
             stability: 0.5,
-            similarity_boost: 0.8,
-            style: 0.0,
-            use_speaker_boost: true
-          },
-          output_format: 'ulaw_8000'
+            similarity_boost: 0.75
+          }
         })
       })
       
@@ -550,57 +558,21 @@ class AIVoiceSession {
         throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
       }
       
-      if (!response.body) {
-        throw new Error('No audio response from ElevenLabs')
-      }
+      console.log('[ElevenLabs] Audio received, for now sending test tones instead')
       
-      console.log('[ElevenLabs] Streaming ulaw_8000 audio directly')
-      
-      // Process the streaming response
-      const reader = response.body.getReader()
-      let audioBuffer: number[] = []
-      let totalFramesSent = 0
-      
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) {
-            console.log(`[ElevenLabs] Stream complete. Total frames sent: ${totalFramesSent}`)
-            
-            // Send any remaining buffered audio
-            while (audioBuffer.length >= FRAME_SIZE) {
-              const frame = new Uint8Array(FRAME_SIZE)
-              for (let i = 0; i < FRAME_SIZE; i++) {
-                frame[i] = audioBuffer.shift()!
-              }
-              await this.sendDirectFrame(frame)
-              totalFramesSent++
-            }
-            break
-          }
-          
-          if (value && value.length > 0) {
-            console.log(`[ElevenLabs] Received ${value.length} bytes of μ-law audio`)
-            
-            // Add to buffer
-            audioBuffer.push(...Array.from(value))
-            
-            // Send complete frames (160 bytes each)
-            while (audioBuffer.length >= FRAME_SIZE) {
-              const frame = new Uint8Array(FRAME_SIZE)
-              for (let i = 0; i < FRAME_SIZE; i++) {
-                frame[i] = audioBuffer.shift()!
-              }
-              await this.sendDirectFrame(frame)
-              totalFramesSent++
-            }
-          }
+      // For now, just send a simple 600Hz tone to test the pipeline
+      for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
+        const frame = new Uint8Array(160)
+        for (let i = 0; i < 160; i++) {
+          const time = (frameIndex * 160 + i) / 8000
+          const amplitude = Math.sin(2 * Math.PI * 600 * time)
+          const pcm16 = Math.floor(amplitude * 8192) // Lower amplitude
+          frame[i] = this.pcmToMulaw(pcm16)
         }
-      } finally {
-        reader.releaseLock()
+        await this.sendDirectFrame(frame)
       }
       
-      console.log('[ElevenLabs] Speech complete - stopping transmission')
+      console.log('[ElevenLabs] Test tone sent instead of TTS')
       
     } catch (error) {
       console.error('[AIVoiceSession] Error generating speech:', error)
