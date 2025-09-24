@@ -1,0 +1,8 @@
+{
+  "importMap": "../import_map.json",
+  "lock": false,
+  "tasks": {
+    "test": "deno test --allow-all --unstable",
+    "dev": "deno run --allow-all --unstable --watch index.ts"
+  }
+}
