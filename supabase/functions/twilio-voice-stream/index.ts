@@ -17,10 +17,19 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null
 
-// Audio constants for Twilio μ-law format
-const FRAME_SIZE = 160 // μ-law bytes per 20ms at 8kHz
+// Audio constants - will be determined based on codec
 const FRAME_DURATION_MS = 20
 const SAMPLE_RATE = 8000
+
+// Codec-specific frame sizes
+const FRAME_SIZE_MULAW = 160  // μ-law: 160 bytes per 20ms at 8kHz
+const FRAME_SIZE_PCM16 = 320  // PCM16: 320 bytes per 20ms at 8kHz (2 bytes per sample)
+
+// Supported codecs
+enum AudioCodec {
+  MULAW = 'mulaw',
+  PCM16 = 'pcm16'
+}
 
 // Voice Activity Detection settings
 const VAD_SILENCE_THRESHOLD = 700
@@ -154,6 +163,10 @@ class AIVoiceSession {
   // Track if session is closed
   private isClosed = false
   
+  // Codec negotiation
+  private outboundCodec: AudioCodec = AudioCodec.MULAW
+  private outboundFrameSize: number = FRAME_SIZE_MULAW
+  
   constructor(
     ws: WebSocket,
     context: { tenantId: string; businessName: string; voiceId: string; greeting: string }
@@ -200,11 +213,58 @@ class AIVoiceSession {
         
       case 'start':
         console.log('[AIVoiceSession] Call started - streamSid:', message.start?.streamSid)
+        console.log('[AIVoiceSession] Full start event:', JSON.stringify(message.start, null, 2))
+        
         // Capture streamSid from start event
         if (message.start?.streamSid) {
           this.streamSid = message.start.streamSid
           console.log('[AIVoiceSession] StreamSid captured:', this.streamSid)
         }
+        
+        // CRITICAL: Detect negotiated codec from mediaFormat
+        if (message.start?.mediaFormat) {
+          const mediaFormat = message.start.mediaFormat
+          console.log('[AIVoiceSession] Media format negotiated:', JSON.stringify(mediaFormat))
+          
+          // Check the encoding field
+          if (mediaFormat.encoding) {
+            const encoding = mediaFormat.encoding.toLowerCase()
+            console.log('[AIVoiceSession] Detected encoding:', encoding)
+            
+            if (encoding.includes('pcm') || encoding.includes('l16')) {
+              // PCM16 format detected
+              this.outboundCodec = AudioCodec.PCM16
+              this.outboundFrameSize = FRAME_SIZE_PCM16
+              console.log('[AIVoiceSession] ✅ Codec set to PCM16, frame size:', this.outboundFrameSize)
+            } else if (encoding.includes('mulaw') || encoding.includes('ulaw') || encoding.includes('g711')) {
+              // μ-law format detected
+              this.outboundCodec = AudioCodec.MULAW
+              this.outboundFrameSize = FRAME_SIZE_MULAW
+              console.log('[AIVoiceSession] ✅ Codec set to μ-law, frame size:', this.outboundFrameSize)
+            } else {
+              // Default to μ-law for unknown formats
+              console.log(`[AIVoiceSession] Unknown encoding '${encoding}', defaulting to μ-law`)
+              this.outboundCodec = AudioCodec.MULAW
+              this.outboundFrameSize = FRAME_SIZE_MULAW
+            }
+          } else {
+            // No encoding specified, default to μ-law
+            console.log('[AIVoiceSession] No encoding specified, defaulting to μ-law')
+            this.outboundCodec = AudioCodec.MULAW
+            this.outboundFrameSize = FRAME_SIZE_MULAW
+          }
+        } else {
+          // No mediaFormat, default to μ-law for backward compatibility
+          console.log('[AIVoiceSession] No mediaFormat in start event, defaulting to μ-law')
+          this.outboundCodec = AudioCodec.MULAW
+          this.outboundFrameSize = FRAME_SIZE_MULAW
+        }
+        
+        console.log('[AIVoiceSession] Final codec configuration:', {
+          codec: this.outboundCodec,
+          frameSize: this.outboundFrameSize
+        })
+        
         // Extract custom parameters if provided
         if (message.start?.customParameters) {
           const params = message.start.customParameters
@@ -213,11 +273,14 @@ class AIVoiceSession {
           if (params.voiceId) this.voiceId = params.voiceId
           if (params.greeting) this.greeting = params.greeting
         }
+        
         // Reset outbound audio tracking
         this.outboundSeq = 0
         this.outboundTsBase = Date.now()
+        
         // Send buffer warmup silence frames
         await this.sendBufferWarmup()
+        
         // Now we're ready - start greeting
         this.isReady = true
         await this.startGreeting()
@@ -277,8 +340,8 @@ class AIVoiceSession {
     try {
       console.log('[AIVoiceSession] Processing speech...')
       
-      // Convert μ-law to PCM
-      const pcmData = new Int16Array(this.audioBuffer.length * FRAME_SIZE)
+      // Convert μ-law to PCM (inbound is always μ-law from Twilio)
+      const pcmData = new Int16Array(this.audioBuffer.length * FRAME_SIZE_MULAW)
       let offset = 0
       
       for (const frame of this.audioBuffer) {
@@ -406,25 +469,56 @@ class AIVoiceSession {
   
 
   private async sendSimpleTestTone(): Promise<void> {
-    console.log('[TEST] Sending simple 440Hz test tone')
-    // Just a quick 440Hz tone for 0.5 seconds to verify connection
-    for (let frameIndex = 0; frameIndex < 25; frameIndex++) {
-      const frame = new Uint8Array(160)
-      for (let i = 0; i < 160; i++) {
-        const time = (frameIndex * 160 + i) / 8000
-        const amplitude = Math.sin(2 * Math.PI * 440 * time)
-        const pcm16 = Math.floor(amplitude * 16384)
-        frame[i] = pcmToMulaw(pcm16)
+    console.log('[TEST] Sending simple 440Hz test tone with codec:', this.outboundCodec)
+    
+    // Generate 0.5 seconds of 440Hz tone
+    const numFrames = 25
+    const samplesPerFrame = this.outboundCodec === AudioCodec.PCM16 ? 160 : 160 // 160 samples at 8kHz
+    
+    for (let frameIndex = 0; frameIndex < numFrames; frameIndex++) {
+      const frame = new Uint8Array(this.outboundFrameSize)
+      
+      if (this.outboundCodec === AudioCodec.PCM16) {
+        // Generate PCM16 directly
+        const view = new DataView(frame.buffer)
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const time = (frameIndex * samplesPerFrame + i) / 8000
+          const amplitude = Math.sin(2 * Math.PI * 440 * time)
+          const pcm16 = Math.floor(amplitude * 16384)
+          // Write as little-endian 16-bit signed integer
+          view.setInt16(i * 2, pcm16, true)
+        }
+      } else {
+        // Generate μ-law
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const time = (frameIndex * samplesPerFrame + i) / 8000
+          const amplitude = Math.sin(2 * Math.PI * 440 * time)
+          const pcm16 = Math.floor(amplitude * 16384)
+          frame[i] = pcmToMulaw(pcm16)
+        }
       }
+      
       await this.sendDirectFrame(frame)
     }
     console.log('[TEST] Test tone complete')
   }
   
   private async sendBufferWarmup(): Promise<void> {
-    console.log('[AIVoiceSession] Sending buffer warmup silence')
+    console.log('[AIVoiceSession] Sending buffer warmup silence for codec:', this.outboundCodec)
+    
     // Send 200ms of silence to prime Twilio's jitter buffer
-    const silenceFrame = new Uint8Array(160).fill(0xFF) // μ-law silence
+    let silenceFrame: Uint8Array
+    
+    if (this.outboundCodec === AudioCodec.PCM16) {
+      // PCM16 silence: all zeros
+      silenceFrame = new Uint8Array(this.outboundFrameSize).fill(0)
+      console.log('[AIVoiceSession] Using PCM16 silence (zeros)')
+    } else {
+      // μ-law silence: 0xFF
+      silenceFrame = new Uint8Array(this.outboundFrameSize).fill(0xFF)
+      console.log('[AIVoiceSession] Using μ-law silence (0xFF)')
+    }
+    
     for (let i = 0; i < 10; i++) {
       await this.sendOutboundFrame(silenceFrame)
     }
@@ -516,8 +610,23 @@ class AIVoiceSession {
     this.turnState = TurnState.SPEAKING
     
     try {
-      // First try PCM format without container (most reliable)
-      console.log('[ElevenLabs] Requesting pcm_16000 format for:', text.substring(0, 50) + '...')
+      // Choose output format based on negotiated codec
+      let outputFormat: string
+      let expectedSampleRate: number
+      
+      if (this.outboundCodec === AudioCodec.PCM16) {
+        // For PCM16 output, request raw PCM from ElevenLabs
+        outputFormat = 'pcm_8000'  // Request 8kHz PCM to match Twilio
+        expectedSampleRate = 8000
+        console.log('[ElevenLabs] ✅ Codec is PCM16, requesting pcm_8000 from ElevenLabs')
+      } else {
+        // For μ-law output, request μ-law directly
+        outputFormat = 'ulaw_8000'
+        expectedSampleRate = 8000
+        console.log('[ElevenLabs] ✅ Codec is μ-law, requesting ulaw_8000 from ElevenLabs')
+      }
+      
+      console.log(`[ElevenLabs] Requesting ${outputFormat} format for: ${text.substring(0, 50)}...`)
       
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
         method: 'POST',
@@ -534,7 +643,7 @@ class AIVoiceSession {
             style: 0.0,
             use_speaker_boost: true
           },
-          output_format: 'pcm_16000' // Try raw PCM first
+          output_format: outputFormat  // Use codec-specific format
         })
       })
       
@@ -588,86 +697,57 @@ class AIVoiceSession {
         console.log(`[ElevenLabs] First 16 bytes (ascii): ${headerAscii}`)
       }
       
-      let audioBuffer: number[] = []
       let totalFramesSent = 0
       
-      // Check if response is WAV container or raw PCM
+      // Check if response is WAV container or raw audio
       const wavInfo = this.parseWavHeader(fullBuffer)
+      let audioData: Uint8Array
       
       if (wavInfo) {
-        // It's a WAV file - extract the audio data
-        console.log('[ElevenLabs] Processing WAV container audio')
+        console.log('[ElevenLabs] Detected WAV container, extracting audio data')
+        audioData = wavInfo.audioData
+      } else {
+        console.log('[ElevenLabs] Raw audio data (no WAV container)')
+        audioData = fullBuffer
+      }
+      
+      // Process based on codec
+      if (this.outboundCodec === AudioCodec.PCM16) {
+        // PCM16 output - send raw PCM directly to Twilio
+        console.log('[ElevenLabs] ✅ Processing PCM16 audio for PCM16 output')
         
-        if (wavInfo.format === 7) {
-          // μ-law format - use directly
-          console.log('[ElevenLabs] WAV contains μ-law audio - using directly')
-          audioBuffer = Array.from(wavInfo.audioData)
-        } else if (wavInfo.format === 1) {
-          // PCM format - need to convert to μ-law
-          console.log('[ElevenLabs] WAV contains PCM audio - converting to μ-law')
+        // Send PCM16 frames directly
+        for (let i = 0; i < audioData.length; i += this.outboundFrameSize) {
+          const frame = new Uint8Array(this.outboundFrameSize)
+          const remaining = Math.min(this.outboundFrameSize, audioData.length - i)
+          frame.set(audioData.slice(i, i + remaining))
           
-          // Parse PCM samples based on bit depth
-          const bytesPerSample = wavInfo.bitsPerSample / 8
-          const view = new DataView(wavInfo.audioData.buffer, wavInfo.audioData.byteOffset, wavInfo.audioData.byteLength)
-          
-          for (let i = 0; i < wavInfo.audioData.length - bytesPerSample + 1; i += bytesPerSample) {
-            let pcmSample = 0
-            if (wavInfo.bitsPerSample === 16) {
-              pcmSample = view.getInt16(i, true) // Little-endian 16-bit PCM
-            } else if (wavInfo.bitsPerSample === 8) {
-              pcmSample = (wavInfo.audioData[i] - 128) * 256 // 8-bit PCM to 16-bit range
-            }
-            
-            // Resample if needed (from 16kHz to 8kHz)
-            if (wavInfo.sampleRate === 16000) {
-              // Simple downsampling - take every other sample
-              if (i % (bytesPerSample * 2) === 0) {
-                audioBuffer.push(pcmToMulaw(pcmSample))
-              }
-            } else if (wavInfo.sampleRate === 8000) {
-              audioBuffer.push(pcmToMulaw(pcmSample))
-            }
+          // Pad with silence if needed (PCM16 silence is 0)
+          if (remaining < this.outboundFrameSize) {
+            // Already zero-initialized
           }
-        } else {
-          console.warn(`[ElevenLabs] Unsupported WAV format: ${wavInfo.format}`)
-          // Fall back to treating as raw data
-          audioBuffer = Array.from(fullBuffer)
+          
+          await this.sendOutboundFrame(frame)
+          totalFramesSent++
         }
       } else {
-        // Not a WAV file - assume raw PCM16 at 16kHz
-        console.log('[ElevenLabs] Processing as raw PCM16 @ 16kHz')
+        // μ-law output - send μ-law directly to Twilio
+        console.log('[ElevenLabs] ✅ Processing μ-law audio for μ-law output')
         
-        // Convert PCM16 to μ-law with downsampling
-        const view = new DataView(fullBuffer.buffer, fullBuffer.byteOffset, fullBuffer.byteLength)
-        for (let i = 0; i < fullBuffer.length - 1; i += 4) {
-          // Read 16-bit PCM sample (little-endian)
-          const pcmSample = view.getInt16(i, true)
-          // Downsample from 16kHz to 8kHz (take every other sample)
-          audioBuffer.push(pcmToMulaw(pcmSample))
+        // Send μ-law frames directly
+        for (let i = 0; i < audioData.length; i += this.outboundFrameSize) {
+          const frame = new Uint8Array(this.outboundFrameSize)
+          const remaining = Math.min(this.outboundFrameSize, audioData.length - i)
+          frame.set(audioData.slice(i, i + remaining))
+          
+          // Pad with silence if needed (μ-law silence is 0xFF)
+          if (remaining < this.outboundFrameSize) {
+            frame.fill(0xFF, remaining)
+          }
+          
+          await this.sendOutboundFrame(frame)
+          totalFramesSent++
         }
-      }
-      
-      // Send the processed audio frames
-      while (audioBuffer.length >= FRAME_SIZE) {
-        const frame = new Uint8Array(FRAME_SIZE)
-        for (let i = 0; i < FRAME_SIZE; i++) {
-          frame[i] = audioBuffer.shift()!
-        }
-        await this.sendOutboundFrame(frame)
-        totalFramesSent++
-      }
-      
-      // Send any remaining audio with padding
-      if (audioBuffer.length > 0) {
-        const frame = new Uint8Array(FRAME_SIZE)
-        for (let i = 0; i < audioBuffer.length; i++) {
-          frame[i] = audioBuffer[i]
-        }
-        for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
-          frame[i] = 0xFF // μ-law silence
-        }
-        await this.sendOutboundFrame(frame)
-        totalFramesSent++
       }
       
       console.log(`[ElevenLabs] Speech complete. Total frames sent: ${totalFramesSent}`)
@@ -684,9 +764,10 @@ class AIVoiceSession {
     } catch (error) {
       console.error('[AIVoiceSession] Error generating speech:', error)
       
-      // Try fallback with ulaw_8000 if PCM failed
+      // Try fallback with alternative format
       try {
-        console.log('[ElevenLabs] Fallback: Trying ulaw_8000 format')
+        const fallbackFormat = this.outboundCodec === AudioCodec.PCM16 ? 'pcm_16000' : 'pcm_8000'
+        console.log(`[ElevenLabs] Fallback: Trying ${fallbackFormat} format`)
         
         const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
           method: 'POST',
@@ -703,7 +784,7 @@ class AIVoiceSession {
               style: 0.0,
               use_speaker_boost: true
             },
-            output_format: 'ulaw_8000'
+            output_format: fallbackFormat
           })
         })
         
@@ -731,31 +812,73 @@ class AIVoiceSession {
           offset += chunk.length
         }
         
-        // Log first bytes of fallback format
-        if (fullBuffer.length >= 16) {
-          const header = Array.from(fullBuffer.slice(0, 16))
-          const headerHex = header.map(b => b.toString(16).padStart(2, '0')).join(' ')
-          console.log(`[ElevenLabs] Fallback first 16 bytes (hex): ${headerHex}`)
-        }
-        
-        // Check if it's wrapped in WAV
+        // Process fallback based on codec
         const wavInfo = this.parseWavHeader(fullBuffer)
         const audioData = wavInfo ? wavInfo.audioData : fullBuffer
         
-        // Send μ-law frames
-        let totalFramesSent = 0
-        for (let i = 0; i < audioData.length; i += FRAME_SIZE) {
-          const frame = new Uint8Array(FRAME_SIZE)
-          const remaining = Math.min(FRAME_SIZE, audioData.length - i)
-          frame.set(audioData.slice(i, i + remaining))
-          if (remaining < FRAME_SIZE) {
-            frame.fill(0xFF, remaining) // Pad with silence
+        if (this.outboundCodec === AudioCodec.PCM16) {
+          // Handle PCM fallback for PCM16 codec
+          if (fallbackFormat === 'pcm_16000') {
+            // Downsample from 16kHz to 8kHz
+            const view = new DataView(audioData.buffer, audioData.byteOffset, audioData.byteLength)
+            const downsampled = new Uint8Array((audioData.length / 4) * 2)
+            const outView = new DataView(downsampled.buffer)
+            let outIndex = 0
+            
+            for (let i = 0; i < audioData.length - 3; i += 4) {
+              // Take every other sample (16kHz to 8kHz)
+              const sample = view.getInt16(i, true)
+              outView.setInt16(outIndex, sample, true)
+              outIndex += 2
+            }
+            
+            // Send PCM16 frames
+            for (let i = 0; i < downsampled.length; i += this.outboundFrameSize) {
+              const frame = new Uint8Array(this.outboundFrameSize)
+              const remaining = Math.min(this.outboundFrameSize, downsampled.length - i)
+              frame.set(downsampled.slice(i, i + remaining))
+              await this.sendOutboundFrame(frame)
+            }
+          } else {
+            // Already 8kHz, send directly
+            for (let i = 0; i < audioData.length; i += this.outboundFrameSize) {
+              const frame = new Uint8Array(this.outboundFrameSize)
+              const remaining = Math.min(this.outboundFrameSize, audioData.length - i)
+              frame.set(audioData.slice(i, i + remaining))
+              await this.sendOutboundFrame(frame)
+            }
           }
-          await this.sendOutboundFrame(frame)
-          totalFramesSent++
+        } else {
+          // Convert PCM to μ-law for μ-law codec
+          const view = new DataView(audioData.buffer, audioData.byteOffset, audioData.byteLength)
+          const mulawBuffer: number[] = []
+          
+          for (let i = 0; i < audioData.length - 1; i += 2) {
+            const pcmSample = view.getInt16(i, true)
+            mulawBuffer.push(pcmToMulaw(pcmSample))
+          }
+          
+          // Send μ-law frames
+          while (mulawBuffer.length >= this.outboundFrameSize) {
+            const frame = new Uint8Array(this.outboundFrameSize)
+            for (let i = 0; i < this.outboundFrameSize; i++) {
+              frame[i] = mulawBuffer.shift()!
+            }
+            await this.sendOutboundFrame(frame)
+          }
+          
+          // Send remaining with padding
+          if (mulawBuffer.length > 0) {
+            const frame = new Uint8Array(this.outboundFrameSize)
+            for (let i = 0; i < mulawBuffer.length; i++) {
+              frame[i] = mulawBuffer[i]
+            }
+            frame.fill(0xFF, mulawBuffer.length)
+            await this.sendOutboundFrame(frame)
+          }
         }
         
-        console.log(`[ElevenLabs] Fallback complete. Frames sent: ${totalFramesSent}`)
+        console.log('[ElevenLabs] Fallback complete')
         
       } catch (fallbackError) {
         console.error('[AIVoiceSession] Fallback also failed:', fallbackError)
@@ -766,39 +889,66 @@ class AIVoiceSession {
   }
 
   private async sendTestPattern(): Promise<void> {
-    console.log('[TEST] Sending diagnostic audio patterns')
+    console.log('[TEST] Sending diagnostic audio patterns with codec:', this.outboundCodec)
+    const samplesPerFrame = 160 // Always 160 samples at 8kHz
     
     // Pattern 1: Pure silence (1 second)
     console.log('[TEST] Pattern 1: Silence')
     for (let i = 0; i < 50; i++) {
-      const frame = new Uint8Array(160)
-      frame.fill(0xFF) // μ-law silence
+      const frame = new Uint8Array(this.outboundFrameSize)
+      if (this.outboundCodec === AudioCodec.PCM16) {
+        // PCM16 silence is all zeros (already initialized)
+      } else {
+        frame.fill(0xFF) // μ-law silence
+      }
       await this.sendDirectFrame(frame)
     }
     
     // Pattern 2: Simple 440Hz tone (A note)
     console.log('[TEST] Pattern 2: 440Hz tone')
     for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
-      const frame = new Uint8Array(160)
-      for (let i = 0; i < 160; i++) {
-        const time = (frameIndex * 160 + i) / 8000
-        const amplitude = Math.sin(2 * Math.PI * 440 * time)
-        const pcm16 = Math.floor(amplitude * 16384) // Half amplitude
-        frame[i] = pcmToMulaw(pcm16)
+      const frame = new Uint8Array(this.outboundFrameSize)
+      
+      if (this.outboundCodec === AudioCodec.PCM16) {
+        const view = new DataView(frame.buffer)
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const time = (frameIndex * samplesPerFrame + i) / 8000
+          const amplitude = Math.sin(2 * Math.PI * 440 * time)
+          const pcm16 = Math.floor(amplitude * 16384)
+          view.setInt16(i * 2, pcm16, true)
+        }
+      } else {
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const time = (frameIndex * samplesPerFrame + i) / 8000
+          const amplitude = Math.sin(2 * Math.PI * 440 * time)
+          const pcm16 = Math.floor(amplitude * 16384)
+          frame[i] = pcmToMulaw(pcm16)
+        }
       }
+      
       await this.sendDirectFrame(frame)
     }
     
-    // Pattern 3: Square wave using proper μ-law encoding
+    // Pattern 3: Square wave
     console.log('[TEST] Pattern 3: Square wave')
     for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
-      const frame = new Uint8Array(160)
-      for (let i = 0; i < 160; i++) {
-        const sampleIndex = frameIndex * 160 + i
-        // 200Hz square wave - alternating between +/- amplitude
-        const squareValue = ((sampleIndex / 20) % 2) < 1 ? 16384 : -16384
-        frame[i] = pcmToMulaw(squareValue)
+      const frame = new Uint8Array(this.outboundFrameSize)
+      
+      if (this.outboundCodec === AudioCodec.PCM16) {
+        const view = new DataView(frame.buffer)
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const sampleIndex = frameIndex * samplesPerFrame + i
+          const squareValue = ((sampleIndex / 20) % 2) < 1 ? 16384 : -16384
+          view.setInt16(i * 2, squareValue, true)
+        }
+      } else {
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const sampleIndex = frameIndex * samplesPerFrame + i
+          const squareValue = ((sampleIndex / 20) % 2) < 1 ? 16384 : -16384
+          frame[i] = pcmToMulaw(squareValue)
+        }
       }
+      
       await this.sendDirectFrame(frame)
     }
     
@@ -807,28 +957,47 @@ class AIVoiceSession {
 
   private async sendTestTone(): Promise<void> {
     console.log('[AIVoiceSession] Sending test tone to verify audio pipeline')
+    console.log('[AIVoiceSession] Using codec:', this.outboundCodec, 'frame size:', this.outboundFrameSize)
     
     // Generate 400Hz tone at 8kHz for 1 second
     const sampleRate = 8000
     const frequency = 400
-    const duration = 1 // seconds (shorter for quicker test)
+    const duration = 1 // seconds
     const totalSamples = sampleRate * duration
-    const totalFrames = Math.ceil(totalSamples / FRAME_SIZE)
+    const samplesPerFrame = this.outboundCodec === AudioCodec.PCM16 ? 160 : 160
+    const totalFrames = Math.ceil(totalSamples / samplesPerFrame)
     
     for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
-      const frame = new Uint8Array(FRAME_SIZE)
+      const frame = new Uint8Array(this.outboundFrameSize)
       
-      for (let i = 0; i < FRAME_SIZE; i++) {
-        const sampleIndex = frameIndex * FRAME_SIZE + i
-        if (sampleIndex < totalSamples) {
-          // Generate sine wave sample
-          const time = sampleIndex / sampleRate
-          const amplitude = Math.sin(2 * Math.PI * frequency * time)
-          // Convert to proper μ-law encoding
-          const pcm16 = Math.floor(amplitude * 32767)
-          frame[i] = pcmToMulaw(pcm16)
-        } else {
-          frame[i] = 0xFF // Proper μ-law silence
+      if (this.outboundCodec === AudioCodec.PCM16) {
+        // Generate PCM16 directly
+        const view = new DataView(frame.buffer)
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const sampleIndex = frameIndex * samplesPerFrame + i
+          if (sampleIndex < totalSamples) {
+            const time = sampleIndex / sampleRate
+            const amplitude = Math.sin(2 * Math.PI * frequency * time)
+            const pcm16 = Math.floor(amplitude * 32767)
+            // Write as little-endian 16-bit signed integer
+            view.setInt16(i * 2, pcm16, true)
+          } else {
+            // PCM16 silence is 0
+            view.setInt16(i * 2, 0, true)
+          }
+        }
+      } else {
+        // Generate μ-law
+        for (let i = 0; i < samplesPerFrame; i++) {
+          const sampleIndex = frameIndex * samplesPerFrame + i
+          if (sampleIndex < totalSamples) {
+            const time = sampleIndex / sampleRate
+            const amplitude = Math.sin(2 * Math.PI * frequency * time)
+            const pcm16 = Math.floor(amplitude * 32767)
+            frame[i] = pcmToMulaw(pcm16)
+          } else {
+            frame[i] = 0xFF // μ-law silence
+          }
         }
       }
       
