@@ -536,23 +536,23 @@ class AIVoiceSession {
     if (!this.streamSid || this.isClosed || this.ws.readyState !== 1) return
     
     const payload = btoa(String.fromCharCode(...frame))
-    const timestamp = this.outboundTsBase + (this.outboundSeq * FRAME_DURATION_MS)
     
+    // CRITICAL FIX: Only send required fields for outbound media
+    // DO NOT include timestamp or sequenceNumber - they're only for inbound messages!
     const message = {
       event: 'media',
       streamSid: this.streamSid,
       media: {
-        track: 'outbound', // Critical: must specify outbound track
-        timestamp: String(timestamp),
-        sequenceNumber: this.outboundSeq,
-        payload: payload
+        track: 'outbound', // Required for outbound audio
+        payload: payload    // The audio data - ONLY these 2 fields allowed
       }
     }
     
     this.ws.send(JSON.stringify(message))
-    this.outboundSeq++
+    this.outboundSeq++ // Keep for internal tracking only
     
-    // No setTimeout - let timestamp scheduling handle pacing
+    // Pace frames at 20ms intervals to match 8kHz audio rate
+    await new Promise(resolve => setTimeout(resolve, 20))
   }
   
   private async sendDirectFrame(frame: Uint8Array): Promise<void> {
