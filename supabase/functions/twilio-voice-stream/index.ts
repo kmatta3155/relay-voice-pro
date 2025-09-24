@@ -6,6 +6,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0'
+import { EdgeLogger } from '../_shared/logger.ts'
+
+// Initialize logger
+const logger = new EdgeLogger('twilio-voice-stream')
 
 const corsHeaders = { 
   'Access-Control-Allow-Origin': '*',
@@ -44,6 +48,15 @@ enum TurnState {
 }
 
 // ========== AUDIO PROCESSING ==========
+
+// Helper function to convert binary data to hex string for debugging
+function toHexString(buffer: Uint8Array, maxBytes: number = 16): string {
+  const bytes = Math.min(buffer.length, maxBytes)
+  const hex = Array.from(buffer.slice(0, bytes))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join(' ')
+  return `${hex}${buffer.length > maxBytes ? '...' : ''} (${buffer.length} bytes total)`
+}
 
 function mulawToPcm(mulaw: number): number {
   mulaw = (~mulaw) & 0xff
@@ -180,6 +193,15 @@ class AIVoiceSession {
     this.openaiKey = Deno.env.get('OPENAI_API_KEY') || ''
     this.elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY') || ''
     
+    logger.info('AIVoiceSession initialized', {
+      tenantId: this.tenantId,
+      businessName: this.businessName,
+      voiceId: this.voiceId,
+      greetingLength: this.greeting?.length || 0,
+      hasOpenAIKey: !!this.openaiKey,
+      hasElevenLabsKey: !!this.elevenLabsKey
+    })
+    
     this.setupEventListeners()
     // Don't start greeting here - wait for 'start' event
   }
@@ -190,79 +212,116 @@ class AIVoiceSession {
         const message = JSON.parse(event.data)
         await this.handleTwilioMessage(message)
       } catch (error) {
-        console.error('[AIVoiceSession] Error processing message:', error)
+        logger.error('Error processing WebSocket message', { 
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        })
       }
     }
     
     this.ws.onclose = () => {
-      console.log('[AIVoiceSession] WebSocket closed')
+      logger.info('WebSocket connection closed')
       this.cleanup()
     }
     
     this.ws.onerror = (error) => {
-      console.error('[AIVoiceSession] WebSocket error:', error)
+      logger.error('WebSocket error occurred', { 
+        error: error instanceof Error ? error.message : String(error),
+        readyState: this.ws.readyState
+      })
     }
   }
   
   private async handleTwilioMessage(message: any): Promise<void> {
     switch (message.event) {
       case 'connected':
-        console.log('[AIVoiceSession] Connected to Twilio - waiting for start event')
+        logger.info('Connected to Twilio WebSocket - waiting for start event')
         // DO NOT trigger greeting here - wait for streamSid
         break
         
       case 'start':
-        console.log('[AIVoiceSession] Call started - streamSid:', message.start?.streamSid)
-        console.log('[AIVoiceSession] Full start event:', JSON.stringify(message.start, null, 2))
+        logger.info('Call started', {
+          streamSid: message.start?.streamSid,
+          callSid: message.start?.callSid
+        })
+        logger.debug('Full start event received', {
+          startEvent: message.start
+        })
         
         // Capture streamSid from start event
         if (message.start?.streamSid) {
           this.streamSid = message.start.streamSid
-          console.log('[AIVoiceSession] StreamSid captured:', this.streamSid)
+          logger.info('StreamSid captured', { streamSid: this.streamSid })
+        } else {
+          logger.warn('No streamSid in start event', { startKeys: Object.keys(message.start || {}) })
         }
         
         // CRITICAL: Detect negotiated codec from mediaFormat
         if (message.start?.mediaFormat) {
           const mediaFormat = message.start.mediaFormat
-          console.log('[AIVoiceSession] Media format negotiated:', JSON.stringify(mediaFormat))
+          logger.info('Media format negotiated', {
+            mediaFormat,
+            encoding: mediaFormat.encoding,
+            sampleRate: mediaFormat.sampleRate,
+            channels: mediaFormat.channels
+          })
           
           // Check the encoding field
           if (mediaFormat.encoding) {
             const encoding = mediaFormat.encoding.toLowerCase()
-            console.log('[AIVoiceSession] Detected encoding:', encoding)
+            logger.debug('Detected encoding type', { 
+              encoding,
+              originalEncoding: mediaFormat.encoding
+            })
             
             if (encoding.includes('pcm') || encoding.includes('l16')) {
               // PCM16 format detected
               this.outboundCodec = AudioCodec.PCM16
               this.outboundFrameSize = FRAME_SIZE_PCM16
-              console.log('[AIVoiceSession] ✅ Codec set to PCM16, frame size:', this.outboundFrameSize)
+              logger.info('✅ Codec set to PCM16', {
+                codec: this.outboundCodec,
+                frameSize: this.outboundFrameSize,
+                bytesPerFrame: FRAME_SIZE_PCM16
+              })
             } else if (encoding.includes('mulaw') || encoding.includes('ulaw') || encoding.includes('g711')) {
               // μ-law format detected
               this.outboundCodec = AudioCodec.MULAW
               this.outboundFrameSize = FRAME_SIZE_MULAW
-              console.log('[AIVoiceSession] ✅ Codec set to μ-law, frame size:', this.outboundFrameSize)
+              logger.info('✅ Codec set to μ-law', {
+                codec: this.outboundCodec,
+                frameSize: this.outboundFrameSize,
+                bytesPerFrame: FRAME_SIZE_MULAW
+              })
             } else {
               // Default to μ-law for unknown formats
-              console.log(`[AIVoiceSession] Unknown encoding '${encoding}', defaulting to μ-law`)
+              logger.warn('Unknown encoding, defaulting to μ-law', {
+                encoding,
+                defaultCodec: AudioCodec.MULAW,
+                defaultFrameSize: FRAME_SIZE_MULAW
+              })
               this.outboundCodec = AudioCodec.MULAW
               this.outboundFrameSize = FRAME_SIZE_MULAW
             }
           } else {
             // No encoding specified, default to μ-law
-            console.log('[AIVoiceSession] No encoding specified, defaulting to μ-law')
+            logger.warn('No encoding specified in mediaFormat, defaulting to μ-law', {
+              mediaFormatKeys: Object.keys(mediaFormat)
+            })
             this.outboundCodec = AudioCodec.MULAW
             this.outboundFrameSize = FRAME_SIZE_MULAW
           }
         } else {
           // No mediaFormat, default to μ-law for backward compatibility
-          console.log('[AIVoiceSession] No mediaFormat in start event, defaulting to μ-law')
+          logger.warn('No mediaFormat in start event, defaulting to μ-law for backward compatibility')
           this.outboundCodec = AudioCodec.MULAW
           this.outboundFrameSize = FRAME_SIZE_MULAW
         }
         
-        console.log('[AIVoiceSession] Final codec configuration:', {
+        logger.info('Final codec configuration determined', {
           codec: this.outboundCodec,
-          frameSize: this.outboundFrameSize
+          frameSize: this.outboundFrameSize,
+          framesPerSecond: 50,
+          durationPerFrame: FRAME_DURATION_MS
         })
         
         // Extract custom parameters if provided
@@ -293,18 +352,30 @@ class AIVoiceSession {
         break
         
       case 'stop':
-        console.log('[AIVoiceSession] Call ended')
+        logger.info('Call ended - stop event received')
         this.cleanup()
         break
     }
   }
   
   private async processAudioFrame(media: any): Promise<void> {
-    if (!media.payload) return
+    if (!media.payload) {
+      logger.debug('Empty audio frame received')
+      return
+    }
     
     // Decode base64 μ-law audio
     const audioData = Uint8Array.from(atob(media.payload), c => c.charCodeAt(0))
     this.audioBuffer.push(audioData)
+    
+    // Log first few incoming frames for debugging
+    if (this.audioBuffer.length <= 3) {
+      logger.debug('Incoming audio frame', {
+        frameNumber: this.audioBuffer.length,
+        frameSize: audioData.length,
+        hexDump: toHexString(audioData, 16)
+      })
+    }
     
     // VAD: Only update lastActivityTime on voiced frames (not silence)
     const rms = calculateRMS([audioData])
@@ -338,7 +409,10 @@ class AIVoiceSession {
     this.turnState = TurnState.THINKING
     
     try {
-      console.log('[AIVoiceSession] Processing speech...')
+      logger.info('Processing user speech', {
+        bufferLength: this.audioBuffer.length,
+        durationMs: this.audioBuffer.length * FRAME_DURATION_MS
+      })
       
       // Convert μ-law to PCM (inbound is always μ-law from Twilio)
       const pcmData = new Int16Array(this.audioBuffer.length * FRAME_SIZE_MULAW)
@@ -357,7 +431,10 @@ class AIVoiceSession {
       const transcript = await this.transcribeAudio(wavData)
       
       if (transcript.trim()) {
-        console.log('[AIVoiceSession] User said:', transcript)
+        logger.info('Transcription completed', {
+          transcript,
+          transcriptLength: transcript.length
+        })
         
         // Generate AI response
         const response = await this.generateResponse(transcript)
@@ -367,7 +444,10 @@ class AIVoiceSession {
       }
       
     } catch (error) {
-      console.error('[AIVoiceSession] Error processing speech:', error)
+      logger.error('Error processing user speech', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
     } finally {
       this.audioBuffer = []
       this.isProcessing = false
@@ -376,6 +456,11 @@ class AIVoiceSession {
   }
   
   private async transcribeAudio(wavData: Uint8Array): Promise<string> {
+    logger.debug('Starting Whisper transcription', {
+      audioSize: wavData.length,
+      model: 'whisper-1'
+    })
+    
     const formData = new FormData()
     formData.append('file', new Blob([wavData], { type: 'audio/wav' }), 'audio.wav')
     formData.append('model', 'whisper-1')
@@ -390,10 +475,21 @@ class AIVoiceSession {
     })
     
     if (!response.ok) {
-      throw new Error(`Whisper API error: ${response.status}`)
+      const errorText = await response.text()
+      logger.error('Whisper API error', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      })
+      throw new Error(`Whisper API error: ${response.status} - ${errorText}`)
     }
     
     const result = await response.json()
+    logger.debug('Whisper transcription result', {
+      hasText: !!result.text,
+      textLength: result.text?.length || 0
+    })
+    
     return result.text || ''
   }
   
@@ -413,7 +509,10 @@ class AIVoiceSession {
           systemPrompt = agent.system_prompt
         }
       } catch (error) {
-        console.warn('[AIVoiceSession] Failed to fetch agent prompt:', error)
+        logger.warn('Failed to fetch agent prompt from database', {
+          error: error instanceof Error ? error.message : String(error),
+          tenantId: this.tenantId
+        })
       }
     }
     
@@ -425,29 +524,50 @@ class AIVoiceSession {
       this.conversationHistory = this.conversationHistory.slice(-20)
     }
     
+    const requestPayload = {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...this.conversationHistory
+      ],
+      max_tokens: 150,
+      temperature: 0.7
+    }
+    
+    logger.debug('OpenAI chat request', {
+      model: requestPayload.model,
+      messageCount: requestPayload.messages.length,
+      maxTokens: requestPayload.max_tokens,
+      temperature: requestPayload.temperature
+    })
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.openaiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...this.conversationHistory
-        ],
-        max_tokens: 150,
-        temperature: 0.7
-      })
+      body: JSON.stringify(requestPayload)
     })
     
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`)
+      const errorText = await response.text()
+      logger.error('OpenAI API error', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      })
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
     }
     
     const result = await response.json()
     const aiResponse = result.choices[0]?.message?.content || "I'm sorry, I didn't catch that. Could you please repeat?"
+    
+    logger.debug('OpenAI response received', {
+      hasResponse: !!result.choices[0]?.message?.content,
+      responseLength: aiResponse.length,
+      usage: result.usage
+    })
     
     // Add to conversation history
     this.conversationHistory.push({ role: 'assistant', content: aiResponse })
@@ -462,14 +582,23 @@ class AIVoiceSession {
   
   // Stop and clean up
   private cleanup(): void {
-    console.log('[AIVoiceSession] Cleaning up session')
+    logger.info('Cleaning up session', {
+      hasGreeted: this.hasGreeted,
+      conversationLength: this.conversationHistory.length,
+      isReady: this.isReady
+    })
     this.isClosed = true
     this.audioBuffer = []
   }
   
 
   private async sendSimpleTestTone(): Promise<void> {
-    console.log('[TEST] Sending simple 440Hz test tone with codec:', this.outboundCodec)
+    logger.debug('Sending 440Hz test tone', {
+      codec: this.outboundCodec,
+      frameSize: this.outboundFrameSize,
+      frequency: 440,
+      durationMs: 500
+    })
     
     // Generate 0.5 seconds of 440Hz tone
     const numFrames = 25
@@ -500,11 +629,18 @@ class AIVoiceSession {
       
       await this.sendDirectFrame(frame)
     }
-    console.log('[TEST] Test tone complete')
+    logger.debug('Test tone transmission complete', {
+      framesSent: numFrames
+    })
   }
   
   private async sendBufferWarmup(): Promise<void> {
-    console.log('[AIVoiceSession] Sending buffer warmup silence for codec:', this.outboundCodec)
+    logger.debug('Starting buffer warmup', {
+      codec: this.outboundCodec,
+      frameSize: this.outboundFrameSize,
+      warmupFrames: 10,
+      warmupDurationMs: 200
+    })
     
     // Send 200ms of silence to prime Twilio's jitter buffer
     let silenceFrame: Uint8Array
@@ -512,24 +648,50 @@ class AIVoiceSession {
     if (this.outboundCodec === AudioCodec.PCM16) {
       // PCM16 silence: all zeros
       silenceFrame = new Uint8Array(this.outboundFrameSize).fill(0)
-      console.log('[AIVoiceSession] Using PCM16 silence (zeros)')
+      logger.debug('Using PCM16 silence pattern', {
+        fillValue: '0x00',
+        frameSize: this.outboundFrameSize
+      })
     } else {
       // μ-law silence: 0xFF
       silenceFrame = new Uint8Array(this.outboundFrameSize).fill(0xFF)
-      console.log('[AIVoiceSession] Using μ-law silence (0xFF)')
+      logger.debug('Using μ-law silence pattern', {
+        fillValue: '0xFF',
+        frameSize: this.outboundFrameSize
+      })
     }
     
     for (let i = 0; i < 10; i++) {
       await this.sendOutboundFrame(silenceFrame)
     }
-    console.log('[AIVoiceSession] Buffer warmup complete')
+    logger.debug('Buffer warmup complete', {
+      framesSent: 10
+    })
   }
   
   private async sendOutboundFrame(frame: Uint8Array): Promise<void> {
     // Guard against sending after close or without streamSid
-    if (!this.streamSid || this.isClosed || this.ws.readyState !== 1) return
+    if (!this.streamSid || this.isClosed || this.ws.readyState !== 1) {
+      logger.debug('Skipping frame send', {
+        hasStreamSid: !!this.streamSid,
+        isClosed: this.isClosed,
+        wsReadyState: this.ws.readyState
+      })
+      return
+    }
     
     const payload = btoa(String.fromCharCode(...frame))
+    
+    // Log first few frames for debugging
+    if (this.outboundSeq < 3) {
+      logger.debug('Sending initial frame', {
+        frameNumber: this.outboundSeq,
+        frameSize: frame.length,
+        codec: this.outboundCodec,
+        hexDump: toHexString(frame, 32),
+        payloadLength: payload.length
+      })
+    }
     
     // CRITICAL FIX: Only send required fields for outbound media
     // DO NOT include timestamp or sequenceNumber - they're only for inbound messages!
@@ -568,7 +730,7 @@ class AIVoiceSession {
     const wave = String.fromCharCode(buffer[8], buffer[9], buffer[10], buffer[11])
     if (wave !== 'WAVE') return null
     
-    console.log('[WAV Parser] Detected WAV container')
+    logger.debug('WAV container detected')
     
     // Find fmt chunk
     let offset = 12
@@ -587,14 +749,23 @@ class AIVoiceSession {
         sampleRate = view.getUint32(offset + 12, true)
         bitsPerSample = view.getUint16(offset + 22, true)
         
-        console.log(`[WAV Parser] Format: ${audioFormat} (1=PCM, 7=μ-law), Channels: ${numChannels}, SampleRate: ${sampleRate}, Bits: ${bitsPerSample}`)
+        logger.debug('WAV format details', {
+          audioFormat,
+          formatName: audioFormat === 1 ? 'PCM' : audioFormat === 7 ? 'μ-law' : 'Unknown',
+          numChannels,
+          sampleRate,
+          bitsPerSample
+        })
       } else if (chunkId === 'data') {
         // Found the data chunk - this contains the actual audio
         const dataStart = offset + 8
         const dataEnd = Math.min(dataStart + chunkSize, buffer.length)
         const audioData = buffer.slice(dataStart, dataEnd)
         
-        console.log(`[WAV Parser] Found data chunk: ${audioData.length} bytes`)
+        logger.debug('WAV data chunk found', {
+          dataSize: audioData.length,
+          firstBytes: toHexString(audioData, 16)
+        })
         return { audioData, format: audioFormat, sampleRate, bitsPerSample }
       }
       
@@ -618,15 +789,21 @@ class AIVoiceSession {
         // For PCM16 output, request raw PCM from ElevenLabs
         outputFormat = 'pcm_8000'  // Request 8kHz PCM to match Twilio
         expectedSampleRate = 8000
-        console.log('[ElevenLabs] ✅ Codec is PCM16, requesting pcm_8000 from ElevenLabs')
+        logger.info('✅ Codec is PCM16, requesting pcm_8000 from ElevenLabs')
       } else {
         // For μ-law output, request μ-law directly
         outputFormat = 'ulaw_8000'
         expectedSampleRate = 8000
-        console.log('[ElevenLabs] ✅ Codec is μ-law, requesting ulaw_8000 from ElevenLabs')
+        logger.info('✅ Codec is μ-law, requesting ulaw_8000 from ElevenLabs')
       }
       
-      console.log(`[ElevenLabs] Requesting ${outputFormat} format for: ${text.substring(0, 50)}...`)
+      logger.info('ElevenLabs TTS request', {
+        outputFormat,
+        textLength: text.length,
+        textPreview: text.substring(0, 50),
+        voiceId: this.voiceId,
+        model: 'eleven_turbo_v2'
+      })
       
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
         method: 'POST',
@@ -658,7 +835,11 @@ class AIVoiceSession {
       
       // Log response metadata
       const contentType = response.headers.get('content-type')
-      console.log('[ElevenLabs] Response content-type:', contentType)
+      logger.debug('ElevenLabs response headers', {
+        contentType,
+        contentLength: response.headers.get('content-length'),
+        status: response.status
+      })
       
       // Collect the entire response first to check format
       const reader = response.body.getReader()
@@ -678,7 +859,10 @@ class AIVoiceSession {
         reader.releaseLock()
       }
       
-      console.log(`[ElevenLabs] Received total ${totalBytes} bytes`)
+      logger.info('ElevenLabs audio received', {
+        totalBytes,
+        chunksCount: chunks.length
+      })
       
       // Combine all chunks
       const fullBuffer = new Uint8Array(totalBytes)
@@ -693,8 +877,11 @@ class AIVoiceSession {
         const header = Array.from(fullBuffer.slice(0, 16))
         const headerHex = header.map(b => b.toString(16).padStart(2, '0')).join(' ')
         const headerAscii = header.map(b => b >= 32 && b <= 126 ? String.fromCharCode(b) : '.').join('')
-        console.log(`[ElevenLabs] First 16 bytes (hex): ${headerHex}`)
-        console.log(`[ElevenLabs] First 16 bytes (ascii): ${headerAscii}`)
+        logger.debug('ElevenLabs audio format identification', {
+          hexDump: headerHex,
+          asciiDump: headerAscii,
+          isWAV: headerAscii.startsWith('RIFF')
+        })
       }
       
       let totalFramesSent = 0
@@ -704,17 +891,27 @@ class AIVoiceSession {
       let audioData: Uint8Array
       
       if (wavInfo) {
-        console.log('[ElevenLabs] Detected WAV container, extracting audio data')
+        logger.info('WAV container detected in ElevenLabs response', {
+          audioFormat: wavInfo.format,
+          sampleRate: wavInfo.sampleRate,
+          bitsPerSample: wavInfo.bitsPerSample,
+          dataSize: wavInfo.audioData.length
+        })
         audioData = wavInfo.audioData
       } else {
-        console.log('[ElevenLabs] Raw audio data (no WAV container)')
+        logger.info('Raw audio data from ElevenLabs (no WAV container)', {
+          dataSize: fullBuffer.length
+        })
         audioData = fullBuffer
       }
       
       // Process based on codec
       if (this.outboundCodec === AudioCodec.PCM16) {
         // PCM16 output - send raw PCM directly to Twilio
-        console.log('[ElevenLabs] ✅ Processing PCM16 audio for PCM16 output')
+        logger.info('✅ Processing PCM16 audio for PCM16 output', {
+          audioDataSize: audioData.length,
+          expectedFrames: Math.ceil(audioData.length / this.outboundFrameSize)
+        })
         
         // Send PCM16 frames directly
         for (let i = 0; i < audioData.length; i += this.outboundFrameSize) {
@@ -732,7 +929,10 @@ class AIVoiceSession {
         }
       } else {
         // μ-law output - send μ-law directly to Twilio
-        console.log('[ElevenLabs] ✅ Processing μ-law audio for μ-law output')
+        logger.info('✅ Processing μ-law audio for μ-law output', {
+          audioDataSize: audioData.length,
+          expectedFrames: Math.ceil(audioData.length / this.outboundFrameSize)
+        })
         
         // Send μ-law frames directly
         for (let i = 0; i < audioData.length; i += this.outboundFrameSize) {
@@ -750,7 +950,11 @@ class AIVoiceSession {
         }
       }
       
-      console.log(`[ElevenLabs] Speech complete. Total frames sent: ${totalFramesSent}`)
+      logger.info('Speech transmission complete', {
+        totalFramesSent,
+        totalBytesSent: totalFramesSent * this.outboundFrameSize,
+        durationMs: totalFramesSent * FRAME_DURATION_MS
+      })
       
       // Send mark event to signal end of speech
       if (this.streamSid) {
@@ -762,12 +966,19 @@ class AIVoiceSession {
       }
       
     } catch (error) {
-      console.error('[AIVoiceSession] Error generating speech:', error)
+      logger.error('Error generating speech with ElevenLabs', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        text: text.substring(0, 50)
+      })
       
       // Try fallback with alternative format
       try {
         const fallbackFormat = this.outboundCodec === AudioCodec.PCM16 ? 'pcm_16000' : 'pcm_8000'
-        console.log(`[ElevenLabs] Fallback: Trying ${fallbackFormat} format`)
+        logger.warn('Attempting ElevenLabs fallback format', {
+          fallbackFormat,
+          originalError: error instanceof Error ? error.message : String(error)
+        })
         
         const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
           method: 'POST',
@@ -789,7 +1000,13 @@ class AIVoiceSession {
         })
         
         if (!response.ok) {
-          throw new Error(`ElevenLabs fallback failed: ${response.status}`)
+          const errorText = await response.text()
+          logger.error('ElevenLabs fallback failed', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText
+          })
+          throw new Error(`ElevenLabs fallback failed: ${response.status} - ${errorText}`)
         }
         
         const reader = response.body!.getReader()
@@ -878,10 +1095,13 @@ class AIVoiceSession {
           }
         }
         
-        console.log('[ElevenLabs] Fallback complete')
+        logger.info('ElevenLabs fallback complete')
         
       } catch (fallbackError) {
-        console.error('[AIVoiceSession] Fallback also failed:', fallbackError)
+        logger.error('Both ElevenLabs attempts failed', {
+          error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          stack: fallbackError instanceof Error ? fallbackError.stack : undefined
+        })
       }
     } finally {
       this.turnState = TurnState.LISTENING
@@ -889,11 +1109,14 @@ class AIVoiceSession {
   }
 
   private async sendTestPattern(): Promise<void> {
-    console.log('[TEST] Sending diagnostic audio patterns with codec:', this.outboundCodec)
+    logger.debug('Sending diagnostic audio patterns', {
+      codec: this.outboundCodec,
+      frameSize: this.outboundFrameSize
+    })
     const samplesPerFrame = 160 // Always 160 samples at 8kHz
     
     // Pattern 1: Pure silence (1 second)
-    console.log('[TEST] Pattern 1: Silence')
+    logger.debug('TEST Pattern 1: Silence frames')
     for (let i = 0; i < 50; i++) {
       const frame = new Uint8Array(this.outboundFrameSize)
       if (this.outboundCodec === AudioCodec.PCM16) {
@@ -905,7 +1128,7 @@ class AIVoiceSession {
     }
     
     // Pattern 2: Simple 440Hz tone (A note)
-    console.log('[TEST] Pattern 2: 440Hz tone')
+    logger.debug('TEST Pattern 2: 440Hz tone')
     for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
       const frame = new Uint8Array(this.outboundFrameSize)
       
@@ -930,7 +1153,7 @@ class AIVoiceSession {
     }
     
     // Pattern 3: Square wave
-    console.log('[TEST] Pattern 3: Square wave')
+    logger.debug('TEST Pattern 3: Square wave')
     for (let frameIndex = 0; frameIndex < 50; frameIndex++) {
       const frame = new Uint8Array(this.outboundFrameSize)
       
@@ -952,12 +1175,15 @@ class AIVoiceSession {
       await this.sendDirectFrame(frame)
     }
     
-    console.log('[TEST] All patterns sent')
+    logger.debug('All test patterns sent successfully')
   }
 
   private async sendTestTone(): Promise<void> {
-    console.log('[AIVoiceSession] Sending test tone to verify audio pipeline')
-    console.log('[AIVoiceSession] Using codec:', this.outboundCodec, 'frame size:', this.outboundFrameSize)
+    logger.info('Sending test tone to verify audio pipeline', {
+      codec: this.outboundCodec,
+      frameSize: this.outboundFrameSize,
+      sampleRate: SAMPLE_RATE
+    })
     
     // Generate 400Hz tone at 8kHz for 1 second
     const sampleRate = 8000
@@ -1004,16 +1230,28 @@ class AIVoiceSession {
       await this.sendDirectFrame(frame)
     }
     
-    console.log('[AIVoiceSession] Test tone complete')
+    logger.debug('Test tone generation complete', {
+      totalFramesSent: numFrames
+    })
   }
   
   // Removed duplicate pcmToMulaw - using standard G.711 function
   
   private async startGreeting(): Promise<void> {
-    if (this.hasGreeted || !this.streamSid) return // Only start when streamSid is available
+    if (this.hasGreeted || !this.streamSid) {
+      logger.debug('Skipping greeting', {
+        hasGreeted: this.hasGreeted,
+        hasStreamSid: !!this.streamSid
+      })
+      return
+    }
     this.hasGreeted = true
     
-    console.log('[AIVoiceSession] Starting greeting with streamSid:', this.streamSid)
+    logger.info('Starting greeting', {
+      streamSid: this.streamSid,
+      greetingLength: this.greeting?.length || 0,
+      businessName: this.businessName
+    })
     
     // Use the fixed speech method with WAV parsing
     const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
@@ -1047,12 +1285,17 @@ serve(async (req) => {
   const voiceId = url.searchParams.get('voiceId') || 'Xb7hH8MSUJpSbSDYk0k2'
   const greeting = url.searchParams.get('greeting') || ''
   
-  console.log('[WebSocket] Starting AI Voice Session for:', businessName)
+  logger.info('Starting AI Voice Session', {
+    tenantId,
+    businessName,
+    voiceId,
+    greetingProvided: !!greeting
+  })
   
   const { socket, response } = Deno.upgradeWebSocket(req)
   
   socket.onopen = () => {
-    console.log('[WebSocket] Connected')
+    logger.info('WebSocket connection established')
     // Initialize AI session
     new AIVoiceSession(socket, { tenantId, businessName, voiceId, greeting })
   }
