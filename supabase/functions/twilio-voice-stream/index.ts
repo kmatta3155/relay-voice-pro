@@ -393,108 +393,8 @@ class AIVoiceSession {
   }
   
   private async speakResponse(text: string): Promise<void> {
-    this.turnState = TurnState.SPEAKING
-    
-    try {
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': this.elevenLabsKey
-        },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_flash_v2_5',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.8,
-            style: 0.0,
-            use_speaker_boost: true
-          },
-          output_format: 'ulaw_8000' // Direct μ-law for Twilio
-        })
-      })
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
-      }
-      
-      if (!response.body) {
-        throw new Error('No audio response from ElevenLabs')
-      }
-      
-      // Log response details for debugging
-      const contentType = response.headers.get('content-type')
-      console.log('[ElevenLabs] Response content-type:', contentType)
-      console.log('[ElevenLabs] Starting audio stream processing')
-      
-      // Process ElevenLabs audio stream
-      const reader = response.body.getReader()
-      const audioBuffer: number[] = []
-      let totalBytes = 0
-      
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) {
-            console.log(`[ElevenLabs] Stream complete. Total bytes: ${totalBytes}`)
-            
-            // Send any remaining buffered audio as final frames
-            while (audioBuffer.length >= FRAME_SIZE) {
-              const frame = audioBuffer.splice(0, FRAME_SIZE)
-              await this.sendDirectFrame(new Uint8Array(frame))
-            }
-            // Pad final frame with silence if needed
-            if (audioBuffer.length > 0) {
-              const frame = new Uint8Array(FRAME_SIZE)
-              frame.set(new Uint8Array(audioBuffer))
-              // Fill remaining bytes with μ-law silence (0xFF)
-              for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
-                frame[i] = 0xFF
-              }
-              await this.sendDirectFrame(frame)
-            }
-            break
-          }
-          
-          if (value && value.length > 0) {
-            totalBytes += value.length
-            console.log(`[ElevenLabs] Received ${value.length} bytes (total: ${totalBytes})`)
-            
-            // ElevenLabs ulaw_8000 returns raw μ-law bytes - use directly
-            console.log('[ElevenLabs] Using raw μ-law bytes directly')
-            const rawBytes = Array.from(value)
-            
-            // Sample check for debugging (μ-law should be 0-255 range)
-            const sampleCheck = rawBytes.slice(0, Math.min(5, rawBytes.length))
-            console.log(`[ElevenLabs] μ-law bytes: [${sampleCheck.join(', ')}]`)
-            
-            // Add raw μ-law bytes to buffer
-            audioBuffer.push(...rawBytes)
-            
-            // Send complete 160-byte frames immediately
-            let framesSent = 0
-            while (audioBuffer.length >= FRAME_SIZE) {
-              const frame = audioBuffer.splice(0, FRAME_SIZE)
-              await this.sendDirectFrame(new Uint8Array(frame))
-              framesSent++
-            }
-            
-            if (framesSent > 0) {
-              console.log(`[ElevenLabs] Sent ${framesSent} audio frames to Twilio`)
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock()
-      }
-      
-    } catch (error) {
-      console.error('[AIVoiceSession] Error generating speech:', error)
-    } finally {
-      this.turnState = TurnState.LISTENING
-    }
+    // Use the fixed version with WAV parsing
+    await this.speakResponseFixed(text)
   }
   
   // Stop and clean up
@@ -560,13 +460,65 @@ class AIVoiceSession {
     await this.sendOutboundFrame(frame)
   }
 
+  private parseWavHeader(buffer: Uint8Array): { audioData: Uint8Array; format: number; sampleRate: number; bitsPerSample: number } | null {
+    // Check if this is a WAV file (starts with 'RIFF' and contains 'WAVE')
+    if (buffer.length < 44) return null
+    
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+    
+    // Check RIFF header
+    const riff = String.fromCharCode(buffer[0], buffer[1], buffer[2], buffer[3])
+    if (riff !== 'RIFF') return null
+    
+    // Check WAVE format
+    const wave = String.fromCharCode(buffer[8], buffer[9], buffer[10], buffer[11])
+    if (wave !== 'WAVE') return null
+    
+    console.log('[WAV Parser] Detected WAV container')
+    
+    // Find fmt chunk
+    let offset = 12
+    let audioFormat = 0
+    let numChannels = 0
+    let sampleRate = 0
+    let bitsPerSample = 0
+    
+    while (offset < buffer.length - 8) {
+      const chunkId = String.fromCharCode(buffer[offset], buffer[offset+1], buffer[offset+2], buffer[offset+3])
+      const chunkSize = view.getUint32(offset + 4, true)
+      
+      if (chunkId === 'fmt ') {
+        audioFormat = view.getUint16(offset + 8, true)
+        numChannels = view.getUint16(offset + 10, true)
+        sampleRate = view.getUint32(offset + 12, true)
+        bitsPerSample = view.getUint16(offset + 22, true)
+        
+        console.log(`[WAV Parser] Format: ${audioFormat} (1=PCM, 7=μ-law), Channels: ${numChannels}, SampleRate: ${sampleRate}, Bits: ${bitsPerSample}`)
+      } else if (chunkId === 'data') {
+        // Found the data chunk - this contains the actual audio
+        const dataStart = offset + 8
+        const dataEnd = Math.min(dataStart + chunkSize, buffer.length)
+        const audioData = buffer.slice(dataStart, dataEnd)
+        
+        console.log(`[WAV Parser] Found data chunk: ${audioData.length} bytes`)
+        return { audioData, format: audioFormat, sampleRate, bitsPerSample }
+      }
+      
+      offset += 8 + chunkSize
+      // Ensure even offset (WAV chunks are word-aligned)
+      if (offset % 2 !== 0) offset++
+    }
+    
+    return null
+  }
+
   private async speakResponseFixed(text: string): Promise<void> {
     this.turnState = TurnState.SPEAKING
     
     try {
-      console.log('[ElevenLabs] Requesting ulaw_8000 format for:', text.substring(0, 50) + '...')
+      // First try PCM format without container (most reliable)
+      console.log('[ElevenLabs] Requesting pcm_16000 format for:', text.substring(0, 50) + '...')
       
-      // Request ulaw_8000 format directly compatible with Twilio
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
         method: 'POST',
         headers: {
@@ -582,7 +534,7 @@ class AIVoiceSession {
             style: 0.0,
             use_speaker_boost: true
           },
-          output_format: 'ulaw_8000'
+          output_format: 'pcm_16000' // Try raw PCM first
         })
       })
       
@@ -595,62 +547,130 @@ class AIVoiceSession {
         throw new Error('No audio response from ElevenLabs')
       }
       
-      console.log('[ElevenLabs] Streaming ulaw_8000 audio with timestamp scheduling')
+      // Log response metadata
+      const contentType = response.headers.get('content-type')
+      console.log('[ElevenLabs] Response content-type:', contentType)
       
-      // Process the streaming response
+      // Collect the entire response first to check format
       const reader = response.body.getReader()
-      let audioBuffer: number[] = []
-      let totalFramesSent = 0
+      const chunks: Uint8Array[] = []
+      let totalBytes = 0
       
       try {
         while (true) {
           const { done, value } = await reader.read()
-          if (done) {
-            // Send any remaining buffered audio
-            while (audioBuffer.length >= FRAME_SIZE) {
-              const frame = new Uint8Array(FRAME_SIZE)
-              for (let i = 0; i < FRAME_SIZE; i++) {
-                frame[i] = audioBuffer.shift()!
-              }
-              await this.sendOutboundFrame(frame)
-              totalFramesSent++
-            }
-            
-            // Pad final frame with silence if needed
-            if (audioBuffer.length > 0) {
-              const frame = new Uint8Array(FRAME_SIZE)
-              for (let i = 0; i < audioBuffer.length; i++) {
-                frame[i] = audioBuffer[i]
-              }
-              for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
-                frame[i] = 0xFF // μ-law silence
-              }
-              await this.sendOutboundFrame(frame)
-              totalFramesSent++
-            }
-            
-            console.log(`[ElevenLabs] Stream complete. Total frames sent: ${totalFramesSent}`)
-            break
-          }
-          
+          if (done) break
           if (value && value.length > 0) {
-            // Add to buffer
-            audioBuffer.push(...Array.from(value))
-            
-            // Send complete frames (160 bytes each)
-            while (audioBuffer.length >= FRAME_SIZE) {
-              const frame = new Uint8Array(FRAME_SIZE)
-              for (let i = 0; i < FRAME_SIZE; i++) {
-                frame[i] = audioBuffer.shift()!
-              }
-              await this.sendOutboundFrame(frame)
-              totalFramesSent++
-            }
+            chunks.push(value)
+            totalBytes += value.length
           }
         }
       } finally {
         reader.releaseLock()
       }
+      
+      console.log(`[ElevenLabs] Received total ${totalBytes} bytes`)
+      
+      // Combine all chunks
+      const fullBuffer = new Uint8Array(totalBytes)
+      let offset = 0
+      for (const chunk of chunks) {
+        fullBuffer.set(chunk, offset)
+        offset += chunk.length
+      }
+      
+      // Log first 16 bytes for format identification
+      if (fullBuffer.length >= 16) {
+        const header = Array.from(fullBuffer.slice(0, 16))
+        const headerHex = header.map(b => b.toString(16).padStart(2, '0')).join(' ')
+        const headerAscii = header.map(b => b >= 32 && b <= 126 ? String.fromCharCode(b) : '.').join('')
+        console.log(`[ElevenLabs] First 16 bytes (hex): ${headerHex}`)
+        console.log(`[ElevenLabs] First 16 bytes (ascii): ${headerAscii}`)
+      }
+      
+      let audioBuffer: number[] = []
+      let totalFramesSent = 0
+      
+      // Check if response is WAV container or raw PCM
+      const wavInfo = this.parseWavHeader(fullBuffer)
+      
+      if (wavInfo) {
+        // It's a WAV file - extract the audio data
+        console.log('[ElevenLabs] Processing WAV container audio')
+        
+        if (wavInfo.format === 7) {
+          // μ-law format - use directly
+          console.log('[ElevenLabs] WAV contains μ-law audio - using directly')
+          audioBuffer = Array.from(wavInfo.audioData)
+        } else if (wavInfo.format === 1) {
+          // PCM format - need to convert to μ-law
+          console.log('[ElevenLabs] WAV contains PCM audio - converting to μ-law')
+          
+          // Parse PCM samples based on bit depth
+          const bytesPerSample = wavInfo.bitsPerSample / 8
+          const view = new DataView(wavInfo.audioData.buffer, wavInfo.audioData.byteOffset, wavInfo.audioData.byteLength)
+          
+          for (let i = 0; i < wavInfo.audioData.length - bytesPerSample + 1; i += bytesPerSample) {
+            let pcmSample = 0
+            if (wavInfo.bitsPerSample === 16) {
+              pcmSample = view.getInt16(i, true) // Little-endian 16-bit PCM
+            } else if (wavInfo.bitsPerSample === 8) {
+              pcmSample = (wavInfo.audioData[i] - 128) * 256 // 8-bit PCM to 16-bit range
+            }
+            
+            // Resample if needed (from 16kHz to 8kHz)
+            if (wavInfo.sampleRate === 16000) {
+              // Simple downsampling - take every other sample
+              if (i % (bytesPerSample * 2) === 0) {
+                audioBuffer.push(pcmToMulaw(pcmSample))
+              }
+            } else if (wavInfo.sampleRate === 8000) {
+              audioBuffer.push(pcmToMulaw(pcmSample))
+            }
+          }
+        } else {
+          console.warn(`[ElevenLabs] Unsupported WAV format: ${wavInfo.format}`)
+          // Fall back to treating as raw data
+          audioBuffer = Array.from(fullBuffer)
+        }
+      } else {
+        // Not a WAV file - assume raw PCM16 at 16kHz
+        console.log('[ElevenLabs] Processing as raw PCM16 @ 16kHz')
+        
+        // Convert PCM16 to μ-law with downsampling
+        const view = new DataView(fullBuffer.buffer, fullBuffer.byteOffset, fullBuffer.byteLength)
+        for (let i = 0; i < fullBuffer.length - 1; i += 4) {
+          // Read 16-bit PCM sample (little-endian)
+          const pcmSample = view.getInt16(i, true)
+          // Downsample from 16kHz to 8kHz (take every other sample)
+          audioBuffer.push(pcmToMulaw(pcmSample))
+        }
+      }
+      
+      // Send the processed audio frames
+      while (audioBuffer.length >= FRAME_SIZE) {
+        const frame = new Uint8Array(FRAME_SIZE)
+        for (let i = 0; i < FRAME_SIZE; i++) {
+          frame[i] = audioBuffer.shift()!
+        }
+        await this.sendOutboundFrame(frame)
+        totalFramesSent++
+      }
+      
+      // Send any remaining audio with padding
+      if (audioBuffer.length > 0) {
+        const frame = new Uint8Array(FRAME_SIZE)
+        for (let i = 0; i < audioBuffer.length; i++) {
+          frame[i] = audioBuffer[i]
+        }
+        for (let i = audioBuffer.length; i < FRAME_SIZE; i++) {
+          frame[i] = 0xFF // μ-law silence
+        }
+        await this.sendOutboundFrame(frame)
+        totalFramesSent++
+      }
+      
+      console.log(`[ElevenLabs] Speech complete. Total frames sent: ${totalFramesSent}`)
       
       // Send mark event to signal end of speech
       if (this.streamSid) {
@@ -661,10 +681,85 @@ class AIVoiceSession {
         }))
       }
       
-      console.log('[ElevenLabs] Speech complete with timestamp scheduling')
-      
     } catch (error) {
       console.error('[AIVoiceSession] Error generating speech:', error)
+      
+      // Try fallback with ulaw_8000 if PCM failed
+      try {
+        console.log('[ElevenLabs] Fallback: Trying ulaw_8000 format')
+        
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': this.elevenLabsKey
+          },
+          body: JSON.stringify({
+            text,
+            model_id: 'eleven_turbo_v2',
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.8,
+              style: 0.0,
+              use_speaker_boost: true
+            },
+            output_format: 'ulaw_8000'
+          })
+        })
+        
+        if (!response.ok) {
+          throw new Error(`ElevenLabs fallback failed: ${response.status}`)
+        }
+        
+        const reader = response.body!.getReader()
+        const chunks: Uint8Array[] = []
+        let totalBytes = 0
+        
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value) {
+            chunks.push(value)
+            totalBytes += value.length
+          }
+        }
+        
+        const fullBuffer = new Uint8Array(totalBytes)
+        let offset = 0
+        for (const chunk of chunks) {
+          fullBuffer.set(chunk, offset)
+          offset += chunk.length
+        }
+        
+        // Log first bytes of fallback format
+        if (fullBuffer.length >= 16) {
+          const header = Array.from(fullBuffer.slice(0, 16))
+          const headerHex = header.map(b => b.toString(16).padStart(2, '0')).join(' ')
+          console.log(`[ElevenLabs] Fallback first 16 bytes (hex): ${headerHex}`)
+        }
+        
+        // Check if it's wrapped in WAV
+        const wavInfo = this.parseWavHeader(fullBuffer)
+        const audioData = wavInfo ? wavInfo.audioData : fullBuffer
+        
+        // Send μ-law frames
+        let totalFramesSent = 0
+        for (let i = 0; i < audioData.length; i += FRAME_SIZE) {
+          const frame = new Uint8Array(FRAME_SIZE)
+          const remaining = Math.min(FRAME_SIZE, audioData.length - i)
+          frame.set(audioData.slice(i, i + remaining))
+          if (remaining < FRAME_SIZE) {
+            frame.fill(0xFF, remaining) // Pad with silence
+          }
+          await this.sendOutboundFrame(frame)
+          totalFramesSent++
+        }
+        
+        console.log(`[ElevenLabs] Fallback complete. Frames sent: ${totalFramesSent}`)
+        
+      } catch (fallbackError) {
+        console.error('[AIVoiceSession] Fallback also failed:', fallbackError)
+      }
     } finally {
       this.turnState = TurnState.LISTENING
     }
@@ -751,7 +846,7 @@ class AIVoiceSession {
     
     console.log('[AIVoiceSession] Starting greeting with streamSid:', this.streamSid)
     
-    // Go straight to greeting with proper ElevenLabs integration
+    // Use the fixed speech method with WAV parsing
     const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
     await this.speakResponseFixed(greetingText)
   }
