@@ -31,6 +31,7 @@ args = "npm run dev -- --config vite.replit.config.ts"
 
 [agent]
 integrations = ["javascript_database:1.0.0", "javascript_openai:1.0.0"]
+expertMode = true
 
 [[ports]]
 localPort = 5000
