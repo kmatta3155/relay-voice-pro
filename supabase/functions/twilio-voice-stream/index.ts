@@ -970,6 +970,7 @@ class AIVoiceSession {
                 setTimeout(() => this.performActualCleanup(), 100)
               }
             }
+          }
           // Note: ElevenLabs WebSocket with ulaw_8000 format only sends JSON messages
           // Binary Blob handling removed as it's not used by ElevenLabs
         } catch (error) {
