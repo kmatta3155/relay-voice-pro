@@ -99,8 +99,8 @@ serve(async (req) => {
   // Allow overriding via environment variable, otherwise derive from request host
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
-  // Route to the full AI agent function for production voice conversations
-  const wsUrl = streamUrlEnv || `wss://${host}/functions/v1/twilio-voice-stream`
+  // TEMPORARY: Route to debug function to isolate static issue
+  const wsUrl = streamUrlEnv || `wss://${host}/functions/v1/twilio-voice-stream-debug`
 
   // Build clean TwiML response with proper Stream element
   // Note: Greeting is handled in WebSocket, so no <Say> element needed
