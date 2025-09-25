@@ -4,7 +4,7 @@
  * Optimized for <300ms response latency with proper audio streaming
  * 
  * CRITICAL PRODUCTION FIXES APPLIED (2024-12-23):
- * - FIXED: Track direction - "inbound" for audio TO caller (not "outbound")
+ * - FIXED: Removed track field from media messages - bidirectional streams do NOT use track field
  * - FIXED: Direct audio forwarding - ElevenLabs base64 audio sent without re-encoding
  * - FIXED: Removed double-encoding that was causing static
  * - FIXED: Added clear message support for barge-in interruptions
@@ -71,6 +71,19 @@ function toHexString(buffer: Uint8Array, maxBytes: number = 16): string {
     .map(b => b.toString(16).padStart(2, '0'))
     .join(' ')
   return `${hex}${buffer.length > maxBytes ? '...' : ''} (${buffer.length} bytes total)`
+}
+
+// Safe base64 encoding function that avoids spread operator stack overflow
+function safeBase64Encode(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 8192 // Process in chunks to avoid stack overflow
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, Math.min(i + chunkSize, bytes.length))
+    for (let j = 0; j < chunk.length; j++) {
+      binary += String.fromCharCode(chunk[j])
+    }
+  }
+  return btoa(binary)
 }
 
 function mulawToPcm(mulaw: number): number {
@@ -942,13 +955,8 @@ class AIVoiceSession {
               })
               ws.close()
             }
-          } else if (event.data instanceof Blob) {
-            // CRITICAL FIX: Binary audio - convert to base64 and send directly
-            const audioData = new Uint8Array(await event.data.arrayBuffer())
-            const base64Audio = btoa(String.fromCharCode(...audioData))
-            await this.sendOutboundFrameDirect(base64Audio)
-            framesReceived++
-          }
+          // Note: ElevenLabs WebSocket with ulaw_8000 format only sends JSON messages
+          // Binary Blob handling removed as it's not used by ElevenLabs
         } catch (error) {
           logger.error('Error processing ElevenLabs WebSocket message', {
             error: error instanceof Error ? error.message : String(error)
@@ -1064,7 +1072,7 @@ class AIVoiceSession {
           while (audioBuffer.length - processedBytes >= FRAME_SIZE_MULAW) {
             const frame = audioBuffer.slice(processedBytes, processedBytes + FRAME_SIZE_MULAW)
             // Convert frame to base64 and send directly
-            const base64Frame = btoa(String.fromCharCode(...frame))
+            const base64Frame = safeBase64Encode(frame)
             await this.sendOutboundFrameDirect(base64Frame)
             processedBytes += FRAME_SIZE_MULAW
             framesStreamed++
@@ -1084,7 +1092,7 @@ class AIVoiceSession {
         paddedFrame.set(audioBuffer)
         paddedFrame.fill(0xFF, audioBuffer.length) // μ-law silence padding
         // Convert to base64 and send directly
-        const base64Frame = btoa(String.fromCharCode(...paddedFrame))
+        const base64Frame = safeBase64Encode(paddedFrame)
         await this.sendOutboundFrameDirect(base64Frame)
         framesStreamed++
       }
@@ -1447,7 +1455,7 @@ class AIVoiceSession {
     // Send warmup silence frames
     for (let i = 0; i < 10; i++) {
       // Convert silence frame to base64 and send directly
-      const base64Silence = btoa(String.fromCharCode(...silenceFrame))
+      const base64Silence = safeBase64Encode(silenceFrame)
       await this.sendOutboundFrameDirect(base64Silence)
     }
     logger.debug('Buffer warmup complete', {
@@ -1468,12 +1476,12 @@ class AIVoiceSession {
     }
     
     try {
-      // CRITICAL: Send ElevenLabs audio directly without any conversion
+      // CRITICAL FIX: Bidirectional streams do NOT use track field
+      // Correct format: just event, streamSid, and media.payload
       const message = {
         event: 'media',
         streamSid: this.streamSid,
         media: {
-          track: 'inbound',   // CRITICAL: "inbound" for audio TO the caller
           payload: base64Audio  // Already base64 encoded μ-law from ElevenLabs
         }
       }
@@ -1482,8 +1490,7 @@ class AIVoiceSession {
       this.outboundSeq++
       this.totalFramesSent++
       
-      // Pace at 20ms to maintain smooth audio flow
-      await new Promise(resolve => setTimeout(resolve, 20))
+      // Send immediately - ElevenLabs provides properly timed chunks
       
     } catch (error) {
       logger.error('Failed to send direct outbound frame', {
@@ -1506,7 +1513,7 @@ class AIVoiceSession {
     }
     
     try {
-      const payload = btoa(String.fromCharCode(...frame))
+      const payload = safeBase64Encode(frame)
       
       // Log first few frames for debugging
       if (this.outboundSeq < 3) {
@@ -1519,13 +1526,12 @@ class AIVoiceSession {
         })
       }
       
-      // PRODUCTION FIX: Use exact Twilio media format
-      // CRITICAL: "inbound" track for audio TO caller (counter-intuitive but correct)
+      // PRODUCTION FIX: Use exact Twilio media format for bidirectional streams
+      // CRITICAL FIX: Bidirectional streams do NOT use track field
       const message = {
         event: 'media',
         streamSid: this.streamSid,
         media: {
-          track: 'inbound',  // CRITICAL FIX: Audio going TO the caller uses "inbound"
           payload: payload   // Base64 encoded μ-law audio
         }
       }
@@ -1534,8 +1540,7 @@ class AIVoiceSession {
       this.outboundSeq++
       this.totalFramesSent++
       
-      // Pace frames at 20ms intervals to match 8kHz audio rate
-      await new Promise(resolve => setTimeout(resolve, 20))
+      // Send immediately - audio timing is handled by the sender
       
     } catch (error) {
       logger.error('Failed to send outbound frame', {
@@ -1548,7 +1553,7 @@ class AIVoiceSession {
   
   private async sendDirectFrame(frame: Uint8Array): Promise<void> {
     // Convert frame to base64 and send using the direct method
-    const base64Frame = btoa(String.fromCharCode(...frame))
+    const base64Frame = safeBase64Encode(frame)
     await this.sendOutboundFrameDirect(base64Frame)
   }
 
