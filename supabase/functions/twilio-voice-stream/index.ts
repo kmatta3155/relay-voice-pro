@@ -204,6 +204,10 @@ class AIVoiceSession {
   // Track if session is closed
   private isClosed = false
   
+  // Track active ElevenLabs streaming
+  private isElevenLabsStreaming = false
+  private pendingCleanup = false
+  
   // Codec negotiation
   private outboundCodec: AudioCodec = AudioCodec.MULAW
   private outboundFrameSize: number = FRAME_SIZE_MULAW
@@ -888,6 +892,9 @@ class AIVoiceSession {
       format: 'ulaw_8000'
     })
     
+    // Mark that we're actively streaming from ElevenLabs
+    this.isElevenLabsStreaming = true
+    
     const ws = new WebSocket(wsUrl, {
       headers: {
         'xi-api-key': this.elevenLabsKey
@@ -953,7 +960,15 @@ class AIVoiceSession {
                 framesReceived,
                 finalMessage: message
               })
+              // Mark streaming as complete before closing
+              this.isElevenLabsStreaming = false
               ws.close()
+              
+              // Check if we need to perform deferred cleanup
+              if (this.pendingCleanup) {
+                logger.info('Performing deferred cleanup after ElevenLabs stream completion')
+                setTimeout(() => this.performActualCleanup(), 100)
+              }
             }
           // Note: ElevenLabs WebSocket with ulaw_8000 format only sends JSON messages
           // Binary Blob handling removed as it's not used by ElevenLabs
@@ -981,12 +996,21 @@ class AIVoiceSession {
           hadError: errorOccurred
         })
         
+        // Ensure streaming flag is cleared
+        this.isElevenLabsStreaming = false
+        
         if (errorOccurred) {
           reject(new Error('ElevenLabs WebSocket error'))
         } else if (!isConnected) {
           reject(new Error('Failed to connect to ElevenLabs WebSocket'))
         } else {
           resolve()
+        }
+        
+        // Check if we need to perform deferred cleanup
+        if (this.pendingCleanup) {
+          logger.info('Performing deferred cleanup after ElevenLabs close')
+          setTimeout(() => this.performActualCleanup(), 100)
         }
       }
       
@@ -1332,15 +1356,41 @@ class AIVoiceSession {
   
   // Stop and clean up
   private cleanup(): void {
-    logger.info('Cleaning up session', {
+    logger.info('Cleanup requested', {
       hasGreeted: this.hasGreeted,
       conversationLength: this.conversationHistory.length,
       isReady: this.isReady,
       sessionDuration: Date.now() - this.sessionStartTime,
       totalFramesSent: this.totalFramesSent,
-      totalFramesReceived: this.totalFramesReceived
+      totalFramesReceived: this.totalFramesReceived,
+      isElevenLabsStreaming: this.isElevenLabsStreaming
     })
     
+    // If ElevenLabs is still streaming, defer the actual cleanup
+    if (this.isElevenLabsStreaming) {
+      logger.info('Deferring cleanup - ElevenLabs is still streaming audio')
+      this.pendingCleanup = true
+      
+      // Set a maximum wait time of 5 seconds for safety
+      setTimeout(() => {
+        if (this.pendingCleanup) {
+          logger.warn('Forcing cleanup after 5 second timeout')
+          this.performActualCleanup()
+        }
+      }, 5000)
+      return
+    }
+    
+    // Perform immediate cleanup if not streaming
+    this.performActualCleanup()
+  }
+  
+  private performActualCleanup(): void {
+    logger.info('Performing actual cleanup', {
+      wasDeferred: this.pendingCleanup
+    })
+    
+    this.pendingCleanup = false
     this.isClosed = true
     this.audioBuffer = []
     this.bargeInBuffer = []
@@ -1466,11 +1516,14 @@ class AIVoiceSession {
   // CRITICAL FIX: New function to send base64 audio directly without re-encoding
   private async sendOutboundFrameDirect(base64Audio: string): Promise<void> {
     // Guard against sending after close or without streamSid
-    if (!this.streamSid || this.isClosed || this.ws.readyState !== 1) {
+    // Allow sending if ElevenLabs is still streaming, even if cleanup is pending
+    if (!this.streamSid || (this.isClosed && !this.isElevenLabsStreaming) || this.ws.readyState !== 1) {
       logger.debug('Skipping direct frame send', {
         hasStreamSid: !!this.streamSid,
         isClosed: this.isClosed,
-        wsReadyState: this.ws.readyState
+        wsReadyState: this.ws.readyState,
+        isElevenLabsStreaming: this.isElevenLabsStreaming,
+        pendingCleanup: this.pendingCleanup
       })
       return
     }
@@ -1503,11 +1556,14 @@ class AIVoiceSession {
   
   private async sendOutboundFrame(frame: Uint8Array): Promise<void> {
     // Guard against sending after close or without streamSid
-    if (!this.streamSid || this.isClosed || this.ws.readyState !== 1) {
+    // Allow sending if ElevenLabs is still streaming, even if cleanup is pending
+    if (!this.streamSid || (this.isClosed && !this.isElevenLabsStreaming) || this.ws.readyState !== 1) {
       logger.debug('Skipping frame send', {
         hasStreamSid: !!this.streamSid,
         isClosed: this.isClosed,
-        wsReadyState: this.ws.readyState
+        wsReadyState: this.ws.readyState,
+        isElevenLabsStreaming: this.isElevenLabsStreaming,
+        pendingCleanup: this.pendingCleanup
       })
       return
     }

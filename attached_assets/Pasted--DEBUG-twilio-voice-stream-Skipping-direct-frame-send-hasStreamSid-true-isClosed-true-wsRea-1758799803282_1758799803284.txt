@@ -1,0 +1,21 @@
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[DEBUG] [twilio-voice-stream] Skipping direct frame send {"hasStreamSid":true,"isClosed":true,"wsReadyState":2}
+[INFO] [twilio-voice-stream] Cleaning up session {"hasGreeted":true,"conversationLength":2,"isReady":true,"sessionDuration":11880,"totalFramesSent":614,"totalFramesReceived":603}
+[INFO] [twilio-voice-stream] Session metrics {"duration":11880,"framesReceived":603,"framesSent":614,"conversationTurns":1,"avgFramesPerSecond":50.75757575757575}
+[INFO] [twilio-voice-stream] Call ended - stop event received
+
+Load older
+Showing 100 results
