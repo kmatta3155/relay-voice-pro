@@ -884,15 +884,15 @@ class AIVoiceSession {
   }
   
   private async streamElevenLabsWebSocket(text: string, abortSignal: AbortSignal): Promise<void> {
-    // CRITICAL FIX: ElevenLabs requires API key to be sent in the FIRST WebSocket message body
-    // NOT as a URL parameter - this is the correct authentication protocol
-    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?model_id=eleven_turbo_v2_5&output_format=ulaw_8000`
+    // CRITICAL FIX: Correct ElevenLabs WebSocket protocol implementation
+    // URL has NO authentication, only streaming parameters
+    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?optimize_streaming_latency=3&output_format=ulaw_8000`
     
     logger.info('Connecting to ElevenLabs WebSocket', {
       voiceId: this.voiceId,
-      model: 'eleven_turbo_v2_5',
-      format: 'ulaw_8000',
-      authentication: 'Message body (correct protocol)'
+      url: wsUrl,
+      protocol: 'Correct implementation with auth in first message',
+      textLength: text.length
     })
     
     // Mark that we're actively streaming from ElevenLabs
@@ -904,6 +904,8 @@ class AIVoiceSession {
       let isConnected = false
       let framesReceived = 0
       let errorOccurred = false
+      let hasReceivedACK = false
+      let messageQueue: string[] = []
       
       const checkAbort = () => {
         if (abortSignal.aborted) {
@@ -919,22 +921,33 @@ class AIVoiceSession {
         if (checkAbort()) return
         
         isConnected = true
-        logger.debug('ElevenLabs WebSocket connected, sending handshake with API key')
+        logger.info('✅ ElevenLabs WebSocket connected, sending initialization message')
         
-        // CRITICAL: Send initial handshake with API key in message body (ElevenLabs protocol requirement)
-        ws.send(JSON.stringify({
-          text: ' ', // Single space for handshake
+        // CRITICAL: Send complete initialization message with ALL required fields
+        const initMessage = {
+          xi_api_key: this.elevenLabsKey,  // Authentication in first message
+          text: ' ',                        // Single space for initialization
+          model_id: 'eleven_turbo_v2_5',   // Required model specification
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.8,
             style: 0.0,
             use_speaker_boost: true
           },
-          xi_api_key: this.elevenLabsKey // API key must be in first message
-        }))
+          output_format: 'ulaw_8000'       // Required format specification
+        }
         
-        // Send actual text with generation trigger
-        ws.send(JSON.stringify({
+        logger.debug('📤 Sending initialization message to ElevenLabs', {
+          hasApiKey: !!initMessage.xi_api_key,
+          model: initMessage.model_id,
+          format: initMessage.output_format,
+          voiceSettings: initMessage.voice_settings
+        })
+        
+        ws.send(JSON.stringify(initMessage))
+        
+        // Queue the actual text and EOS messages to send after ACK
+        messageQueue.push(JSON.stringify({
           text: text,
           try_trigger_generation: true,
           generation_config: {
@@ -942,30 +955,87 @@ class AIVoiceSession {
           }
         }))
         
-        // Send EOS to indicate end of text
-        ws.send(JSON.stringify({ text: '' }))
+        messageQueue.push(JSON.stringify({ text: '' })) // EOS marker
       }
       
       ws.onmessage = async (event) => {
         if (checkAbort()) return
         
         try {
-          // ElevenLabs sends both JSON metadata and binary audio
+          // ElevenLabs sends JSON messages
           if (typeof event.data === 'string') {
             const message = JSON.parse(event.data)
             
-            if (message.audio) {
-              // CRITICAL FIX: Direct forward ElevenLabs base64 audio without re-encoding
-              // ElevenLabs WebSocket with ulaw_8000 already provides base64 encoded μ-law
-              await this.sendOutboundFrameDirect(message.audio)
-              framesReceived++
+            // Log ALL incoming messages for debugging
+            logger.debug('📥 ElevenLabs message received', {
+              type: Object.keys(message).join(','),
+              hasAudio: !!message.audio,
+              hasError: !!message.error,
+              hasMeta: !!message.meta,
+              isFinal: !!message.isFinal,
+              messageKeys: Object.keys(message),
+              framesReceived
+            })
+            
+            // Handle error messages
+            if (message.error) {
+              logger.error('❌ ElevenLabs error message', {
+                error: message.error,
+                code: message.code,
+                message: message.message,
+                details: message
+              })
+              errorOccurred = true
+              ws.close()
+              return
             }
             
-            if (message.isFinal) {
-              logger.info('ElevenLabs WebSocket stream complete', {
-                framesReceived,
-                finalMessage: message
+            // Handle metadata/acknowledgment messages
+            if (message.meta || message.type === 'meta' || (!message.audio && !message.isFinal && !message.error)) {
+              logger.info('📋 ElevenLabs metadata/ACK received', {
+                meta: message.meta || message,
+                hasReceivedACK,
+                queuedMessages: messageQueue.length
               })
+              
+              // After receiving first ACK, send queued messages
+              if (!hasReceivedACK && messageQueue.length > 0) {
+                hasReceivedACK = true
+                logger.info('✅ Server ACK received, sending text messages')
+                
+                for (const queuedMessage of messageQueue) {
+                  logger.debug('📤 Sending queued message', {
+                    messagePreview: queuedMessage.substring(0, 100)
+                  })
+                  ws.send(queuedMessage)
+                }
+                messageQueue = []
+              }
+            }
+            
+            // Handle audio chunks
+            if (message.audio) {
+              // Direct forward ElevenLabs base64 audio without re-encoding
+              await this.sendOutboundFrameDirect(message.audio)
+              framesReceived++
+              
+              // Log every 10th frame to avoid log spam
+              if (framesReceived % 10 === 1) {
+                logger.debug('🔊 Audio frames received', {
+                  framesReceived,
+                  audioLength: message.audio.length
+                })
+              }
+            }
+            
+            // Handle stream completion
+            if (message.isFinal) {
+              logger.info('✅ ElevenLabs stream complete', {
+                framesReceived,
+                finalMessage: message,
+                totalAudioFrames: framesReceived
+              })
+              
               // Mark streaming as complete before closing
               this.isElevenLabsStreaming = false
               ws.close()
@@ -976,12 +1046,18 @@ class AIVoiceSession {
                 setTimeout(() => this.performActualCleanup(), 100)
               }
             }
+          } else {
+            // Log unexpected data types
+            logger.warn('⚠️ Unexpected non-string message from ElevenLabs', {
+              dataType: typeof event.data,
+              dataConstructor: event.data?.constructor?.name
+            })
           }
-          // Note: ElevenLabs WebSocket with ulaw_8000 format only sends JSON messages
-          // Binary Blob handling removed as it's not used by ElevenLabs
         } catch (error) {
-          logger.error('Error processing ElevenLabs WebSocket message', {
-            error: error instanceof Error ? error.message : String(error)
+          logger.error('❌ Error processing ElevenLabs message', {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            eventData: typeof event.data === 'string' ? event.data.substring(0, 200) : 'non-string'
           })
           errorOccurred = true
           ws.close()
@@ -989,18 +1065,22 @@ class AIVoiceSession {
       }
       
       ws.onerror = (error) => {
-        logger.error('ElevenLabs WebSocket error', {
-          error: error instanceof Error ? error.message : String(error)
+        logger.error('❌ ElevenLabs WebSocket error', {
+          error: error instanceof Error ? error.message : String(error),
+          readyState: ws.readyState,
+          hasReceivedACK,
+          framesReceived
         })
         errorOccurred = true
         reject(error)
       }
       
       ws.onclose = () => {
-        logger.info('ElevenLabs WebSocket closed', {
+        logger.info('🔌 ElevenLabs WebSocket closed', {
           framesReceived,
           wasConnected: isConnected,
-          hadError: errorOccurred
+          hadError: errorOccurred,
+          hasReceivedACK
         })
         
         // Ensure streaming flag is cleared
@@ -1010,6 +1090,9 @@ class AIVoiceSession {
           reject(new Error('ElevenLabs WebSocket error'))
         } else if (!isConnected) {
           reject(new Error('Failed to connect to ElevenLabs WebSocket'))
+        } else if (framesReceived === 0) {
+          logger.warn('⚠️ WebSocket closed without receiving any audio frames')
+          reject(new Error('No audio frames received'))
         } else {
           resolve()
         }
@@ -1024,7 +1107,11 @@ class AIVoiceSession {
       // Set timeout for connection
       setTimeout(() => {
         if (!isConnected && !errorOccurred) {
-          logger.error('ElevenLabs WebSocket connection timeout')
+          logger.error('⏱️ ElevenLabs WebSocket connection timeout', {
+            readyState: ws.readyState,
+            hasReceivedACK,
+            framesReceived
+          })
           ws.close()
           reject(new Error('WebSocket connection timeout'))
         }

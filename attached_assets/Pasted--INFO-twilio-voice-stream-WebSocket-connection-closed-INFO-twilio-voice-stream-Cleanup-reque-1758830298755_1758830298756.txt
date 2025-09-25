@@ -1,0 +1,100 @@
+[INFO] [twilio-voice-stream] WebSocket connection closed
+[INFO] [twilio-voice-stream] Cleanup requested {"hasGreeted":true,"conversationLength":8,"isReady":true,"sessionDuration":16621,"totalFramesSent":10,"totalFramesReceived":780,"isElevenLabsStreaming":true}
+[INFO] [twilio-voice-stream] Deferring cleanup - ElevenLabs is still streaming audio
+[DEBUG] [twilio-voice-stream] ElevenLabs WebSocket connected, sending text
+[INFO] [twilio-voice-stream] Connecting to ElevenLabs WebSocket {"voiceId":"Xb7hH8MSUJpSbSDYk0k2","model":"eleven_turbo_v2_5","format":"ulaw_8000","authentication":"URL parameter (Deno-compatible)"}
+[INFO] [twilio-voice-stream] Starting ElevenLabs TTS with WebSocket streaming {"textLength":143,"voiceId":"Xb7hH8MSUJpSbSDYk0k2","codec":"mulaw","frameSize":160,"streamingMode":"websocket"}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":143,"usage":{"prompt_tokens":155,"completion_tokens":31,"total_tokens":186,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Cleanup requested {"hasGreeted":true,"conversationLength":7,"isReady":true,"sessionDuration":15612,"totalFramesSent":10,"totalFramesReceived":780,"isElevenLabsStreaming":false}
+[INFO] [twilio-voice-stream] Session metrics {"duration":15613,"framesReceived":780,"framesSent":10,"conversationTurns":3.5,"avgFramesPerSecond":49.958368026644465}
+[INFO] [twilio-voice-stream] Performing actual cleanup {"wasDeferred":false}
+[INFO] [twilio-voice-stream] Call ended - stop event received
+[INFO] [twilio-voice-stream] Transcription completed {"transcript":"You","transcriptLength":3}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":3}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":8,"maxTokens":150,"temperature":0.7}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":5164,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":16,"durationMs":320}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"5.5","hexDump":"7e ff fe ff 7e 7e 7e ff fe 7e 7e ff 7e 7e 7e 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"5.4","hexDump":"ff 7d 7d 7e fe 7e 7e 7e 7e fe 7d 7e 7e fe 7e ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"5.6","hexDump":"7d 7e 7d fe 7e 7d ff fe ff 7e 7e ff fe ff ff ff... (160 bytes total)"}
+[INFO] [twilio-voice-stream] ElevenLabs WebSocket closed {"framesReceived":0,"wasConnected":true,"hadError":false}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":3,"frameSize":160,"rms":"5.4","threshold":800}
+[DEBUG] [twilio-voice-stream] ElevenLabs WebSocket connected, sending text
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":2,"frameSize":160,"rms":"5.0","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":1,"frameSize":160,"rms":"5.6","threshold":800}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":61,"usage":{"prompt_tokens":113,"completion_tokens":33,"total_tokens":146,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Starting ElevenLabs TTS with WebSocket streaming {"textLength":61,"voiceId":"Xb7hH8MSUJpSbSDYk0k2","codec":"mulaw","frameSize":160,"streamingMode":"websocket"}
+[INFO] [twilio-voice-stream] Connecting to ElevenLabs WebSocket {"voiceId":"Xb7hH8MSUJpSbSDYk0k2","model":"eleven_turbo_v2_5","format":"ulaw_8000","authentication":"URL parameter (Deno-compatible)"}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":14}
+[INFO] [twilio-voice-stream] Transcription completed {"transcript":"MBC 뉴스 이덕영입니다.","transcriptLength":14}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":6,"maxTokens":150,"temperature":0.7}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":5164,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":16,"durationMs":320}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[INFO] [twilio-voice-stream] ElevenLabs WebSocket closed {"framesReceived":0,"wasConnected":true,"hadError":false}
+[INFO] [twilio-voice-stream] 🔄 Switched to LISTENING state due to barge-in {"audioBufferLength":12,"bufferDurationMs":240}
+[DEBUG] [twilio-voice-stream] Sent clear message to stop pending audio
+[DEBUG] [twilio-voice-stream] Aborting current TTS stream due to barge-in
+[INFO] [twilio-voice-stream] 🎤 BARGE-IN DETECTED - User interrupted during speaking {"duration":250,"rms":"1327.7","threshold":800,"bufferFrames":12}
+[DEBUG] [twilio-voice-stream] ElevenLabs WebSocket connected, sending text
+[INFO] [twilio-voice-stream] Connecting to ElevenLabs WebSocket {"voiceId":"Xb7hH8MSUJpSbSDYk0k2","model":"eleven_turbo_v2_5","format":"ulaw_8000","authentication":"URL parameter (Deno-compatible)"}
+[INFO] [twilio-voice-stream] Starting ElevenLabs TTS with WebSocket streaming {"textLength":150,"voiceId":"Xb7hH8MSUJpSbSDYk0k2","codec":"mulaw","frameSize":160,"streamingMode":"websocket"}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":150,"usage":{"prompt_tokens":66,"completion_tokens":31,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Transcription completed {"transcript":"You","transcriptLength":3}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":3}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":4,"maxTokens":150,"temperature":0.7}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":5164,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":16,"durationMs":320}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"10.3","hexDump":"7d fc fc 7e 7d 7c 7d fe 7c 7e 7d ff fb 7e 7e fc... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"10.6","hexDump":"ff ff fe fe 7e 7e fe 7e 7e fd fe fe ff 7e 7c 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"9.8","hexDump":"fe 7e 7e 7e 7e 7c 7d 7d fd ff fd 7c fe fe 7e 7e... (160 bytes total)"}
+[INFO] [twilio-voice-stream] ElevenLabs WebSocket closed {"framesReceived":0,"wasConnected":true,"hadError":false}
+[DEBUG] [twilio-voice-stream] ElevenLabs WebSocket connected, sending text
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":34,"usage":{"prompt_tokens":48,"completion_tokens":9,"total_tokens":57,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Starting ElevenLabs TTS with WebSocket streaming {"textLength":34,"voiceId":"Xb7hH8MSUJpSbSDYk0k2","codec":"mulaw","frameSize":160,"streamingMode":"websocket"}
+[INFO] [twilio-voice-stream] Connecting to ElevenLabs WebSocket {"voiceId":"Xb7hH8MSUJpSbSDYk0k2","model":"eleven_turbo_v2_5","format":"ulaw_8000","authentication":"URL parameter (Deno-compatible)"}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":3}
+[INFO] [twilio-voice-stream] Transcription completed {"transcript":"You","transcriptLength":3}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":2,"maxTokens":150,"temperature":0.7}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":5164,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":16,"durationMs":320}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[INFO] [twilio-voice-stream] ElevenLabs WebSocket closed {"framesReceived":0,"wasConnected":true,"hadError":false}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":1,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":2,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":3,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] ElevenLabs WebSocket connected, sending text
+[INFO] [twilio-voice-stream] Connecting to ElevenLabs WebSocket {"voiceId":"Xb7hH8MSUJpSbSDYk0k2","model":"eleven_turbo_v2_5","format":"ulaw_8000","authentication":"URL parameter (Deno-compatible)"}
+[DEBUG] [twilio-voice-stream] Buffer warmup complete {"framesSent":10}
+[INFO] [twilio-voice-stream] Starting ElevenLabs TTS with WebSocket streaming {"textLength":69,"voiceId":"Xb7hH8MSUJpSbSDYk0k2","codec":"mulaw","frameSize":160,"streamingMode":"websocket"}
+[INFO] [twilio-voice-stream] Starting greeting {"streamSid":"MZa4f1c2e7b18c7f9446af4c9b35832526","greetingLength":0,"businessName":"this business"}
+[DEBUG] [twilio-voice-stream] Starting buffer warmup {"codec":"mulaw","frameSize":160,"warmupFrames":10,"warmupDurationMs":200}
+[DEBUG] [twilio-voice-stream] Using μ-law silence pattern {"fillValue":"0xFF","frameSize":160}
+[DEBUG] [twilio-voice-stream] Detected encoding type {"encoding":"audio/x-mulaw","originalEncoding":"audio/x-mulaw"}
+[INFO] [twilio-voice-stream] ✅ Codec set to μ-law {"codec":"mulaw","frameSize":160,"bytesPerFrame":160}
+[INFO] [twilio-voice-stream] StreamSid captured {"streamSid":"MZa4f1c2e7b18c7f9446af4c9b35832526"}
+[INFO] [twilio-voice-stream] Media format negotiated {"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1}
+[INFO] [twilio-voice-stream] ✅ FORCED codec configuration to μ-law for optimal audio quality {"codec":"mulaw","frameSize":160,"framesPerSecond":50,"durationPerFrame":20,"note":"Outbound codec explicitly forced to μ-law for ElevenLabs compatibility"}
+[DEBUG] [twilio-voice-stream] Full start event received {"startEvent":{"accountSid":"ACe6e513d70609f6d6376a80db0b4214d5","streamSid":"MZa4f1c2e7b18c7f9446af4c9b35832526","callSid":"CAdf170fa2f9355ecb9a93898739d28e8b","tracks":["inbound"],"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"customParameters":{"phoneNumber":"+19169450065","businessName":"this business","to":"+19194203058","from":"+19169450065"}}}
+[INFO] [twilio-voice-stream] Call started {"streamSid":"MZa4f1c2e7b18c7f9446af4c9b35832526","callSid":"CAdf170fa2f9355ecb9a93898739d28e8b"}
+[INFO] [twilio-voice-stream] Connected to Twilio WebSocket - waiting for start event
+[INFO] [twilio-voice-stream] WebSocket connection established
+[INFO] [twilio-voice-stream] AIVoiceSession initialized successfully {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingLength":0,"hasOpenAIKey":true,"hasElevenLabsKey":true,"maxSessionDuration":"150s (Free) / 400s (Pro)","features":["WebSocket streaming","Barge-in detection","VAD with 500ms silence","Database-driven prompts","Session timeout protection"]}
+[INFO] [twilio-voice-stream] Twilio WebSocket connection request {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingProvided":false,"headers":{"host":"edge-runtime.supabase.com","origin":null,"userAgent":"Twilio.TmeWs/1.0"},"production":true,"authRequired":false}
+Listening on http://localhost:9999/
+[INFO] [twilio-voice-stream] Performing actual cleanup {"wasDeferred":false}
+[INFO] [twilio-voice-stream] Session metrics {"duration":15295,"framesReceived":719,"framesSent":10,"conversationTurns":3,"avgFramesPerSecond":47.00882641386074}
+[INFO] [twilio-voice-stream] Cleanup requested {"hasGreeted":true,"conversationLength":6,"isReady":true,"sessionDuration":15295,"totalFramesSent":10,"totalFramesReceived":719,"isElevenLabsStreaming":false}
+[INFO] [twilio-voice-stream] WebSocket connection closed
+[INFO] [twilio-voice-stream] Session metrics {"duration":14294,"framesReceived":719,"framesSent":10,"conversationTurns":3,"avgFramesPerSecond":50.3008255211977}
+[INFO] [twilio-voice-stream] Performing actual cleanup {"wasDeferred":false}
+[INFO] [twilio-voice-stream] Cleanup requested {"hasGreeted":true,"conversationLength":6,"isReady":true,"sessionDuration":14293,"totalFramesSent":10,"totalFramesReceived":719,"isElevenLabsStreaming":false}
+[INFO] [twilio-voice-stream] Call ended - stop event received
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.4","hexDump":"fe ff ff ff 7e 7e 7e ff 7e 7e 7e fe 7e fe ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.4","hexDump":"7e ff ff fe 7e ff ff ff ff fe 7e fe 7e ff ff 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.4","hexDump":"7e 7e ff ff fe fe 7e 7e 7e fe 7e 7e fe 7e 7e 7e... (160 bytes total)"}
+[INFO] [twilio-voice-stream] ElevenLabs WebSocket closed {"framesReceived":0,"wasConnected":true,"hadError":false}
