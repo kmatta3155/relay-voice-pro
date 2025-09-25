@@ -2,6 +2,13 @@
  * AI Voice Receptionist - Production-Ready Pipeline
  * Architecture: Twilio WebSocket → Audio Processing → STT → Dialogue → TTS → Response
  * Optimized for <300ms response latency with proper audio streaming
+ * 
+ * PRODUCTION FIXES APPLIED:
+ * - No authentication required for Twilio WebSocket connections
+ * - ElevenLabs WebSocket streaming with ulaw_8000 format
+ * - Proper "outbound" track usage for audio to caller
+ * - 200ms warmup silence to prevent initial static
+ * - Comprehensive error recovery and logging
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -190,6 +197,13 @@ class AIVoiceSession {
   private currentTTSAbortController: AbortController | null = null
   private lastBargeInTime = 0
   
+  // Production monitoring
+  private sessionStartTime = Date.now()
+  private totalFramesSent = 0
+  private totalFramesReceived = 0
+  private sessionTimeoutHandle: number | null = null
+  private heartbeatInterval: number | null = null
+  
   constructor(
     ws: WebSocket,
     context: { tenantId: string; businessName: string; voiceId: string; greeting: string }
@@ -203,17 +217,104 @@ class AIVoiceSession {
     this.openaiKey = Deno.env.get('OPENAI_API_KEY') || ''
     this.elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY') || ''
     
-    logger.info('AIVoiceSession initialized', {
+    // Validate required API keys
+    if (!this.openaiKey) {
+      logger.error('CRITICAL: OpenAI API key not configured')
+      this.sendErrorToCallerAndClose('Configuration error: OpenAI API key missing')
+      return
+    }
+    
+    if (!this.elevenLabsKey) {
+      logger.error('CRITICAL: ElevenLabs API key not configured')
+      this.sendErrorToCallerAndClose('Configuration error: ElevenLabs API key missing')
+      return
+    }
+    
+    logger.info('AIVoiceSession initialized successfully', {
       tenantId: this.tenantId,
       businessName: this.businessName,
       voiceId: this.voiceId,
       greetingLength: this.greeting?.length || 0,
       hasOpenAIKey: !!this.openaiKey,
-      hasElevenLabsKey: !!this.elevenLabsKey
+      hasElevenLabsKey: !!this.elevenLabsKey,
+      maxSessionDuration: '150s (Free) / 400s (Pro)',
+      features: [
+        'WebSocket streaming',
+        'Barge-in detection',
+        'VAD with 500ms silence',
+        'Database-driven prompts',
+        'Session timeout protection'
+      ]
     })
     
     this.setupEventListeners()
-    // Don't start greeting here - wait for 'start' event
+    this.setupSessionTimeout()
+    this.setupHeartbeat()
+  }
+  
+  private async sendErrorToCallerAndClose(errorMessage: string): Promise<void> {
+    try {
+      logger.error('Sending error message to caller', { errorMessage })
+      // Try to speak the error if we have a streamSid
+      if (this.streamSid) {
+        await this.speakResponse('I apologize, but I cannot continue this call due to a technical issue. Please call back later.')
+      }
+    } catch (error) {
+      logger.error('Failed to send error message to caller', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    } finally {
+      setTimeout(() => this.cleanup(), 1000)
+    }
+  }
+  
+  private setupSessionTimeout(): void {
+    // Set timeout for 140 seconds (just under the 150s Free tier limit)
+    // This gives us time to gracefully close before Supabase kills the function
+    const timeout = 140000 // 140 seconds
+    
+    this.sessionTimeoutHandle = setTimeout(() => {
+      logger.warn('Session approaching timeout limit, closing gracefully', {
+        sessionDuration: Date.now() - this.sessionStartTime,
+        totalFramesSent: this.totalFramesSent,
+        totalFramesReceived: this.totalFramesReceived
+      })
+      
+      // Send a final message to the user
+      this.speakResponse('I need to end this call now. Please call back if you need further assistance. Goodbye!')
+        .then(() => {
+          setTimeout(() => this.cleanup(), 2000) // Give time for goodbye message
+        })
+        .catch(() => this.cleanup())
+    }, timeout)
+  }
+  
+  private setupHeartbeat(): void {
+    // Send heartbeat every 30 seconds to keep connection alive
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws.readyState === 1 && this.streamSid) {
+        try {
+          // Send a mark event as heartbeat
+          this.ws.send(JSON.stringify({
+            event: 'mark',
+            streamSid: this.streamSid,
+            mark: {
+              name: 'heartbeat',
+              timestamp: Date.now()
+            }
+          }))
+          
+          logger.debug('Heartbeat sent', {
+            uptime: Date.now() - this.sessionStartTime,
+            state: this.turnState
+          })
+        } catch (error) {
+          logger.error('Failed to send heartbeat', {
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      }
+    }, 30000)
   }
   
   private setupEventListeners(): void {
@@ -380,17 +481,26 @@ class AIVoiceSession {
       return
     }
     
-    // Decode base64 μ-law audio
-    const audioData = Uint8Array.from(atob(media.payload), c => c.charCodeAt(0))
-    const rms = calculateRMS([audioData])
-    
-    // Handle different states
-    if (this.turnState === TurnState.LISTENING) {
-      await this.handleListeningState(audioData, rms)
-    } else if (this.turnState === TurnState.SPEAKING) {
-      await this.handleSpeakingState(audioData, rms)
+    try {
+      // Decode base64 μ-law audio with error handling
+      const audioData = Uint8Array.from(atob(media.payload), c => c.charCodeAt(0))
+      this.totalFramesReceived++
+      
+      const rms = calculateRMS([audioData])
+      
+      // Handle different states
+      if (this.turnState === TurnState.LISTENING) {
+        await this.handleListeningState(audioData, rms)
+      } else if (this.turnState === TurnState.SPEAKING) {
+        await this.handleSpeakingState(audioData, rms)
+      }
+      // THINKING state: ignore audio frames while processing
+    } catch (error) {
+      logger.error('Error processing audio frame', {
+        error: error instanceof Error ? error.message : String(error),
+        frameNumber: this.totalFramesReceived
+      })
     }
-    // THINKING state: ignore audio frames while processing
   }
   
   private async handleListeningState(audioData: Uint8Array, rms: number): Promise<void> {
@@ -599,24 +709,39 @@ class AIVoiceSession {
   }
   
   private async generateResponse(userText: string): Promise<string> {
-    // Get business-specific system prompt
-    let systemPrompt = `You are a professional AI receptionist for ${this.businessName}. Be helpful, friendly, and efficient. Answer questions about the business and help customers with their needs.`
+    // Get business-specific system prompt with enhanced fallback
+    let systemPrompt = `You are a professional AI receptionist for ${this.businessName}. Be helpful, friendly, and efficient. Answer questions about the business and help customers with their needs. Keep responses concise and conversational.`
     
     if (this.tenantId && supabase) {
       try {
-        const { data: agent } = await supabase
+        const { data: agent, error } = await supabase
           .from('ai_agents')
           .select('system_prompt')
           .eq('tenant_id', this.tenantId)
           .maybeSingle()
         
-        if (agent?.system_prompt) {
+        if (error) {
+          logger.warn('Database error fetching agent prompt', {
+            error: error.message,
+            code: error.code,
+            tenantId: this.tenantId
+          })
+        } else if (agent?.system_prompt) {
           systemPrompt = agent.system_prompt
+          logger.debug('Using custom system prompt from database', {
+            promptLength: systemPrompt.length,
+            tenantId: this.tenantId
+          })
+        } else {
+          logger.debug('No custom prompt found, using default', {
+            tenantId: this.tenantId
+          })
         }
       } catch (error) {
         logger.warn('Failed to fetch agent prompt from database', {
           error: error instanceof Error ? error.message : String(error),
-          tenantId: this.tenantId
+          tenantId: this.tenantId,
+          fallbackPrompt: 'Using default prompt'
         })
       }
     }
@@ -693,20 +818,197 @@ class AIVoiceSession {
     const abortSignal = this.currentTTSAbortController.signal
     
     try {
-      logger.info('Starting ElevenLabs TTS', {
+      logger.info('Starting ElevenLabs TTS with WebSocket streaming', {
         textLength: text.length,
         voiceId: this.voiceId,
         codec: this.outboundCodec,
-        frameSize: this.outboundFrameSize
+        frameSize: this.outboundFrameSize,
+        streamingMode: 'websocket'
       })
       
-      // Determine optimal ElevenLabs format based on outbound codec
-      const outputFormat = this.outboundCodec === AudioCodec.MULAW ? 'ulaw_8000' : 'pcm_16000'
+      // PRODUCTION FIX: Always use ulaw_8000 for optimal Twilio compatibility
+      const outputFormat = 'ulaw_8000'
       
-      logger.debug('ElevenLabs request configuration', {
-        outputFormat,
-        model: 'eleven_turbo_v2',
-        streamingEnabled: true
+      // PRODUCTION FIX: Use ElevenLabs WebSocket API for real-time streaming
+      await this.streamElevenLabsWebSocket(text, abortSignal)
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
+      if (errorMessage === 'TTS_ABORTED') {
+        logger.info('ElevenLabs TTS streaming was aborted due to barge-in - no fallback needed')
+        return
+      }
+      
+      logger.error('ElevenLabs WebSocket streaming failed, attempting REST fallback', {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      
+      // Fallback to REST API approach
+      await this.speakResponseREST(text)
+    } finally {
+      this.currentTTSAbortController = null
+      this.turnState = TurnState.LISTENING
+    }
+  }
+  
+  private async streamElevenLabsWebSocket(text: string, abortSignal: AbortSignal): Promise<void> {
+    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?model_id=eleven_turbo_v2_5&output_format=ulaw_8000`
+    
+    logger.info('Connecting to ElevenLabs WebSocket', {
+      voiceId: this.voiceId,
+      model: 'eleven_turbo_v2_5',
+      format: 'ulaw_8000'
+    })
+    
+    const ws = new WebSocket(wsUrl, {
+      headers: {
+        'xi-api-key': this.elevenLabsKey
+      }
+    })
+    
+    return new Promise((resolve, reject) => {
+      let isConnected = false
+      let framesReceived = 0
+      let errorOccurred = false
+      
+      const checkAbort = () => {
+        if (abortSignal.aborted) {
+          logger.info('Closing ElevenLabs WebSocket due to abort signal')
+          ws.close()
+          reject(new Error('TTS_ABORTED'))
+          return true
+        }
+        return false
+      }
+      
+      ws.onopen = () => {
+        if (checkAbort()) return
+        
+        isConnected = true
+        logger.debug('ElevenLabs WebSocket connected, sending text')
+        
+        // Send text input with optimized settings
+        ws.send(JSON.stringify({
+          text: text,
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.8,
+            style: 0.0,
+            use_speaker_boost: true
+          },
+          generation_config: {
+            chunk_length_schedule: [50] // Optimize for low latency
+          }
+        }))
+        
+        // Send EOS to indicate end of text
+        ws.send(JSON.stringify({ text: '' }))
+      }
+      
+      ws.onmessage = async (event) => {
+        if (checkAbort()) return
+        
+        try {
+          // ElevenLabs sends both JSON metadata and binary audio
+          if (typeof event.data === 'string') {
+            const message = JSON.parse(event.data)
+            
+            if (message.audio) {
+              // Base64 encoded audio chunk
+              const audioData = Uint8Array.from(atob(message.audio), c => c.charCodeAt(0))
+              
+              // Process in 160-byte frames (20ms of μ-law at 8kHz)
+              for (let i = 0; i < audioData.length; i += FRAME_SIZE_MULAW) {
+                if (checkAbort()) return
+                
+                const frame = audioData.slice(i, i + FRAME_SIZE_MULAW)
+                if (frame.length === FRAME_SIZE_MULAW) {
+                  await this.sendOutboundFrame(frame)
+                  framesReceived++
+                } else if (frame.length > 0) {
+                  // Pad final frame if needed
+                  const paddedFrame = new Uint8Array(FRAME_SIZE_MULAW)
+                  paddedFrame.set(frame)
+                  paddedFrame.fill(0xFF, frame.length) // μ-law silence
+                  await this.sendOutboundFrame(paddedFrame)
+                  framesReceived++
+                }
+              }
+            }
+            
+            if (message.isFinal) {
+              logger.info('ElevenLabs WebSocket stream complete', {
+                framesReceived,
+                finalMessage: message
+              })
+              ws.close()
+            }
+          } else if (event.data instanceof Blob) {
+            // Binary audio data
+            const audioData = new Uint8Array(await event.data.arrayBuffer())
+            
+            // Process binary frames
+            for (let i = 0; i < audioData.length; i += FRAME_SIZE_MULAW) {
+              if (checkAbort()) return
+              
+              const frame = audioData.slice(i, i + FRAME_SIZE_MULAW)
+              if (frame.length === FRAME_SIZE_MULAW) {
+                await this.sendOutboundFrame(frame)
+                framesReceived++
+              }
+            }
+          }
+        } catch (error) {
+          logger.error('Error processing ElevenLabs WebSocket message', {
+            error: error instanceof Error ? error.message : String(error)
+          })
+          errorOccurred = true
+          ws.close()
+        }
+      }
+      
+      ws.onerror = (error) => {
+        logger.error('ElevenLabs WebSocket error', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+        errorOccurred = true
+        reject(error)
+      }
+      
+      ws.onclose = () => {
+        logger.info('ElevenLabs WebSocket closed', {
+          framesReceived,
+          wasConnected: isConnected,
+          hadError: errorOccurred
+        })
+        
+        if (errorOccurred) {
+          reject(new Error('ElevenLabs WebSocket error'))
+        } else if (!isConnected) {
+          reject(new Error('Failed to connect to ElevenLabs WebSocket'))
+        } else {
+          resolve()
+        }
+      }
+      
+      // Set timeout for connection
+      setTimeout(() => {
+        if (!isConnected && !errorOccurred) {
+          logger.error('ElevenLabs WebSocket connection timeout')
+          ws.close()
+          reject(new Error('WebSocket connection timeout'))
+        }
+      }, 5000)
+    })
+  }
+  
+  private async speakResponseREST(text: string): Promise<void> {
+    try {
+      logger.info('Using ElevenLabs REST API fallback', {
+        textLength: text.length,
+        voiceId: this.voiceId
       })
       
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`, {
@@ -717,28 +1019,28 @@ class AIVoiceSession {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_turbo_v2',
+          model_id: 'eleven_turbo_v2_5',
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.8,
             style: 0.0,
             use_speaker_boost: true
           },
-          output_format: outputFormat
+          output_format: 'ulaw_8000'
         })
       })
       
       if (!response.ok) {
         const errorText = await response.text()
-        logger.error('ElevenLabs API error', {
+        logger.error('ElevenLabs REST API error', {
           status: response.status,
           statusText: response.statusText,
           error: errorText
         })
-        throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
+        throw new Error(`ElevenLabs REST API error: ${response.status} - ${errorText}`)
       }
       
-      logger.debug('ElevenLabs response received, starting stream processing')
+      logger.debug('ElevenLabs REST response received, processing stream')
       
       if (!response.body) {
         throw new Error('No response body from ElevenLabs')
@@ -746,187 +1048,63 @@ class AIVoiceSession {
       
       const reader = response.body.getReader()
       let audioBuffer = new Uint8Array(0)
-      let headerSkipped = false
       let totalBytesProcessed = 0
       let framesStreamed = 0
       
-      try {
-        while (true) {
-          // Check for abort signal before each iteration
-          if (abortSignal.aborted) {
-            logger.info('TTS streaming aborted due to barge-in')
-            throw new Error('TTS_ABORTED')
-          }
-          
-          const { done, value } = await reader.read()
-          
-          if (done) {
-            logger.debug('ElevenLabs stream complete', {
-              totalBytesProcessed,
-              framesStreamed
-            })
-            break
-          }
-          
-          if (value) {
-            // Append new data to buffer
-            const newBuffer = new Uint8Array(audioBuffer.length + value.length)
-            newBuffer.set(audioBuffer)
-            newBuffer.set(value, audioBuffer.length)
-            audioBuffer = newBuffer
-            
-            // Skip WAV header if present (first time only)
-            if (!headerSkipped) {
-              const wavInfo = this.parseWavHeader(audioBuffer)
-              if (wavInfo) {
-                logger.debug('WAV header detected and skipped', {
-                  headerSize: wavInfo.dataOffset,
-                  expectedDataSize: wavInfo.dataSize,
-                  sampleRate: wavInfo.sampleRate,
-                  bitsPerSample: wavInfo.bitsPerSample
-                })
-                audioBuffer = wavInfo.audioData
-              }
-              headerSkipped = true
-            }
-            
-            // Process audio in frame-sized chunks
-            let processedBytes = 0
-            
-            if (outputFormat === 'ulaw_8000') {
-              // Direct μ-law streaming - optimal for μ-law codec
-              while (audioBuffer.length - processedBytes >= this.outboundFrameSize) {
-                // Check for abort before each frame
-                if (abortSignal.aborted) {
-                  logger.info('TTS frame processing aborted during μ-law streaming')
-                  throw new Error('TTS_ABORTED')
-                }
-                
-                const frame = audioBuffer.slice(processedBytes, processedBytes + this.outboundFrameSize)
-                await this.sendOutboundFrame(frame)
-                processedBytes += this.outboundFrameSize
-                framesStreamed++
-                totalBytesProcessed += this.outboundFrameSize
-              }
-            } else {
-              // PCM16 format - convert if needed
-              const bytesPerSample = 2
-              const samplesPerFrame = 160
-              const frameSize = samplesPerFrame * bytesPerSample
-              
-              while (audioBuffer.length - processedBytes >= frameSize) {
-                // Check for abort before each frame
-                if (abortSignal.aborted) {
-                  logger.info('TTS frame processing aborted during PCM16 streaming')
-                  throw new Error('TTS_ABORTED')
-                }
-                
-                const pcmFrame = audioBuffer.slice(processedBytes, processedBytes + frameSize)
-                
-                if (this.outboundCodec === AudioCodec.MULAW) {
-                  // Convert PCM16 to μ-law
-                  const mulawFrame = new Uint8Array(this.outboundFrameSize)
-                  const view = new DataView(pcmFrame.buffer, pcmFrame.byteOffset, pcmFrame.byteLength)
-                  
-                  for (let i = 0; i < samplesPerFrame; i++) {
-                    const pcmSample = view.getInt16(i * 2, true)
-                    mulawFrame[i] = pcmToMulaw(pcmSample)
-                  }
-                  
-                  await this.sendOutboundFrame(mulawFrame)
-                } else {
-                  // Direct PCM16 streaming
-                  await this.sendOutboundFrame(pcmFrame)
-                }
-                
-                processedBytes += frameSize
-                framesStreamed++
-                totalBytesProcessed += frameSize
-              }
-            }
-            
-            // Keep remaining unprocessed bytes for next iteration
-            if (processedBytes > 0) {
-              audioBuffer = audioBuffer.slice(processedBytes)
-            }
-          }
-        }
+      while (true) {
+        const { done, value } = await reader.read()
         
-        // Process any remaining audio data
-        if (audioBuffer.length > 0) {
-          logger.debug('Processing final audio chunk', {
-            remainingBytes: audioBuffer.length,
-            frameSize: this.outboundFrameSize
+        if (done) {
+          logger.debug('ElevenLabs REST stream complete', {
+            totalBytesProcessed,
+            framesStreamed
           })
-          
-          if (outputFormat === 'ulaw_8000') {
-            // Pad the final frame if needed
-            if (audioBuffer.length < this.outboundFrameSize) {
-              const paddedFrame = new Uint8Array(this.outboundFrameSize)
-              paddedFrame.set(audioBuffer)
-              paddedFrame.fill(0xFF, audioBuffer.length) // μ-law silence padding
-              await this.sendOutboundFrame(paddedFrame)
-            } else {
-              await this.sendOutboundFrame(audioBuffer.slice(0, this.outboundFrameSize))
-            }
-          } else {
-            // Handle PCM16 final chunk
-            const bytesPerSample = 2
-            const samplesInChunk = Math.floor(audioBuffer.length / bytesPerSample)
-            
-            if (samplesInChunk > 0) {
-              if (this.outboundCodec === AudioCodec.MULAW) {
-                const mulawFrame = new Uint8Array(this.outboundFrameSize)
-                const view = new DataView(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength)
-                
-                for (let i = 0; i < Math.min(samplesInChunk, 160); i++) {
-                  const pcmSample = view.getInt16(i * 2, true)
-                  mulawFrame[i] = pcmToMulaw(pcmSample)
-                }
-                
-                // Fill remaining with silence
-                mulawFrame.fill(0xFF, samplesInChunk)
-                await this.sendOutboundFrame(mulawFrame)
-              } else {
-                const paddedFrame = new Uint8Array(this.outboundFrameSize)
-                paddedFrame.set(audioBuffer.slice(0, Math.min(audioBuffer.length, this.outboundFrameSize)))
-                await this.sendOutboundFrame(paddedFrame)
-              }
-            }
-          }
-          
-          framesStreamed++
+          break
         }
         
-        logger.info('ElevenLabs TTS streaming complete', {
-          totalBytesProcessed,
-          framesStreamed,
-          outputFormat,
-          streamingMode: 'real-time'
-        })
-        
-      } finally {
-        reader.releaseLock()
+        if (value) {
+          // Append new data to buffer
+          const newBuffer = new Uint8Array(audioBuffer.length + value.length)
+          newBuffer.set(audioBuffer)
+          newBuffer.set(value, audioBuffer.length)
+          audioBuffer = newBuffer
+          
+          // Process μ-law audio in 160-byte frames
+          let processedBytes = 0
+          while (audioBuffer.length - processedBytes >= FRAME_SIZE_MULAW) {
+            const frame = audioBuffer.slice(processedBytes, processedBytes + FRAME_SIZE_MULAW)
+            await this.sendOutboundFrame(frame)
+            processedBytes += FRAME_SIZE_MULAW
+            framesStreamed++
+            totalBytesProcessed += FRAME_SIZE_MULAW
+          }
+          
+          // Keep remaining unprocessed bytes
+          if (processedBytes > 0) {
+            audioBuffer = audioBuffer.slice(processedBytes)
+          }
+        }
       }
       
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      
-      if (errorMessage === 'TTS_ABORTED') {
-        logger.info('ElevenLabs TTS streaming was aborted due to barge-in - no fallback needed')
-        return // Don't attempt fallback for intentional abort
+      // Process any remaining audio
+      if (audioBuffer.length > 0) {
+        const paddedFrame = new Uint8Array(FRAME_SIZE_MULAW)
+        paddedFrame.set(audioBuffer)
+        paddedFrame.fill(0xFF, audioBuffer.length) // μ-law silence padding
+        await this.sendOutboundFrame(paddedFrame)
+        framesStreamed++
       }
       
-      logger.error('ElevenLabs TTS streaming failed, attempting fallback', {
-        error: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined
+      logger.info('ElevenLabs REST streaming complete', {
+        totalBytesProcessed,
+        framesStreamed
       })
       
-      // Fallback to the buffered approach
-      await this.speakResponseFallback(text)
-    } finally {
-      // Clean up abort controller after TTS completes or is aborted
-      this.currentTTSAbortController = null
+    } catch (error) {
+      logger.error('ElevenLabs REST API failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
     }
   }
   
@@ -1155,10 +1333,52 @@ class AIVoiceSession {
     logger.info('Cleaning up session', {
       hasGreeted: this.hasGreeted,
       conversationLength: this.conversationHistory.length,
-      isReady: this.isReady
+      isReady: this.isReady,
+      sessionDuration: Date.now() - this.sessionStartTime,
+      totalFramesSent: this.totalFramesSent,
+      totalFramesReceived: this.totalFramesReceived
     })
+    
     this.isClosed = true
     this.audioBuffer = []
+    this.bargeInBuffer = []
+    
+    // Cancel any pending operations
+    if (this.currentTTSAbortController) {
+      this.currentTTSAbortController.abort()
+      this.currentTTSAbortController = null
+    }
+    
+    // Clear timeouts and intervals
+    if (this.sessionTimeoutHandle) {
+      clearTimeout(this.sessionTimeoutHandle)
+      this.sessionTimeoutHandle = null
+    }
+    
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval)
+      this.heartbeatInterval = null
+    }
+    
+    // Close WebSocket if still open
+    if (this.ws.readyState === 1) {
+      try {
+        this.ws.close(1000, 'Session ended')
+      } catch (error) {
+        logger.error('Error closing WebSocket', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+    
+    // Log final metrics
+    logger.info('Session metrics', {
+      duration: Date.now() - this.sessionStartTime,
+      framesReceived: this.totalFramesReceived,
+      framesSent: this.totalFramesSent,
+      conversationTurns: this.conversationHistory.length / 2,
+      avgFramesPerSecond: this.totalFramesReceived / ((Date.now() - this.sessionStartTime) / 1000)
+    })
   }
 
   private async sendSimpleTestTone(): Promise<void> {
@@ -1249,35 +1469,45 @@ class AIVoiceSession {
       return
     }
     
-    const payload = btoa(String.fromCharCode(...frame))
-    
-    // Log first few frames for debugging
-    if (this.outboundSeq < 3) {
-      logger.debug('Sending initial frame', {
+    try {
+      const payload = btoa(String.fromCharCode(...frame))
+      
+      // Log first few frames for debugging
+      if (this.outboundSeq < 3) {
+        logger.debug('Sending initial frame', {
+          frameNumber: this.outboundSeq,
+          frameSize: frame.length,
+          codec: this.outboundCodec,
+          hexDump: toHexString(frame, 32),
+          payloadLength: payload.length
+        })
+      }
+      
+      // PRODUCTION FIX: Use exact Twilio media format
+      // CRITICAL: "outbound" track for audio TO caller
+      const message = {
+        event: 'media',
+        streamSid: this.streamSid,
+        media: {
+          track: 'outbound',  // REQUIRED: Audio going TO the caller
+          payload: payload     // Base64 encoded μ-law audio
+        }
+      }
+      
+      this.ws.send(JSON.stringify(message))
+      this.outboundSeq++
+      this.totalFramesSent++
+      
+      // Pace frames at 20ms intervals to match 8kHz audio rate
+      await new Promise(resolve => setTimeout(resolve, 20))
+      
+    } catch (error) {
+      logger.error('Failed to send outbound frame', {
+        error: error instanceof Error ? error.message : String(error),
         frameNumber: this.outboundSeq,
-        frameSize: frame.length,
-        codec: this.outboundCodec,
-        hexDump: toHexString(frame, 32),
-        payloadLength: payload.length
+        streamSid: this.streamSid
       })
     }
-    
-    // CRITICAL FIX: Only send required fields for outbound media
-    // DO NOT include timestamp or sequenceNumber - they're only for inbound messages!
-    const message = {
-      event: 'media',
-      streamSid: this.streamSid,
-      media: {
-        track: 'outbound', // Required for outbound audio
-        payload: payload    // The audio data - ONLY these 2 fields allowed
-      }
-    }
-    
-    this.ws.send(JSON.stringify(message))
-    this.outboundSeq++ // Keep for internal tracking only
-    
-    // Pace frames at 20ms intervals to match 8kHz audio rate
-    await new Promise(resolve => setTimeout(resolve, 20))
   }
   
   private async sendDirectFrame(frame: Uint8Array): Promise<void> {
@@ -1432,25 +1662,57 @@ class AIVoiceSession {
       businessName: this.businessName
     })
     
-    // Use the fixed speech method with WAV parsing
-    const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
-    await this.speakResponseFixed(greetingText)
+    try {
+      // Use custom greeting or default
+      const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
+      await this.speakResponseFixed(greetingText)
+    } catch (error) {
+      logger.error('Failed to deliver greeting', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      
+      // Try a simple fallback greeting
+      try {
+        await this.speakResponseFixed(`Hello! How can I help you today?`)
+      } catch (fallbackError) {
+        logger.error('Even fallback greeting failed', {
+          error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        })
+      }
+    }
   }
 }
 
 // ========== MAIN WEBSOCKET HANDLER ==========
 
 serve(async (req) => {
+  // PRODUCTION FIX: No authentication required for Twilio WebSocket connections
+  // Twilio cannot send JWT headers with WebSocket connections
+  
   // Health check endpoint
   const url = new URL(req.url)
   if (url.searchParams.get('health') === '1') {
     return new Response(JSON.stringify({ 
       status: 'ok', 
-      version: '2024-09-20-v2',
+      version: '2024-12-20-production',
+      features: [
+        'No authentication required',
+        'ElevenLabs WebSocket streaming',
+        'μ-law codec optimization',
+        'Barge-in detection',
+        'VAD with 500ms silence detection',
+        '200ms warmup silence'
+      ],
       timestamp: new Date().toISOString()
     }), { 
-      headers: { 'Content-Type': 'application/json' } 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     })
+  }
+  
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
   }
   
   // Handle WebSocket upgrade
@@ -1458,17 +1720,25 @@ serve(async (req) => {
     return new Response('Expected WebSocket', { status: 400 })
   }
   
-  // Extract context from URL parameters
+  // Extract context from URL parameters with validation
   const tenantId = url.searchParams.get('tenantId') || ''
   const businessName = url.searchParams.get('businessName') || 'this business'
-  const voiceId = url.searchParams.get('voiceId') || 'Xb7hH8MSUJpSbSDYk0k2'
+  const voiceId = url.searchParams.get('voiceId') || 'Xb7hH8MSUJpSbSDYk0k2' // Default ElevenLabs voice
   const greeting = url.searchParams.get('greeting') || ''
   
-  logger.info('Starting AI Voice Session', {
+  // Log connection attempt with full context
+  logger.info('Twilio WebSocket connection request', {
     tenantId,
     businessName,
     voiceId,
-    greetingProvided: !!greeting
+    greetingProvided: !!greeting,
+    headers: {
+      host: req.headers.get('host'),
+      origin: req.headers.get('origin'),
+      userAgent: req.headers.get('user-agent')
+    },
+    production: true,
+    authRequired: false // PRODUCTION FIX: No auth needed
   })
   
   const { socket, response } = Deno.upgradeWebSocket(req)
