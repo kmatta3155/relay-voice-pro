@@ -111,36 +111,50 @@ class SimpleVoiceSession {
 }
 
 serve(async (req) => {
-  // Handle CORS
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-  
-  // Health check
-  const url = new URL(req.url)
-  if (url.searchParams.get('health') === '1') {
-    return new Response(JSON.stringify({ 
-      status: 'ok', 
-      version: 'debug-v1',
-      timestamp: new Date().toISOString()
-    }), { 
-      headers: { 'Content-Type': 'application/json' } 
+  try {
+    // Handle CORS
+    if (req.method === 'OPTIONS') {
+      return new Response('ok', { headers: corsHeaders })
+    }
+    
+    // Health check (no auth required)
+    const url = new URL(req.url)
+    if (url.searchParams.get('health') === '1') {
+      return new Response(JSON.stringify({ 
+        status: 'ok', 
+        version: 'debug-v1',
+        timestamp: new Date().toISOString()
+      }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      })
+    }
+    
+    // Handle WebSocket upgrade
+    if (req.headers.get('upgrade') !== 'websocket') {
+      console.log('Non-WebSocket request received')
+      return new Response('Expected WebSocket', { status: 400 })
+    }
+    
+    console.log('🎙️ Starting debug voice session')
+    
+    const { socket, response } = Deno.upgradeWebSocket(req)
+    
+    socket.onopen = () => {
+      console.log('✅ Debug WebSocket connection established')
+      new SimpleVoiceSession(socket)
+    }
+    
+    socket.onerror = (error) => {
+      console.error('❌ WebSocket error in main handler:', error)
+    }
+    
+    return response
+    
+  } catch (error) {
+    console.error('🚨 Function error:', error)
+    return new Response(`Function error: ${error.message}`, { 
+      status: 500,
+      headers: corsHeaders 
     })
   }
-  
-  // Handle WebSocket upgrade
-  if (req.headers.get('upgrade') !== 'websocket') {
-    return new Response('Expected WebSocket', { status: 400 })
-  }
-  
-  console.log('Starting debug voice session')
-  
-  const { socket, response } = Deno.upgradeWebSocket(req)
-  
-  socket.onopen = () => {
-    console.log('Debug WebSocket connection established')
-    new SimpleVoiceSession(socket)
-  }
-  
-  return response
 })
