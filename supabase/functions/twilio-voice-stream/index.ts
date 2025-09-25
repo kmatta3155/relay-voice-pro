@@ -884,22 +884,22 @@ class AIVoiceSession {
   }
   
   private async streamElevenLabsWebSocket(text: string, abortSignal: AbortSignal): Promise<void> {
-    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?model_id=eleven_turbo_v2_5&output_format=ulaw_8000`
+    // CRITICAL FIX: Add API key as URL parameter for Deno compatibility
+    // Deno WebSocket doesn't support headers in options, must pass as query param
+    const apiKey = encodeURIComponent(this.elevenLabsKey)
+    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?model_id=eleven_turbo_v2_5&output_format=ulaw_8000&xi_api_key=${apiKey}`
     
     logger.info('Connecting to ElevenLabs WebSocket', {
       voiceId: this.voiceId,
       model: 'eleven_turbo_v2_5',
-      format: 'ulaw_8000'
+      format: 'ulaw_8000',
+      authentication: 'URL parameter (Deno-compatible)'
     })
     
     // Mark that we're actively streaming from ElevenLabs
     this.isElevenLabsStreaming = true
     
-    const ws = new WebSocket(wsUrl, {
-      headers: {
-        'xi-api-key': this.elevenLabsKey
-      }
-    })
+    const ws = new WebSocket(wsUrl)
     
     return new Promise((resolve, reject) => {
       let isConnected = false
