@@ -3,10 +3,13 @@
  * Architecture: Twilio WebSocket → Audio Processing → STT → Dialogue → TTS → Response
  * Optimized for <300ms response latency with proper audio streaming
  * 
- * PRODUCTION FIXES APPLIED:
+ * CRITICAL PRODUCTION FIXES APPLIED (2024-12-23):
+ * - FIXED: Track direction - "inbound" for audio TO caller (not "outbound")
+ * - FIXED: Direct audio forwarding - ElevenLabs base64 audio sent without re-encoding
+ * - FIXED: Removed double-encoding that was causing static
+ * - FIXED: Added clear message support for barge-in interruptions
  * - No authentication required for Twilio WebSocket connections
  * - ElevenLabs WebSocket streaming with ulaw_8000 format
- * - Proper "outbound" track usage for audio to caller
  * - 200ms warmup silence to prevent initial static
  * - Comprehensive error recovery and logging
  */
@@ -586,6 +589,16 @@ class AIVoiceSession {
   
   private async handleBargeIn(): Promise<void> {
     try {
+      // CRITICAL FIX: Send clear message to stop pending audio
+      if (this.streamSid && this.ws.readyState === 1) {
+        const clearMessage = {
+          event: 'clear',
+          streamSid: this.streamSid
+        }
+        this.ws.send(JSON.stringify(clearMessage))
+        logger.debug('Sent clear message to stop pending audio')
+      }
+      
       // Abort current TTS streaming if active
       if (this.currentTTSAbortController) {
         logger.debug('Aborting current TTS stream due to barge-in')
@@ -916,26 +929,10 @@ class AIVoiceSession {
             const message = JSON.parse(event.data)
             
             if (message.audio) {
-              // Base64 encoded audio chunk
-              const audioData = Uint8Array.from(atob(message.audio), c => c.charCodeAt(0))
-              
-              // Process in 160-byte frames (20ms of μ-law at 8kHz)
-              for (let i = 0; i < audioData.length; i += FRAME_SIZE_MULAW) {
-                if (checkAbort()) return
-                
-                const frame = audioData.slice(i, i + FRAME_SIZE_MULAW)
-                if (frame.length === FRAME_SIZE_MULAW) {
-                  await this.sendOutboundFrame(frame)
-                  framesReceived++
-                } else if (frame.length > 0) {
-                  // Pad final frame if needed
-                  const paddedFrame = new Uint8Array(FRAME_SIZE_MULAW)
-                  paddedFrame.set(frame)
-                  paddedFrame.fill(0xFF, frame.length) // μ-law silence
-                  await this.sendOutboundFrame(paddedFrame)
-                  framesReceived++
-                }
-              }
+              // CRITICAL FIX: Direct forward ElevenLabs base64 audio without re-encoding
+              // ElevenLabs WebSocket with ulaw_8000 already provides base64 encoded μ-law
+              await this.sendOutboundFrameDirect(message.audio)
+              framesReceived++
             }
             
             if (message.isFinal) {
@@ -946,19 +943,11 @@ class AIVoiceSession {
               ws.close()
             }
           } else if (event.data instanceof Blob) {
-            // Binary audio data
+            // CRITICAL FIX: Binary audio - convert to base64 and send directly
             const audioData = new Uint8Array(await event.data.arrayBuffer())
-            
-            // Process binary frames
-            for (let i = 0; i < audioData.length; i += FRAME_SIZE_MULAW) {
-              if (checkAbort()) return
-              
-              const frame = audioData.slice(i, i + FRAME_SIZE_MULAW)
-              if (frame.length === FRAME_SIZE_MULAW) {
-                await this.sendOutboundFrame(frame)
-                framesReceived++
-              }
-            }
+            const base64Audio = btoa(String.fromCharCode(...audioData))
+            await this.sendOutboundFrameDirect(base64Audio)
+            framesReceived++
           }
         } catch (error) {
           logger.error('Error processing ElevenLabs WebSocket message', {
@@ -1069,11 +1058,14 @@ class AIVoiceSession {
           newBuffer.set(value, audioBuffer.length)
           audioBuffer = newBuffer
           
+          // CRITICAL FIX: For REST API, convert chunks to base64 and send directly
           // Process μ-law audio in 160-byte frames
           let processedBytes = 0
           while (audioBuffer.length - processedBytes >= FRAME_SIZE_MULAW) {
             const frame = audioBuffer.slice(processedBytes, processedBytes + FRAME_SIZE_MULAW)
-            await this.sendOutboundFrame(frame)
+            // Convert frame to base64 and send directly
+            const base64Frame = btoa(String.fromCharCode(...frame))
+            await this.sendOutboundFrameDirect(base64Frame)
             processedBytes += FRAME_SIZE_MULAW
             framesStreamed++
             totalBytesProcessed += FRAME_SIZE_MULAW
@@ -1091,7 +1083,9 @@ class AIVoiceSession {
         const paddedFrame = new Uint8Array(FRAME_SIZE_MULAW)
         paddedFrame.set(audioBuffer)
         paddedFrame.fill(0xFF, audioBuffer.length) // μ-law silence padding
-        await this.sendOutboundFrame(paddedFrame)
+        // Convert to base64 and send directly
+        const base64Frame = btoa(String.fromCharCode(...paddedFrame))
+        await this.sendOutboundFrameDirect(base64Frame)
         framesStreamed++
       }
       
@@ -1450,12 +1444,54 @@ class AIVoiceSession {
       })
     }
     
+    // Send warmup silence frames
     for (let i = 0; i < 10; i++) {
-      await this.sendOutboundFrame(silenceFrame)
+      // Convert silence frame to base64 and send directly
+      const base64Silence = btoa(String.fromCharCode(...silenceFrame))
+      await this.sendOutboundFrameDirect(base64Silence)
     }
     logger.debug('Buffer warmup complete', {
       framesSent: 10
     })
+  }
+  
+  // CRITICAL FIX: New function to send base64 audio directly without re-encoding
+  private async sendOutboundFrameDirect(base64Audio: string): Promise<void> {
+    // Guard against sending after close or without streamSid
+    if (!this.streamSid || this.isClosed || this.ws.readyState !== 1) {
+      logger.debug('Skipping direct frame send', {
+        hasStreamSid: !!this.streamSid,
+        isClosed: this.isClosed,
+        wsReadyState: this.ws.readyState
+      })
+      return
+    }
+    
+    try {
+      // CRITICAL: Send ElevenLabs audio directly without any conversion
+      const message = {
+        event: 'media',
+        streamSid: this.streamSid,
+        media: {
+          track: 'inbound',   // CRITICAL: "inbound" for audio TO the caller
+          payload: base64Audio  // Already base64 encoded μ-law from ElevenLabs
+        }
+      }
+      
+      this.ws.send(JSON.stringify(message))
+      this.outboundSeq++
+      this.totalFramesSent++
+      
+      // Pace at 20ms to maintain smooth audio flow
+      await new Promise(resolve => setTimeout(resolve, 20))
+      
+    } catch (error) {
+      logger.error('Failed to send direct outbound frame', {
+        error: error instanceof Error ? error.message : String(error),
+        frameNumber: this.outboundSeq,
+        streamSid: this.streamSid
+      })
+    }
   }
   
   private async sendOutboundFrame(frame: Uint8Array): Promise<void> {
@@ -1474,7 +1510,7 @@ class AIVoiceSession {
       
       // Log first few frames for debugging
       if (this.outboundSeq < 3) {
-        logger.debug('Sending initial frame', {
+        logger.debug('Sending initial frame (legacy method - prefer sendOutboundFrameDirect)', {
           frameNumber: this.outboundSeq,
           frameSize: frame.length,
           codec: this.outboundCodec,
@@ -1484,13 +1520,13 @@ class AIVoiceSession {
       }
       
       // PRODUCTION FIX: Use exact Twilio media format
-      // CRITICAL: "outbound" track for audio TO caller
+      // CRITICAL: "inbound" track for audio TO caller (counter-intuitive but correct)
       const message = {
         event: 'media',
         streamSid: this.streamSid,
         media: {
-          track: 'outbound',  // REQUIRED: Audio going TO the caller
-          payload: payload     // Base64 encoded μ-law audio
+          track: 'inbound',  // CRITICAL FIX: Audio going TO the caller uses "inbound"
+          payload: payload   // Base64 encoded μ-law audio
         }
       }
       
@@ -1511,8 +1547,9 @@ class AIVoiceSession {
   }
   
   private async sendDirectFrame(frame: Uint8Array): Promise<void> {
-    // Wrapper for compatibility - uses new sendOutboundFrame
-    await this.sendOutboundFrame(frame)
+    // Convert frame to base64 and send using the direct method
+    const base64Frame = btoa(String.fromCharCode(...frame))
+    await this.sendOutboundFrameDirect(base64Frame)
   }
 
 
