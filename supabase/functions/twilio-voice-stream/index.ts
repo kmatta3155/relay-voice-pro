@@ -884,16 +884,15 @@ class AIVoiceSession {
   }
   
   private async streamElevenLabsWebSocket(text: string, abortSignal: AbortSignal): Promise<void> {
-    // CRITICAL FIX: Add API key as URL parameter for Deno compatibility
-    // Deno WebSocket doesn't support headers in options, must pass as query param
-    const apiKey = encodeURIComponent(this.elevenLabsKey)
-    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?model_id=eleven_turbo_v2_5&output_format=ulaw_8000&xi_api_key=${apiKey}`
+    // CRITICAL FIX: ElevenLabs requires API key to be sent in the FIRST WebSocket message body
+    // NOT as a URL parameter - this is the correct authentication protocol
+    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?model_id=eleven_turbo_v2_5&output_format=ulaw_8000`
     
     logger.info('Connecting to ElevenLabs WebSocket', {
       voiceId: this.voiceId,
       model: 'eleven_turbo_v2_5',
       format: 'ulaw_8000',
-      authentication: 'URL parameter (Deno-compatible)'
+      authentication: 'Message body (correct protocol)'
     })
     
     // Mark that we're actively streaming from ElevenLabs
@@ -920,17 +919,24 @@ class AIVoiceSession {
         if (checkAbort()) return
         
         isConnected = true
-        logger.debug('ElevenLabs WebSocket connected, sending text')
+        logger.debug('ElevenLabs WebSocket connected, sending handshake with API key')
         
-        // Send text input with optimized settings
+        // CRITICAL: Send initial handshake with API key in message body (ElevenLabs protocol requirement)
         ws.send(JSON.stringify({
-          text: text,
+          text: ' ', // Single space for handshake
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.8,
             style: 0.0,
             use_speaker_boost: true
           },
+          xi_api_key: this.elevenLabsKey // API key must be in first message
+        }))
+        
+        // Send actual text with generation trigger
+        ws.send(JSON.stringify({
+          text: text,
+          try_trigger_generation: true,
           generation_config: {
             chunk_length_schedule: [50] // Optimize for low latency
           }

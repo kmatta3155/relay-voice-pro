@@ -1,0 +1,41 @@
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":5164,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":16,"durationMs":320}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"14.3","hexDump":"ff fd 7e 7e fd 7e 7e 7d fe 7d 7e fe ff 7e 7d ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"15.4","hexDump":"7d fe fd fe 7d fb ff fc 7b 7d fc fe ff fe fd fc... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"13.9","hexDump":"fd 7e fd 7e ff 7e 7e 7e 7e fe 7d fe fb 7e ff fd... (160 bytes total)"}
+[INFO] [twilio-voice-stream] ElevenLabs WebSocket closed {"framesReceived":0,"wasConnected":true,"hadError":false}
+[DEBUG] [twilio-voice-stream] ElevenLabs WebSocket connected, sending text
+[INFO] [twilio-voice-stream] Connecting to ElevenLabs WebSocket {"voiceId":"Xb7hH8MSUJpSbSDYk0k2","model":"eleven_turbo_v2_5","format":"ulaw_8000","authentication":"URL parameter (Deno-compatible)"}
+[INFO] [twilio-voice-stream] Starting ElevenLabs TTS with WebSocket streaming {"textLength":34,"voiceId":"Xb7hH8MSUJpSbSDYk0k2","codec":"mulaw","frameSize":160,"streamingMode":"websocket"}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":34,"usage":{"prompt_tokens":48,"completion_tokens":9,"total_tokens":57,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":2,"maxTokens":150,"temperature":0.7}
+[INFO] [twilio-voice-stream] Transcription completed {"transcript":"You","transcriptLength":3}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":3}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":5164,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":16,"durationMs":320}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[INFO] [twilio-voice-stream] ElevenLabs WebSocket closed {"framesReceived":0,"wasConnected":true,"hadError":false}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":2,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":3,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":1,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] ElevenLabs WebSocket connected, sending text
+[INFO] [twilio-voice-stream] Connecting to ElevenLabs WebSocket {"voiceId":"Xb7hH8MSUJpSbSDYk0k2","model":"eleven_turbo_v2_5","format":"ulaw_8000","authentication":"URL parameter (Deno-compatible)"}
+[INFO] [twilio-voice-stream] Starting ElevenLabs TTS with WebSocket streaming {"textLength":69,"voiceId":"Xb7hH8MSUJpSbSDYk0k2","codec":"mulaw","frameSize":160,"streamingMode":"websocket"}
+[INFO] [twilio-voice-stream] Starting greeting {"streamSid":"MZc71efc58747f4ced7281684c6e6c7545","greetingLength":0,"businessName":"this business"}
+[DEBUG] [twilio-voice-stream] Buffer warmup complete {"framesSent":10}
+[DEBUG] [twilio-voice-stream] Using μ-law silence pattern {"fillValue":"0xFF","frameSize":160}
+[DEBUG] [twilio-voice-stream] Starting buffer warmup {"codec":"mulaw","frameSize":160,"warmupFrames":10,"warmupDurationMs":200}
+[INFO] [twilio-voice-stream] ✅ FORCED codec configuration to μ-law for optimal audio quality {"codec":"mulaw","frameSize":160,"framesPerSecond":50,"durationPerFrame":20,"note":"Outbound codec explicitly forced to μ-law for ElevenLabs compatibility"}
+[INFO] [twilio-voice-stream] ✅ Codec set to μ-law {"codec":"mulaw","frameSize":160,"bytesPerFrame":160}
+[INFO] [twilio-voice-stream] Media format negotiated {"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1}
+[INFO] [twilio-voice-stream] StreamSid captured {"streamSid":"MZc71efc58747f4ced7281684c6e6c7545"}
+[DEBUG] [twilio-voice-stream] Detected encoding type {"encoding":"audio/x-mulaw","originalEncoding":"audio/x-mulaw"}
+[DEBUG] [twilio-voice-stream] Full start event received {"startEvent":{"accountSid":"ACe6e513d70609f6d6376a80db0b4214d5","streamSid":"MZc71efc58747f4ced7281684c6e6c7545","callSid":"CA3426a284d8f2c148501d3637f4b88049","tracks":["inbound"],"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"customParameters":{"phoneNumber":"+19169450065","to":"+19194203058","businessName":"this business","from":"+19169450065"}}}
+[INFO] [twilio-voice-stream] Connected to Twilio WebSocket - waiting for start event
+[INFO] [twilio-voice-stream] Call started {"streamSid":"MZc71efc58747f4ced7281684c6e6c7545","callSid":"CA3426a284d8f2c148501d3637f4b88049"}
+[INFO] [twilio-voice-stream] AIVoiceSession initialized successfully {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingLength":0,"hasOpenAIKey":true,"hasElevenLabsKey":true,"maxSessionDuration":"150s (Free) / 400s (Pro)","features":["WebSocket streaming","Barge-in detection","VAD with 500ms silence","Database-driven prompts","Session timeout protection"]}
+[INFO] [twilio-voice-stream] WebSocket connection established
+[INFO] [twilio-voice-stream] Twilio WebSocket connection request {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingProvided":false,"headers":{"host":"edge-runtime.supabase.com","origin":null,"userAgent":"Twilio.TmeWs/1.0"},"production":true,"authRequired":false}
+Listening on http://localhost:9999/
