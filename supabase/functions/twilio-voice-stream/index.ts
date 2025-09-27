@@ -194,7 +194,8 @@ class AIVoiceSession {
   
   // API keys
   private openaiKey: string
-  private elevenLabsKey: string
+  private azureTtsKey: string
+  private azureTtsRegion: string
   
   // Conversation state
   private conversationHistory: Array<{ role: string; content: string }> = []
@@ -204,8 +205,8 @@ class AIVoiceSession {
   // Track if session is closed
   private isClosed = false
   
-  // Track active ElevenLabs streaming
-  private isElevenLabsStreaming = false
+  // Track active Azure TTS streaming
+  private isAzureTtsStreaming = false
   private pendingCleanup = false
   
   // Codec negotiation
@@ -235,7 +236,8 @@ class AIVoiceSession {
     this.greeting = context.greeting
     
     this.openaiKey = Deno.env.get('OPENAI_API_KEY') || ''
-    this.elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY') || ''
+    this.azureTtsKey = Deno.env.get('AZURE_TTS_KEY') || ''
+    this.azureTtsRegion = Deno.env.get('AZURE_TTS_REGION') || 'eastus'
     
     // Validate required API keys
     if (!this.openaiKey) {
@@ -244,9 +246,9 @@ class AIVoiceSession {
       return
     }
     
-    if (!this.elevenLabsKey) {
-      logger.error('CRITICAL: ElevenLabs API key not configured')
-      this.sendErrorToCallerAndClose('Configuration error: ElevenLabs API key missing')
+    if (!this.azureTtsKey) {
+      logger.error('CRITICAL: Azure TTS API key not configured')
+      this.sendErrorToCallerAndClose('Configuration error: Azure TTS API key missing')
       return
     }
     
@@ -256,10 +258,11 @@ class AIVoiceSession {
       voiceId: this.voiceId,
       greetingLength: this.greeting?.length || 0,
       hasOpenAIKey: !!this.openaiKey,
-      hasElevenLabsKey: !!this.elevenLabsKey,
+      hasAzureTtsKey: !!this.azureTtsKey,
+      azureTtsRegion: this.azureTtsRegion,
       maxSessionDuration: '150s (Free) / 400s (Pro)',
       features: [
-        'WebSocket streaming',
+        'Azure TTS streaming',
         'Barge-in detection',
         'VAD with 500ms silence',
         'Database-driven prompts',
@@ -306,7 +309,7 @@ class AIVoiceSession {
           setTimeout(() => this.cleanup(), 2000) // Give time for goodbye message
         })
         .catch(() => this.cleanup())
-    }, timeout)
+    }, timeout) as unknown as number
   }
   
   private setupHeartbeat(): void {
@@ -334,7 +337,7 @@ class AIVoiceSession {
           })
         }
       }
-    }, 30000)
+    }, 30000) as unknown as number
   }
   
   private setupEventListeners(): void {
@@ -848,38 +851,187 @@ class AIVoiceSession {
     const abortSignal = this.currentTTSAbortController.signal
     
     try {
-      logger.info('Starting ElevenLabs TTS with WebSocket streaming', {
+      logger.info('Starting Azure TTS with REST API streaming', {
         textLength: text.length,
-        voiceId: this.voiceId,
+        region: this.azureTtsRegion,
         codec: this.outboundCodec,
         frameSize: this.outboundFrameSize,
-        streamingMode: 'websocket'
+        streamingMode: 'azure-rest'
       })
       
-      // PRODUCTION FIX: Always use ulaw_8000 for optimal Twilio compatibility
-      const outputFormat = 'ulaw_8000'
-      
-      // PRODUCTION FIX: Use ElevenLabs WebSocket API for real-time streaming
-      await this.streamElevenLabsWebSocket(text, abortSignal)
+      // Use Azure TTS REST API for real-time streaming
+      await this.streamAzureTTS(text, abortSignal)
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       
       if (errorMessage === 'TTS_ABORTED') {
-        logger.info('ElevenLabs TTS streaming was aborted due to barge-in - no fallback needed')
+        logger.info('Azure TTS streaming was aborted due to barge-in - no fallback needed')
         return
       }
       
-      logger.error('ElevenLabs WebSocket streaming failed, attempting REST fallback', {
+      logger.error('Azure TTS streaming failed', {
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined
       })
       
-      // Fallback to REST API approach
-      await this.speakResponseREST(text)
+      throw error
     } finally {
       this.currentTTSAbortController = null
       this.turnState = TurnState.LISTENING
+    }
+  }
+  
+  private async streamAzureTTS(text: string, abortSignal: AbortSignal): Promise<void> {
+    // Mark that we're actively streaming from Azure TTS
+    this.isAzureTtsStreaming = true
+    
+    const endpoint = `https://${this.azureTtsRegion}.tts.speech.microsoft.com/cognitiveservices/v1`
+    
+    logger.info('Starting Azure TTS REST API call', {
+      endpoint,
+      region: this.azureTtsRegion,
+      textLength: text.length,
+      outputFormat: 'raw-8khz-8bit-mono-mulaw',
+      authentication: 'Ocp-Apim-Subscription-Key header'
+    })
+    
+    // Create SSML for Azure TTS
+    const ssml = `<speak version='1.0' xml:lang='en-US'>
+      <voice xml:lang='en-US' xml:gender='Female' name='en-US-JennyNeural'>
+        ${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+      </voice>
+    </speak>`
+    
+    try {
+      const checkAbort = () => {
+        if (abortSignal.aborted) {
+          logger.info('Azure TTS aborted due to barge-in')
+          throw new Error('TTS_ABORTED')
+        }
+      }
+      
+      checkAbort()
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': this.azureTtsKey,
+          'Content-Type': 'application/ssml+xml',
+          'X-Microsoft-OutputFormat': 'raw-8khz-8bit-mono-mulaw',
+          'User-Agent': 'VoiceRelay-TTS/1.0'
+        },
+        body: ssml,
+        signal: abortSignal
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        logger.error('Azure TTS API error', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+          headers: Object.fromEntries(response.headers.entries())
+        })
+        throw new Error(`Azure TTS API error: ${response.status} - ${errorText}`)
+      }
+      
+      logger.debug('Azure TTS response received, processing audio stream')
+      
+      if (!response.body) {
+        throw new Error('No response body from Azure TTS')
+      }
+      
+      const reader = response.body.getReader()
+      let audioBuffer = new Uint8Array(0)
+      let totalBytesProcessed = 0
+      let framesStreamed = 0
+      
+      try {
+        while (true) {
+          checkAbort()
+          
+          const { done, value } = await reader.read()
+          
+          if (done) {
+            logger.debug('Azure TTS stream complete', {
+              totalBytesProcessed,
+              framesStreamed
+            })
+            break
+          }
+          
+          if (value) {
+            // Append new data to buffer
+            const newBuffer = new Uint8Array(audioBuffer.length + value.length)
+            newBuffer.set(audioBuffer)
+            newBuffer.set(value, audioBuffer.length)
+            audioBuffer = newBuffer
+            
+            // Process μ-law audio in 160-byte frames (20ms at 8kHz)
+            let processedBytes = 0
+            while (audioBuffer.length - processedBytes >= FRAME_SIZE_MULAW) {
+              checkAbort()
+              
+              const frame = audioBuffer.slice(processedBytes, processedBytes + FRAME_SIZE_MULAW)
+              // Convert frame to base64 and send directly to Twilio
+              const base64Frame = safeBase64Encode(frame)
+              await this.sendOutboundFrameDirect(base64Frame)
+              processedBytes += FRAME_SIZE_MULAW
+              framesStreamed++
+              totalBytesProcessed += FRAME_SIZE_MULAW
+              
+              // Log progress for first few frames and then periodically
+              if (framesStreamed <= 3 || framesStreamed % 25 === 0) {
+                logger.debug('Azure TTS audio streaming', {
+                  framesStreamed,
+                  totalBytesProcessed,
+                  bufferSize: audioBuffer.length,
+                  frameSize: FRAME_SIZE_MULAW
+                })
+              }
+            }
+            
+            // Keep remaining unprocessed bytes
+            if (processedBytes > 0) {
+              audioBuffer = audioBuffer.slice(processedBytes)
+            }
+          }
+        }
+        
+        // Process any remaining audio
+        if (audioBuffer.length > 0) {
+          const paddedFrame = new Uint8Array(FRAME_SIZE_MULAW)
+          paddedFrame.set(audioBuffer)
+          paddedFrame.fill(0xFF, audioBuffer.length) // μ-law silence padding
+          const base64Frame = safeBase64Encode(paddedFrame)
+          await this.sendOutboundFrameDirect(base64Frame)
+          framesStreamed++
+        }
+        
+        logger.info('✅ Azure TTS streaming complete', {
+          totalBytesProcessed,
+          framesStreamed,
+          avgFrameSize: totalBytesProcessed / framesStreamed || 0
+        })
+        
+      } finally {
+        reader.releaseLock()
+      }
+      
+    } catch (error) {
+      if (error instanceof Error && error.message === 'TTS_ABORTED') {
+        logger.info('Azure TTS streaming aborted due to barge-in')
+        throw error
+      }
+      
+      logger.error('Azure TTS streaming failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      throw error
+    } finally {
+      this.isAzureTtsStreaming = false
     }
   }
   
@@ -916,7 +1068,7 @@ class AIVoiceSession {
     })
     
     // Mark that we're actively streaming from ElevenLabs
-    this.isElevenLabsStreaming = true
+    this.isAzureTtsStreaming = true
     
     const ws = new WebSocket(wsUrl)
     
@@ -946,7 +1098,7 @@ class AIVoiceSession {
         // PHASE 1: Initialize connection with proper settings and authentication
         // CRITICAL FIX: Include xi_api_key in the FIRST message as required by ElevenLabs
         const initMessage = {
-          xi_api_key: this.elevenLabsKey,  // REQUIRED: Authentication in first message
+          xi_api_key: this.azureTtsKey,  // REQUIRED: Authentication in first message
           text: " ",  // Single space for initialization (REQUIRED)
           voice_settings: {
             stability: 0.4,  // Optimal for natural speech
@@ -963,7 +1115,7 @@ class AIVoiceSession {
           message: 'xi_api_key, text=" ", voice_settings, generation_config, model_id, output_format',
           protocol: 'Fixed ElevenLabs 3-phase protocol with authentication',
           phase: '1 of 3',
-          hasApiKey: !!this.elevenLabsKey
+          hasApiKey: !!this.azureTtsKey
         })
         
         ws.send(JSON.stringify(initMessage))
@@ -1104,7 +1256,7 @@ class AIVoiceSession {
               })
               
               // Mark streaming as complete before closing
-              this.isElevenLabsStreaming = false
+              this.isAzureTtsStreaming = false
               ws.close()
               
               // Check if we need to perform deferred cleanup
@@ -1164,7 +1316,7 @@ class AIVoiceSession {
         })
         
         // Ensure streaming flag is cleared
-        this.isElevenLabsStreaming = false
+        this.isAzureTtsStreaming = false
         
         if (errorOccurred) {
           reject(new Error('ElevenLabs WebSocket error - check logs for details'))
@@ -1235,7 +1387,7 @@ class AIVoiceSession {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'xi-api-key': this.elevenLabsKey  // FIXED: Use xi-api-key header as required by ElevenLabs
+          'xi-api-key': this.azureTtsKey  // FIXED: Use xi-api-key header as required by ElevenLabs
         },
         body: JSON.stringify({
           text,
@@ -1430,7 +1582,7 @@ class AIVoiceSession {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'xi-api-key': this.elevenLabsKey  // FIXED: Use xi-api-key header as required by ElevenLabs
+          'xi-api-key': this.azureTtsKey  // FIXED: Use xi-api-key header as required by ElevenLabs
         },
         body: JSON.stringify({
           text,
@@ -1562,12 +1714,12 @@ class AIVoiceSession {
       sessionDuration: Date.now() - this.sessionStartTime,
       totalFramesSent: this.totalFramesSent,
       totalFramesReceived: this.totalFramesReceived,
-      isElevenLabsStreaming: this.isElevenLabsStreaming
+      isAzureTtsStreaming: this.isAzureTtsStreaming
     })
     
-    // If ElevenLabs is still streaming, defer the actual cleanup
-    if (this.isElevenLabsStreaming) {
-      logger.info('Deferring cleanup - ElevenLabs is still streaming audio')
+    // If Azure TTS is still streaming, defer the actual cleanup
+    if (this.isAzureTtsStreaming) {
+      logger.info('Deferring cleanup - Azure TTS is still streaming audio')
       this.pendingCleanup = true
       
       // Set a maximum wait time of 5 seconds for safety
@@ -1716,12 +1868,12 @@ class AIVoiceSession {
   private async sendOutboundFrameDirect(base64Audio: string): Promise<void> {
     // Guard against sending after close or without streamSid
     // Allow sending if ElevenLabs is still streaming, even if cleanup is pending
-    if (!this.streamSid || (this.isClosed && !this.isElevenLabsStreaming) || this.ws.readyState !== 1) {
+    if (!this.streamSid || (this.isClosed && !this.isAzureTtsStreaming) || this.ws.readyState !== 1) {
       logger.debug('Skipping direct frame send', {
         hasStreamSid: !!this.streamSid,
         isClosed: this.isClosed,
         wsReadyState: this.ws.readyState,
-        isElevenLabsStreaming: this.isElevenLabsStreaming,
+        isElevenLabsStreaming: this.isAzureTtsStreaming,
         pendingCleanup: this.pendingCleanup
       })
       return
@@ -1756,12 +1908,12 @@ class AIVoiceSession {
   private async sendOutboundFrame(frame: Uint8Array): Promise<void> {
     // Guard against sending after close or without streamSid
     // Allow sending if ElevenLabs is still streaming, even if cleanup is pending
-    if (!this.streamSid || (this.isClosed && !this.isElevenLabsStreaming) || this.ws.readyState !== 1) {
+    if (!this.streamSid || (this.isClosed && !this.isAzureTtsStreaming) || this.ws.readyState !== 1) {
       logger.debug('Skipping frame send', {
         hasStreamSid: !!this.streamSid,
         isClosed: this.isClosed,
         wsReadyState: this.ws.readyState,
-        isElevenLabsStreaming: this.isElevenLabsStreaming,
+        isElevenLabsStreaming: this.isAzureTtsStreaming,
         pendingCleanup: this.pendingCleanup
       })
       return
@@ -1995,11 +2147,11 @@ serve(async (req) => {
       version: '2024-12-20-production',
       features: [
         'No authentication required',
-        'ElevenLabs WebSocket streaming',
-        'μ-law codec optimization',
+        'Azure TTS REST streaming',
+        'μ-law 8kHz native support',
         'Barge-in detection',
         'VAD with 500ms silence detection',
-        '200ms warmup silence'
+        'Simple header authentication'
       ],
       timestamp: new Date().toISOString()
     }), { 
