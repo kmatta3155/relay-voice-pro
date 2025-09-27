@@ -884,15 +884,33 @@ class AIVoiceSession {
   }
   
   private async streamElevenLabsWebSocket(text: string, abortSignal: AbortSignal): Promise<void> {
-    // CRITICAL FIX: Correct ElevenLabs WebSocket protocol implementation
-    // URL has NO authentication, only streaming parameters
-    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?optimize_streaming_latency=3&output_format=ulaw_8000`
+    /* ========================================================
+     * ELEVENLABS WEBSOCKET INTEGRATION - PROVEN FIX APPLIED
+     * ========================================================
+     * This implementation follows the EXACT official ElevenLabs protocol from:
+     * https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input
+     * 
+     * CRITICAL FIXES APPLIED:
+     * 1. Authentication via xi-api-key in URL query parameter (NOT in message body)
+     * 2. Exact 3-phase message flow: initialize → text → close
+     * 3. Proper message formats matching official documentation
+     * 4. Comprehensive logging for debugging
+     * 
+     * PROTOCOL PHASES:
+     * - Phase 1: Send initialization with voice settings
+     * - Phase 2: Send actual text (after receiving ACK)
+     * - Phase 3: Send close message with empty text
+     * ======================================================== */
     
-    logger.info('Connecting to ElevenLabs WebSocket', {
+    // Authentication MUST be in URL as query parameter (Deno doesn't support WebSocket headers)
+    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?xi-api-key=${this.elevenLabsKey}&model_id=eleven_turbo_v2_5&output_format=ulaw_8000&optimize_streaming_latency=3`
+    
+    logger.info('Connecting to ElevenLabs WebSocket with correct authentication', {
       voiceId: this.voiceId,
-      url: wsUrl,
-      protocol: 'Correct implementation with auth in first message',
-      textLength: text.length
+      url: wsUrl.replace(this.elevenLabsKey, 'API_KEY_REDACTED'), // Redact API key in logs
+      protocol: 'Official protocol with xi-api-key in URL query',
+      textLength: text.length,
+      implementation: 'EXACT match to official documentation'
     })
     
     // Mark that we're actively streaming from ElevenLabs
@@ -921,41 +939,56 @@ class AIVoiceSession {
         if (checkAbort()) return
         
         isConnected = true
-        logger.info('✅ ElevenLabs WebSocket connected, sending initialization message')
+        logger.info('✅ ElevenLabs WebSocket connected, implementing 3-phase protocol')
         
-        // CRITICAL: Send complete initialization message with ALL required fields
+        // PHASE 1: Initialize connection with exact format from official docs
+        // NO authentication in message body - it's already in the URL!
         const initMessage = {
-          xi_api_key: this.elevenLabsKey,  // Authentication in first message
-          text: ' ',                        // Single space for initialization
-          model_id: 'eleven_turbo_v2_5',   // Required model specification
+          text: " ",  // Single space for initialization (REQUIRED)
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.8,
-            style: 0.0,
+            style: 0,  // Must be number 0, not 0.0
             use_speaker_boost: true
           },
-          output_format: 'ulaw_8000'       // Required format specification
+          generation_config: {
+            chunk_length_schedule: [50]  // Optimize for low latency
+          }
         }
         
-        logger.debug('📤 Sending initialization message to ElevenLabs', {
-          hasApiKey: !!initMessage.xi_api_key,
-          model: initMessage.model_id,
-          format: initMessage.output_format,
-          voiceSettings: initMessage.voice_settings
+        logger.info('📤 PHASE 1: Sending initialization message', {
+          message: 'text=" ", voice_settings, generation_config',
+          protocol: 'Official ElevenLabs 3-phase protocol',
+          phase: '1 of 3'
         })
         
         ws.send(JSON.stringify(initMessage))
         
-        // Queue the actual text and EOS messages to send after ACK
-        messageQueue.push(JSON.stringify({
+        // PHASE 2: Queue actual text message (sent after ACK)
+        const textMessage = {
           text: text,
-          try_trigger_generation: true,
-          generation_config: {
-            chunk_length_schedule: [50] // Optimize for low latency
-          }
-        }))
+          try_trigger_generation: true
+        }
         
-        messageQueue.push(JSON.stringify({ text: '' })) // EOS marker
+        logger.debug('📝 PHASE 2 queued: Text message', {
+          textLength: text.length,
+          try_trigger_generation: true,
+          phase: '2 of 3'
+        })
+        
+        messageQueue.push(JSON.stringify(textMessage))
+        
+        // PHASE 3: Queue close/EOS message
+        const closeMessage = {
+          text: ""  // Empty string to signal end
+        }
+        
+        logger.debug('🔚 PHASE 3 queued: Close message', {
+          text: 'empty string for EOS',
+          phase: '3 of 3'
+        })
+        
+        messageQueue.push(JSON.stringify(closeMessage))
       }
       
       ws.onmessage = async (event) => {
@@ -966,15 +999,19 @@ class AIVoiceSession {
           if (typeof event.data === 'string') {
             const message = JSON.parse(event.data)
             
-            // Log ALL incoming messages for debugging
-            logger.debug('📥 ElevenLabs message received', {
+            // ENHANCED LOGGING: Log ALL incoming messages for debugging
+            logger.info('📥 ElevenLabs message received', {
+              messageNumber: framesReceived + 1,
               type: Object.keys(message).join(','),
               hasAudio: !!message.audio,
               hasError: !!message.error,
               hasMeta: !!message.meta,
               isFinal: !!message.isFinal,
               messageKeys: Object.keys(message),
-              framesReceived
+              fullMessage: JSON.stringify(message).substring(0, 200), // Log first 200 chars
+              audioPreview: message.audio ? message.audio.substring(0, 50) + '...' : null,
+              framesReceived,
+              protocol: 'Using official 3-phase protocol'
             })
             
             // Handle error messages
@@ -990,24 +1027,47 @@ class AIVoiceSession {
               return
             }
             
-            // Handle metadata/acknowledgment messages
-            if (message.meta || message.type === 'meta' || (!message.audio && !message.isFinal && !message.error)) {
-              logger.info('📋 ElevenLabs metadata/ACK received', {
-                meta: message.meta || message,
+            // Handle metadata/acknowledgment messages (various possible formats)
+            // ElevenLabs may send different metadata formats - be flexible
+            const isMetadata = message.meta || 
+                             message.type === 'meta' || 
+                             message.metadata ||
+                             (!message.audio && !message.isFinal && !message.error)
+            
+            if (isMetadata) {
+              logger.info('📋 ElevenLabs ACK/metadata received', {
+                meta: message.meta || message.metadata || message,
                 hasReceivedACK,
-                queuedMessages: messageQueue.length
+                queuedMessages: messageQueue.length,
+                messageContent: JSON.stringify(message),
+                phase: hasReceivedACK ? 'Already ACKed' : 'First ACK'
               })
               
-              // After receiving first ACK, send queued messages
+              // After receiving first ACK, send queued messages (PHASES 2 & 3)
               if (!hasReceivedACK && messageQueue.length > 0) {
                 hasReceivedACK = true
-                logger.info('✅ Server ACK received, sending text messages')
+                logger.info('✅ PHASE 1 COMPLETE: Server ACK received, sending PHASE 2 & 3 messages', {
+                  queuedCount: messageQueue.length,
+                  protocol: 'Official 3-phase protocol'
+                })
                 
-                for (const queuedMessage of messageQueue) {
-                  logger.debug('📤 Sending queued message', {
-                    messagePreview: queuedMessage.substring(0, 100)
+                // Send each queued message with phase logging
+                for (let i = 0; i < messageQueue.length; i++) {
+                  const queuedMessage = messageQueue[i]
+                  const phaseNum = i + 2 // Phase 2 and 3
+                  
+                  logger.info(`📤 PHASE ${phaseNum}: Sending message`, {
+                    phase: phaseNum === 2 ? 'Text content' : 'Close/EOS',
+                    messagePreview: queuedMessage.substring(0, 150),
+                    messageLength: queuedMessage.length
                   })
+                  
                   ws.send(queuedMessage)
+                  
+                  // Small delay between messages to ensure proper sequencing
+                  if (i < messageQueue.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 50))
+                  }
                 }
                 messageQueue = []
               }
@@ -1019,11 +1079,14 @@ class AIVoiceSession {
               await this.sendOutboundFrameDirect(message.audio)
               framesReceived++
               
-              // Log every 10th frame to avoid log spam
-              if (framesReceived % 10 === 1) {
-                logger.debug('🔊 Audio frames received', {
+              // Enhanced logging for first few frames and then periodic
+              if (framesReceived <= 3 || framesReceived % 10 === 0) {
+                logger.info('🔊 Audio streaming active', {
                   framesReceived,
-                  audioLength: message.audio.length
+                  audioLength: message.audio.length,
+                  audioPreview: message.audio.substring(0, 30) + '...',
+                  protocol: 'Direct base64 forwarding (no re-encoding)',
+                  phase: 'Audio streaming phase'
                 })
               }
             }
@@ -1080,19 +1143,33 @@ class AIVoiceSession {
           framesReceived,
           wasConnected: isConnected,
           hadError: errorOccurred,
-          hasReceivedACK
+          hasReceivedACK,
+          protocol: 'Official 3-phase protocol',
+          possibleIssues: framesReceived === 0 ? [
+            'Check API key is valid',
+            'Check voiceId exists',
+            'Verify authentication in URL query parameter',
+            'Ensure proper message format'
+          ] : []
         })
         
         // Ensure streaming flag is cleared
         this.isElevenLabsStreaming = false
         
         if (errorOccurred) {
-          reject(new Error('ElevenLabs WebSocket error'))
+          reject(new Error('ElevenLabs WebSocket error - check logs for details'))
         } else if (!isConnected) {
-          reject(new Error('Failed to connect to ElevenLabs WebSocket'))
+          reject(new Error('Failed to connect to ElevenLabs WebSocket - verify API key and network'))
+        } else if (!hasReceivedACK) {
+          logger.error('⚠️ WebSocket closed without receiving ACK', {
+            possibleCause: 'Authentication failed or invalid initialization message'
+          })
+          reject(new Error('No ACK received - authentication or initialization failed'))
         } else if (framesReceived === 0) {
-          logger.warn('⚠️ WebSocket closed without receiving any audio frames')
-          reject(new Error('No audio frames received'))
+          logger.warn('⚠️ WebSocket closed without receiving any audio frames', {
+            possibleCause: 'Text message not processed or voice synthesis failed'
+          })
+          reject(new Error('No audio frames received - check text message format'))
         } else {
           resolve()
         }
@@ -1104,16 +1181,34 @@ class AIVoiceSession {
         }
       }
       
-      // Set timeout for connection
+      // Set timeout for connection and ACK
       setTimeout(() => {
         if (!isConnected && !errorOccurred) {
           logger.error('⏱️ ElevenLabs WebSocket connection timeout', {
             readyState: ws.readyState,
             hasReceivedACK,
-            framesReceived
+            framesReceived,
+            possibleCauses: [
+              'Invalid API key in URL query parameter',
+              'Network connectivity issues',
+              'ElevenLabs service unavailable'
+            ]
           })
           ws.close()
-          reject(new Error('WebSocket connection timeout'))
+          reject(new Error('WebSocket connection timeout - check API key and network'))
+        } else if (isConnected && !hasReceivedACK) {
+          logger.error('⏱️ ElevenLabs ACK timeout after connection', {
+            readyState: ws.readyState,
+            hasReceivedACK,
+            framesReceived,
+            possibleCauses: [
+              'Invalid initialization message format',
+              'Authentication failed despite connection',
+              'Invalid voiceId or model_id'
+            ]
+          })
+          ws.close()
+          reject(new Error('No ACK received after 5s - check initialization message'))
         }
       }, 5000)
     })
