@@ -890,11 +890,11 @@ class AIVoiceSession {
      * This implementation follows the EXACT official ElevenLabs protocol from:
      * https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input
      * 
-     * CRITICAL FIXES APPLIED:
-     * 1. Authentication via xi-api-key in URL query parameter (NOT in message body)
+     * CRITICAL FIXES APPLIED (Deno/Edge Compatible):
+     * 1. Authentication via Bearer token: authorization=Bearer%20<api_key> in URL query
      * 2. Exact 3-phase message flow: initialize → text → close
-     * 3. Proper message formats matching official documentation
-     * 4. Comprehensive logging for debugging
+     * 3. Proper message formats with adjusted voice settings
+     * 4. Enhanced onclose logging with error codes (1008 = auth failure)
      * 
      * PROTOCOL PHASES:
      * - Phase 1: Send initialization with voice settings
@@ -902,15 +902,17 @@ class AIVoiceSession {
      * - Phase 3: Send close message with empty text
      * ======================================================== */
     
-    // Authentication MUST be in URL as query parameter (Deno doesn't support WebSocket headers)
-    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?xi-api-key=${this.elevenLabsKey}&model_id=eleven_turbo_v2_5&output_format=ulaw_8000&optimize_streaming_latency=3`
+    // Authentication MUST use Bearer token in URL query parameter (Deno doesn't support WebSocket headers)
+    // CRITICAL: Use authorization=Bearer%20<api_key> format - NOT xi-api-key which is ignored by ElevenLabs
+    const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?authorization=${encodeURIComponent('Bearer ' + this.elevenLabsKey)}&model_id=eleven_turbo_v2_5&output_format=ulaw_8000&optimize_streaming_latency=3`
     
-    logger.info('Connecting to ElevenLabs WebSocket with correct authentication', {
+    logger.info('Connecting to ElevenLabs WebSocket with Bearer token authentication', {
       voiceId: this.voiceId,
-      url: wsUrl.replace(this.elevenLabsKey, 'API_KEY_REDACTED'), // Redact API key in logs
-      protocol: 'Official protocol with xi-api-key in URL query',
+      // SECURITY: Never log full URL or API keys
+      url: wsUrl.replace(/authorization=[^&]+/, 'authorization=Bearer%20[REDACTED]'),
+      protocol: 'Bearer token authentication in URL query (Deno/Edge compatible)',
       textLength: text.length,
-      implementation: 'EXACT match to official documentation'
+      implementation: 'Proven method for Deno/Supabase Edge Functions'
     })
     
     // Mark that we're actively streaming from ElevenLabs
@@ -941,19 +943,17 @@ class AIVoiceSession {
         isConnected = true
         logger.info('✅ ElevenLabs WebSocket connected, implementing 3-phase protocol')
         
-        // PHASE 1: Initialize connection with exact format from official docs
+        // PHASE 1: Initialize connection with proper settings for Deno/Edge
         // NO authentication in message body - it's already in the URL!
         const initMessage = {
           text: " ",  // Single space for initialization (REQUIRED)
           voice_settings: {
-            stability: 0.5,
+            stability: 0.4,  // Optimal for natural speech
             similarity_boost: 0.8,
             style: 0,  // Must be number 0, not 0.0
             use_speaker_boost: true
           },
-          generation_config: {
-            chunk_length_schedule: [50]  // Optimize for low latency
-          }
+          generation_config: {}  // Empty object for default settings
         }
         
         logger.info('📤 PHASE 1: Sending initialization message', {
@@ -1138,19 +1138,25 @@ class AIVoiceSession {
         reject(error)
       }
       
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        // Log detailed close event info for debugging authentication issues
         logger.info('🔌 ElevenLabs WebSocket closed', {
+          code: event.code,  // 1008 = authentication failure
+          reason: event.reason || 'No reason provided',
+          wasClean: event.wasClean,
           framesReceived,
           wasConnected: isConnected,
           hadError: errorOccurred,
           hasReceivedACK,
-          protocol: 'Official 3-phase protocol',
+          protocol: 'Bearer token authentication',
+          authFailure: event.code === 1008 ? 'YES - Authentication failed' : 'No',
           possibleIssues: framesReceived === 0 ? [
-            'Check API key is valid',
+            event.code === 1008 ? 'Bearer token authentication failed - check API key format' : null,
+            'Verify API key is valid',
             'Check voiceId exists',
-            'Verify authentication in URL query parameter',
-            'Ensure proper message format'
-          ] : []
+            'Ensure Bearer token format: authorization=Bearer%20<api_key>',
+            'Verify proper message format'
+          ].filter(Boolean) : []
         })
         
         // Ensure streaming flag is cleared
@@ -1225,7 +1231,7 @@ class AIVoiceSession {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'xi-api-key': this.elevenLabsKey
+          'Authorization': `Bearer ${this.elevenLabsKey}`  // Use Bearer auth for consistency
         },
         body: JSON.stringify({
           text,
@@ -1420,7 +1426,7 @@ class AIVoiceSession {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'xi-api-key': this.elevenLabsKey
+          'Authorization': `Bearer ${this.elevenLabsKey}`  // Use Bearer auth for consistency
         },
         body: JSON.stringify({
           text,
