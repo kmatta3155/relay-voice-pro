@@ -47,13 +47,16 @@ enum AudioCodec {
 
 // Voice Activity Detection settings - optimized for natural speech patterns
 const VAD_SILENCE_THRESHOLD = 700
-const VAD_MIN_SPEECH_MS = 600  // Increased to capture complete words
-const VAD_END_SILENCE_MS = 1200  // Increased to allow natural pauses in speech
+const VAD_MIN_SPEECH_MS = 800  // Increased to 800ms per Azure engineer recommendation
+const VAD_END_SILENCE_MS = 1200  // Within 1000-1300ms range as recommended
 
 // Barge-in detection settings
 const BARGE_IN_THRESHOLD = 800  // Slightly higher than VAD to avoid false positives
-const BARGE_IN_MIN_DURATION_MS = 250  // 250ms of sustained speech to trigger barge-in
+const BARGE_IN_MIN_DURATION_MS = 350  // Increased to 350ms per Azure engineer recommendation
 const BARGE_IN_BUFFER_FRAMES = 12  // ~240ms buffer for detection (12 frames * 20ms)
+
+// Turn-taking timing constants
+const POST_TTS_COOLDOWN_MS = 300  // 300ms cooldown after TTS before resuming VAD
 
 // Turn management states
 enum TurnState {
@@ -308,6 +311,13 @@ class AIVoiceSession {
   private sessionTimeoutHandle: number | null = null
   private heartbeatInterval: number | null = null
   
+  // Idle timeout management per Azure engineer recommendations
+  private lastUserActivityTime = Date.now()
+  private idleTimeoutHandle: number | null = null
+  private hasPromptedForActivity = false
+  private readonly IDLE_TIMEOUT_MS = 8000 // 8 seconds idle before prompt
+  private readonly FINAL_TIMEOUT_MS = 8000 // Another 8 seconds after prompt before close
+  
   constructor(
     ws: WebSocket,
     context: { tenantId: string; businessName: string; voiceId: string; greeting: string }
@@ -376,12 +386,11 @@ class AIVoiceSession {
   }
   
   private setupSessionTimeout(): void {
-    // Set timeout for 140 seconds (just under the 150s Free tier limit)
-    // This gives us time to gracefully close before Supabase kills the function
-    const timeout = 140000 // 140 seconds
+    // Set maximum session limit for 140 seconds (just under the 150s Free tier limit)
+    const maxSessionTimeout = 140000 // 140 seconds
     
     this.sessionTimeoutHandle = setTimeout(() => {
-      logger.warn('Session approaching timeout limit, closing gracefully', {
+      logger.warn('Session approaching maximum time limit, closing gracefully', {
         sessionDuration: Date.now() - this.sessionStartTime,
         totalFramesSent: this.totalFramesSent,
         totalFramesReceived: this.totalFramesReceived
@@ -393,7 +402,10 @@ class AIVoiceSession {
           setTimeout(() => this.cleanup(), 2000) // Give time for goodbye message
         })
         .catch(() => this.cleanup())
-    }, timeout) as unknown as number
+    }, maxSessionTimeout) as unknown as number
+    
+    // CRITICAL: Implement proper idle timeout per Azure engineer recommendation
+    this.setupIdleTimeout()
   }
   
   private setupHeartbeat(): void {
@@ -422,6 +434,84 @@ class AIVoiceSession {
         }
       }
     }, 30000) as unknown as number
+  }
+  
+  private setupIdleTimeout(): void {
+    // Setup proper idle timeout per Azure engineer recommendations
+    this.resetIdleTimeout()
+  }
+  
+  private resetIdleTimeout(): void {
+    // Clear existing idle timeout
+    if (this.idleTimeoutHandle) {
+      clearTimeout(this.idleTimeoutHandle)
+      this.idleTimeoutHandle = null
+    }
+    
+    // Reset activity tracking
+    this.lastUserActivityTime = Date.now()
+    this.hasPromptedForActivity = false
+    
+    // Set new idle timeout
+    this.idleTimeoutHandle = setTimeout(() => {
+      this.handleIdleTimeout()
+    }, this.IDLE_TIMEOUT_MS) as unknown as number
+    
+    logger.debug('Idle timeout reset', {
+      idleTimeoutMs: this.IDLE_TIMEOUT_MS,
+      hasPromptedForActivity: this.hasPromptedForActivity
+    })
+  }
+  
+  private async handleIdleTimeout(): Promise<void> {
+    const idleDuration = Date.now() - this.lastUserActivityTime
+    
+    if (!this.hasPromptedForActivity) {
+      // First idle timeout - prompt user
+      this.hasPromptedForActivity = true
+      logger.info('First idle timeout reached - prompting user', {
+        idleDurationMs: idleDuration,
+        nextTimeoutMs: this.FINAL_TIMEOUT_MS
+      })
+      
+      try {
+        await this.speakResponse('Are you still there?')
+        
+        // Set final timeout
+        this.idleTimeoutHandle = setTimeout(() => {
+          this.handleFinalIdleTimeout()
+        }, this.FINAL_TIMEOUT_MS) as unknown as number
+        
+      } catch (error) {
+        logger.error('Failed to prompt user during idle timeout', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+        // Fallback to immediate close if prompt fails
+        this.handleFinalIdleTimeout()
+      }
+    } else {
+      // Already prompted, now close
+      this.handleFinalIdleTimeout()
+    }
+  }
+  
+  private async handleFinalIdleTimeout(): Promise<void> {
+    const totalIdleDuration = Date.now() - this.lastUserActivityTime
+    
+    logger.info('Final idle timeout reached - ending call gracefully', {
+      totalIdleDurationMs: totalIdleDuration,
+      hasPromptedForActivity: this.hasPromptedForActivity
+    })
+    
+    try {
+      await this.speakResponse('Thank you for calling. Have a great day!')
+      setTimeout(() => this.cleanup(), 2000) // Give time for goodbye message
+    } catch (error) {
+      logger.error('Failed to send goodbye message during final idle timeout', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      this.cleanup() // Close immediately if goodbye fails
+    }
   }
   
   private setupEventListeners(): void {
@@ -736,7 +826,16 @@ class AIVoiceSession {
   }
   
   private async processUserSpeech(): Promise<void> {
-    if (this.isProcessing || this.audioBuffer.length === 0) return
+    // CRITICAL: Only proceed if in LISTENING state per Azure engineer recommendation
+    if (this.isProcessing || this.audioBuffer.length === 0 || this.turnState !== TurnState.LISTENING) {
+      if (this.turnState !== TurnState.LISTENING) {
+        logger.debug('Skipping speech processing - not in LISTENING state', {
+          currentState: this.turnState,
+          bufferLength: this.audioBuffer.length
+        })
+      }
+      return
+    }
     
     // Check minimum speech duration to prevent processing very short audio
     const speechDurationMs = this.audioBuffer.length * FRAME_DURATION_MS
@@ -970,37 +1069,24 @@ class AIVoiceSession {
       }
     }
 
-    return `You are the expert AI receptionist for ${this.businessName}, a professional salon and beauty establishment. You have deep knowledge of hair and beauty services and excel at customer service.
-
-SALON EXPERTISE:
-You understand all hair services (cuts, color, styling, treatments), beauty services (facials, lashes, brows, nails), and salon operations. You know typical service durations, maintenance schedules, and industry best practices.
+    return `You are the professional receptionist for ${this.businessName}. Answer only what was asked with one concise, helpful response, then end with a single clarifying question.
 
 BUSINESS KNOWLEDGE:
 ${knowledgeContext}
 
-CONVERSATIONAL GUIDELINES FOR SALON CUSTOMERS:
-✅ ALWAYS engage naturally - never say "I don't have enough information"
-✅ Use your salon expertise to provide helpful responses even when specifics aren't available
-✅ For hours questions: If specific hours are in the knowledge base, provide them. If not, give helpful guidance like "We're typically open weekdays and weekends, let me have someone confirm our exact hours for you today"
-✅ Ask follow-up questions to understand customer needs better
-✅ Suggest complementary services when appropriate
-✅ Be enthusiastic about beauty and helping clients look their best
-✅ Handle requests gracefully by offering alternatives and solutions
-✅ Keep responses natural, warm, and conversational (1-2 sentences ideal)
-✅ NEVER go silent - always provide a helpful response
+CORE RULES:
+- Give one direct answer to what was asked
+- Keep responses to 1-2 sentences maximum
+- End with ONE clarifying question
+- Never volunteer unsolicited information
+- Be helpful and professional
 
-EXAMPLE SALON RESPONSES:
-• "What hours are you open?" → "We're open most days of the week! Let me have someone confirm our exact schedule for today and call you right back. Are you looking to book an appointment?"
-• "Do you do highlights?" → "Absolutely! We specialize in all types of hair coloring including highlights, balayage, and color correction. What look are you hoping to achieve?"
-• "I need my roots done" → "Perfect timing! Root touch-ups are one of our most popular services. When was your last color? I can connect you with our colorist to get you scheduled."
+EXAMPLES:
+• "What hours are you open?" → "We're open Tuesday through Saturday. What day were you thinking of coming in?"
+• "Do you do highlights?" → "Yes, we do all types of highlights and color services. What look are you hoping to achieve?"
+• "How much for a haircut?" → "Our cuts start at $65. Are you looking to book an appointment?"
 
-STRICT RULES:
-- NEVER respond with just "yes" or "no" - always provide helpful context
-- NEVER say you don't have information without offering an alternative
-- ALWAYS sound professional yet friendly and approachable
-- ALWAYS offer next steps (scheduling, consultation, call back)
-
-Remember: You represent a professional salon, so be knowledgeable, helpful, and proactive in every response.`;
+Remember: Answer the question asked, nothing more. Always end with one helpful question.`;
   }
 
   /**
@@ -1138,7 +1224,14 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       throw error
     } finally {
       this.currentTTSAbortController = null
+      
+      // CRITICAL: Add 300ms post-TTS cooldown before resuming VAD per Azure engineer recommendation
+      logger.debug('Adding 300ms post-TTS cooldown before resuming VAD')
+      await new Promise(resolve => setTimeout(resolve, POST_TTS_COOLDOWN_MS))
+      
+      // Now return to LISTENING state
       this.turnState = TurnState.LISTENING
+      logger.debug('Resumed LISTENING state after post-TTS cooldown')
     }
   }
   
@@ -2023,6 +2116,12 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       this.heartbeatInterval = null
     }
     
+    // Clear idle timeout
+    if (this.idleTimeoutHandle) {
+      clearTimeout(this.idleTimeoutHandle)
+      this.idleTimeoutHandle = null
+    }
+    
     // Close WebSocket if still open
     if (this.ws.readyState === 1) {
       try {
@@ -2040,7 +2139,9 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       framesReceived: this.totalFramesReceived,
       framesSent: this.totalFramesSent,
       conversationTurns: this.conversationHistory.length / 2,
-      avgFramesPerSecond: this.totalFramesReceived / ((Date.now() - this.sessionStartTime) / 1000)
+      avgFramesPerSecond: this.totalFramesReceived / ((Date.now() - this.sessionStartTime) / 1000),
+      idleTimeoutImplemented: true,
+      azureRecommendationsApplied: true
     })
   }
 
@@ -2372,8 +2473,8 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
     })
     
     try {
-      // Use custom greeting or default
-      const greetingText = this.greeting || `Hello! Thank you for calling ${this.businessName}. How can I help you today?`
+      // Use custom greeting or Azure-recommended short greeting
+      const greetingText = this.greeting || `Thanks for calling ${this.businessName}—how can I help you today?`
       await this.speakResponseFixed(greetingText)
     } catch (error) {
       logger.error('Failed to deliver greeting', {
