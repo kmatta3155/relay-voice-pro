@@ -92,7 +92,7 @@ serve(async (req) => {
     // Create agent settings
     await sb.from("agent_settings").insert({ 
       tenant_id: tenantId, 
-      greeting: body.greeting ?? `Thanks for calling ${body.name}!`, 
+      greeting: body.greeting ?? `Hello! Thank you for calling ${body.name}. I'm your AI receptionist and I'm here to help you with scheduling appointments, answering questions about our services, or connecting you with the right person. How can I assist you today?`, 
       website_url: body.website_url ?? null 
     });
 

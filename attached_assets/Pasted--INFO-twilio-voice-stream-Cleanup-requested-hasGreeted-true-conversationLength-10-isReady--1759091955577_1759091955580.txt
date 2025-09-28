@@ -1,0 +1,274 @@
+[INFO] [twilio-voice-stream] Cleanup requested {"hasGreeted":true,"conversationLength":10,"isReady":true,"sessionDuration":33326,"totalFramesSent":2091,"totalFramesReceived":1621,"isAzureTtsStreaming":false}
+[INFO] [twilio-voice-stream] Performing actual cleanup {"wasDeferred":false}
+[INFO] [twilio-voice-stream] Session metrics {"duration":33326,"framesReceived":1621,"framesSent":2091,"conversationTurns":5,"avgFramesPerSecond":48.640700954209926,"idleTimeoutImplemented":true,"azureRecommendationsApplied":true}
+[INFO] [twilio-voice-stream] WebSocket connection closed
+[INFO] [twilio-voice-stream] Transcription filtered out by smart filtering {"transcript":"you","transcriptLength":3,"rejectionReason":"stop_word","minRequiredLength":3,"note":"Smart filtering prevents processing of meaningless fragments while allowing valid short responses"}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":3}
+[INFO] [twilio-voice-stream] Session metrics {"duration":32323,"framesReceived":1621,"framesSent":2091,"conversationTurns":5,"avgFramesPerSecond":50.15004795346967,"idleTimeoutImplemented":true,"azureRecommendationsApplied":true}
+[INFO] [twilio-voice-stream] Cleanup requested {"hasGreeted":true,"conversationLength":10,"isReady":true,"sessionDuration":32322,"totalFramesSent":2091,"totalFramesReceived":1621,"isAzureTtsStreaming":false}
+[INFO] [twilio-voice-stream] Performing actual cleanup {"wasDeferred":false}
+[INFO] [twilio-voice-stream] Call ended - stop event received
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":12844,"model":"whisper-1"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.2","hexDump":"7e fe 7e 7e 7e fe ff 7e 7e 7e 7e 7e ff fe fe 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.8","hexDump":"7e 7e 7e fe ff 7e fe 7e 7e ff 7e 7e 7e ff fe 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.4","hexDump":"fe ff 7e 7e 7e 7d fe 7e fe 7e fe 7d 7e 7e fe 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":3}
+[INFO] [twilio-voice-stream] Transcription filtered out by smart filtering {"transcript":"you","transcriptLength":3,"rejectionReason":"stop_word","minRequiredLength":3,"note":"Smart filtering prevents processing of meaningless fragments while allowing valid short responses"}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":12844,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Heartbeat sent {"uptime":30002,"state":"LISTENING"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.3","hexDump":"ff 7e 7e 7e ff ff ff 7d 7e fe ff ff 7e ff 7e 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.1","hexDump":"ff ff ff 7e ff fe 7e fe ff 7e 7e ff 7e 7e ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.4","hexDump":"ff 7e ff ff fe ff 7e 7e ff 7e ff 7e 7e 7e fe ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] [twilio-voice-stream] Adding 300ms post-TTS cooldown before resuming VAD
+[INFO] [twilio-voice-stream] ✅ Azure TTS streaming complete {"totalBytesProcessed":0,"framesStreamed":0,"avgFrameSize":0}
+[DEBUG] [twilio-voice-stream] Azure TTS stream complete {"totalBytesProcessed":0,"framesStreamed":0}
+[DEBUG] [twilio-voice-stream] Azure TTS response received, processing audio stream
+[INFO] [twilio-voice-stream] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":67,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[INFO] [twilio-voice-stream] Starting Azure TTS with REST API streaming {"textLength":67,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":67,"usage":{"prompt_tokens":1627,"completion_tokens":35,"total_tokens":1662,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[DEBUG] [twilio-voice-stream] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":10,"maxTokens":150,"temperature":0.7}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] [twilio-voice-stream] Transcription completed and validated {"transcript":"MBC 뉴스 이덕영입니다.","transcriptLength":14,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":14}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":12844,"model":"whisper-1"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.4","hexDump":"7e ff ff 7e fe 7e fe ff ff 7e 7e 7e ff 7e fe fe... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.1","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":3}
+[INFO] [twilio-voice-stream] Transcription filtered out by smart filtering {"transcript":"you","transcriptLength":3,"rejectionReason":"stop_word","minRequiredLength":3,"note":"Smart filtering prevents processing of meaningless fragments while allowing valid short responses"}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":12844,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"5.5","hexDump":"7e fe ff 7d 7e 7e ff 7e 7d fe 7e 7e 7e fe 7e 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"5.3","hexDump":"7e ff 7e 7e 7e 7d ff 7e ff ff fe 7e ff 7e 7e 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"5.3","hexDump":"fe 7e 7e 7d 7e fe 7e ff 7e 7e ff 7e ff 7e fe 7e... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":3040,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS stream complete {"totalBytesProcessed":68800,"framesStreamed":430}
+[DEBUG] [twilio-voice-stream] Adding 300ms post-TTS cooldown before resuming VAD
+[INFO] [twilio-voice-stream] ✅ Azure TTS streaming complete {"totalBytesProcessed":68800,"framesStreamed":430,"avgFrameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":4188,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":4116,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4092,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":2882,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":4148,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":4212,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4151,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":4215,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":4196,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":1405,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":4100,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4199,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4103,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4106,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4170,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4170,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS response received, processing audio stream
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":126,"usage":{"prompt_tokens":1583,"completion_tokens":28,"total_tokens":1611,"prompt_tokens_details":{"cached_tokens":1536,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":126,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[INFO] [twilio-voice-stream] Starting Azure TTS with REST API streaming {"textLength":126,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":8,"maxTokens":150,"temperature":0.7}
+[DEBUG] [twilio-voice-stream] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":10}
+[INFO] [twilio-voice-stream] Transcription completed and validated {"transcript":"Thank you.","transcriptLength":10,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":12844,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"138.8","hexDump":"7c 7e 71 7a 70 6d 76 77 6f 6d fe ff 7a f2 ec e9... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"109.5","hexDump":"ff ff fe ff ff ff 7d 7e ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"5.2","hexDump":"ff ff 7e 7e ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] [twilio-voice-stream] Azure TTS stream complete {"totalBytesProcessed":77760,"framesStreamed":486}
+[DEBUG] [twilio-voice-stream] Adding 300ms post-TTS cooldown before resuming VAD
+[INFO] [twilio-voice-stream] ✅ Azure TTS streaming complete {"totalBytesProcessed":77760,"framesStreamed":487,"avgFrameSize":159.67145790554414}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":475,"totalBytesProcessed":76000,"bufferSize":2440,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":450,"totalBytesProcessed":72000,"bufferSize":4237,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":4176,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":4240,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4254,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":3510,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":4222,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":4158,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":2052,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4161,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":4225,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":4206,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":4110,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4208,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":2100,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4112,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4106,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS response received, processing audio stream
+[INFO] [twilio-voice-stream] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":136,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":136,"usage":{"prompt_tokens":1544,"completion_tokens":28,"total_tokens":1572,"prompt_tokens_details":{"cached_tokens":1408,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Starting Azure TTS with REST API streaming {"textLength":136,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[DEBUG] [twilio-voice-stream] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":6,"maxTokens":150,"temperature":0.7}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":10}
+[INFO] [twilio-voice-stream] Transcription completed and validated {"transcript":"Thank you.","transcriptLength":10,"validationReason":"valid_content","smartFilteringEnabled":true}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":12844,"model":"whisper-1"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"301.0","hexDump":"69 eb e4 df d6 cf d3 d5 d2 d7 dd e0 e7 72 69 6b... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"569.6","hexDump":"db df e7 fe f6 ff 58 5f 5e 59 51 53 56 5c 71 57... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"345.1","hexDump":"69 6d 68 61 5d 72 6c 5b 73 f0 f9 fe e4 d6 de d9... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] [twilio-voice-stream] Adding 300ms post-TTS cooldown before resuming VAD
+[INFO] [twilio-voice-stream] ✅ Azure TTS streaming complete {"totalBytesProcessed":87840,"framesStreamed":550,"avgFrameSize":159.70909090909092}
+[DEBUG] [twilio-voice-stream] Azure TTS stream complete {"totalBytesProcessed":87840,"framesStreamed":549}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":525,"totalBytesProcessed":84000,"bufferSize":4155,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":500,"totalBytesProcessed":80000,"bufferSize":4219,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":475,"totalBytesProcessed":76000,"bufferSize":4131,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":450,"totalBytesProcessed":72000,"bufferSize":4195,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":4176,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":4240,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":2070,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":4242,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":3512,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":4088,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4160,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":4098,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":4162,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":1512,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":4142,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4208,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4189,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4093,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS response received, processing audio stream
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":3,"frameSize":160,"rms":"38.3","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":2,"frameSize":160,"rms":"82.5","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":1,"frameSize":160,"rms":"192.3","threshold":800}
+[INFO] [twilio-voice-stream] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":173,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":173,"usage":{"prompt_tokens":1499,"completion_tokens":34,"total_tokens":1533,"prompt_tokens_details":{"cached_tokens":1408,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Starting Azure TTS with REST API streaming {"textLength":173,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[DEBUG] [twilio-voice-stream] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":4,"maxTokens":150,"temperature":0.7}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] [twilio-voice-stream] Transcription completed and validated {"transcript":"This is it for Aerotopia.","transcriptLength":25,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":25}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":33004,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":103,"durationMs":2060,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"560.5","hexDump":"58 ea 7a 48 db 48 d3 e1 6d c2 4c d2 5e 7b de 56... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"571.7","hexDump":"dd f4 59 d5 fd dc 72 4c ed 5e d9 ff e7 cd 7d cf... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"535.1","hexDump":"dd de f4 ec 6a cd ee e5 e3 4f 6b 4a 5a 5d 5a 5b... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] [twilio-voice-stream] Sent clear message to stop pending audio
+[INFO] [twilio-voice-stream] 🔄 Switched to LISTENING state due to barge-in {"audioBufferLength":12,"bufferDurationMs":240}
+[INFO] [twilio-voice-stream] 🎤 BARGE-IN DETECTED - User interrupted during speaking {"duration":350,"rms":"823.5","threshold":800,"bufferFrames":12}
+[INFO] [twilio-voice-stream] ✅ Azure TTS streaming complete {"totalBytesProcessed":78080,"framesStreamed":489,"avgFrameSize":159.67280163599182}
+[DEBUG] [twilio-voice-stream] Adding 300ms post-TTS cooldown before resuming VAD
+[DEBUG] [twilio-voice-stream] Azure TTS stream complete {"totalBytesProcessed":78080,"framesStreamed":488}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":475,"totalBytesProcessed":76000,"bufferSize":4120,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":450,"totalBytesProcessed":72000,"bufferSize":1470,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":4101,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":4165,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":3435,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4171,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":4147,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":4243,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":4246,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4150,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":1500,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":4131,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":4195,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":4133,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4197,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":1387,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS response received, processing audio stream
+[INFO] [twilio-voice-stream] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":137,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[DEBUG] [twilio-voice-stream] OpenAI response received {"hasResponse":true,"responseLength":137,"usage":{"prompt_tokens":1453,"completion_tokens":30,"total_tokens":1483,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] [twilio-voice-stream] Starting Azure TTS with REST API streaming {"textLength":137,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[DEBUG] [twilio-voice-stream] OpenAI chat request {"model":"gpt-4o-mini","messageCount":2,"maxTokens":150,"temperature":0.7}
+[DEBUG] [twilio-voice-stream] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[WARN] [twilio-voice-stream] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] [twilio-voice-stream] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] [twilio-voice-stream] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] [twilio-voice-stream] Transcription completed and validated {"transcript":"Bye.","transcriptLength":4,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] [twilio-voice-stream] Whisper transcription result {"hasText":true,"textLength":5}
+[DEBUG] [twilio-voice-stream] Starting Whisper transcription {"audioSize":28844,"model":"whisper-1"}
+[INFO] [twilio-voice-stream] Processing user speech {"bufferLength":90,"durationMs":1800,"minRequiredMs":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] [twilio-voice-stream] Resumed LISTENING state after post-TTS cooldown
+[INFO] [twilio-voice-stream] ✅ Azure TTS streaming complete {"totalBytesProcessed":20000,"framesStreamed":125,"avgFrameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS stream complete {"totalBytesProcessed":20000,"framesStreamed":125}
+[DEBUG] [twilio-voice-stream] Adding 300ms post-TTS cooldown before resuming VAD
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4202,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":3840,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4106,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4178,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] [twilio-voice-stream] Azure TTS response received, processing audio stream
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":2,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":1,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] [twilio-voice-stream] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":3,"frameSize":160,"rms":"4.0","threshold":800}
+[INFO] [twilio-voice-stream] Starting Azure TTS with REST API streaming {"textLength":29,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[INFO] [twilio-voice-stream] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":29,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[INFO] [twilio-voice-stream] Starting greeting {"streamSid":"MZd1a3ec259a80439afdc765754c722e97","greetingLength":29,"businessName":"Salon Blu"}
+[DEBUG] [twilio-voice-stream] Buffer warmup complete {"framesSent":10}
+[DEBUG] [twilio-voice-stream] Using μ-law silence pattern {"fillValue":"0xFF","frameSize":160}
+[DEBUG] [twilio-voice-stream] Starting buffer warmup {"codec":"mulaw","frameSize":160,"warmupFrames":10,"warmupDurationMs":200}
+[INFO] [twilio-voice-stream] ✅ Codec set to μ-law {"codec":"mulaw","frameSize":160,"bytesPerFrame":160}
+[DEBUG] [twilio-voice-stream] Detected encoding type {"encoding":"audio/x-mulaw","originalEncoding":"audio/x-mulaw"}
+[INFO] [twilio-voice-stream] ✅ FORCED codec configuration to μ-law for optimal audio quality {"codec":"mulaw","frameSize":160,"framesPerSecond":50,"durationPerFrame":20,"note":"Outbound codec explicitly forced to μ-law for ElevenLabs compatibility"}
+[INFO] [twilio-voice-stream] StreamSid captured {"streamSid":"MZd1a3ec259a80439afdc765754c722e97"}
+[INFO] [twilio-voice-stream] Media format negotiated {"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1}
+[INFO] [twilio-voice-stream] Call started {"streamSid":"MZd1a3ec259a80439afdc765754c722e97","callSid":"CAc82241c4c3e6846c49fd6cb47674b5f8"}
+[DEBUG] [twilio-voice-stream] Full start event received {"startEvent":{"accountSid":"ACe6e513d70609f6d6376a80db0b4214d5","streamSid":"MZd1a3ec259a80439afdc765754c722e97","callSid":"CAc82241c4c3e6846c49fd6cb47674b5f8","tracks":["inbound"],"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"customParameters":{"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","to":"+19194203058","greeting":"Thanks for calling Salon Blu!","businessName":"Salon Blu","from":"+19169450065","phoneNumber":"+19169450065"}}}
+[INFO] [twilio-voice-stream] Connected to Twilio WebSocket - waiting for start event
+[DEBUG] [twilio-voice-stream] Idle timeout reset {"idleTimeoutMs":45000,"hasPromptedForActivity":false}
+[INFO] [twilio-voice-stream] WebSocket connection established
+[INFO] [twilio-voice-stream] AIVoiceSession initialized successfully {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingLength":0,"hasOpenAIKey":true,"hasAzureTtsKey":true,"azureTtsRegion":"eastus","maxSessionDuration":"150s (Free) / 400s (Pro)","features":["Azure TTS streaming","Barge-in detection","VAD with 1200ms silence detection","Smart transcript filtering","Database-driven prompts","Session timeout protection"]}
+[INFO] [twilio-voice-stream] Twilio WebSocket connection request {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingProvided":false,"headers":{"host":"edge-runtime.supabase.com","origin":null,"userAgent":"Twilio.TmeWs/1.0"},"production":true,"authRequired":false}
+Listening on http://localhost:9999/

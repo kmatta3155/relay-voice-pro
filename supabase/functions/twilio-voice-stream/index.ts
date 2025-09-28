@@ -84,8 +84,9 @@ const TIME_PATTERNS = [
 ]
 
 // Stop-words filter to reject low-content single-word utterances
+// Note: Removed 'you' as it can be a meaningful response in conversations
 const STOP_WORDS = new Set([
-  'you', 'i', 'me', 'we', 'they', 'uh', 'um', 'hmm', 'huh', 'hey', 'eh', 'ah'
+  'i', 'me', 'we', 'they', 'uh', 'um', 'hmm', 'huh', 'hey', 'eh', 'ah'
 ])
 
 /**
@@ -916,14 +917,23 @@ class AIVoiceSession {
   }
   
   private async transcribeAudio(wavData: Uint8Array): Promise<string> {
-    logger.debug('Starting Whisper transcription', {
+    // CRITICAL FIX: Add audio quality validation to prevent Korean transcription errors
+    if (wavData.length < 1000) {
+      logger.warn('Audio data too small for reliable transcription', { size: wavData.length })
+      return ''
+    }
+    
+    logger.debug('Starting Whisper transcription with English language enforcement', {
       audioSize: wavData.length,
-      model: 'whisper-1'
+      model: 'whisper-1',
+      language: 'en',
+      format: '8kHz μ-law audio converted to WAV'
     })
     
     const formData = new FormData()
     formData.append('file', new Blob([wavData], { type: 'audio/wav' }), 'audio.wav')
     formData.append('model', 'whisper-1')
+    formData.append('language', 'en')  // CRITICAL: Force English to prevent Korean misdetection
     formData.append('response_format', 'json')
     
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -1203,10 +1213,16 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
           logger.error('Both primary and fallback RAG searches failed', {
             fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
           });
+          
+          // ENHANCED FALLBACK: Return basic salon information when all searches fail
+          logger.info('Using enhanced fallback with basic salon context');
+          return `${this.businessName} is a professional salon. We offer various beauty and wellness services. Please call during business hours for specific information about services, pricing, and scheduling. Our team is happy to help answer all your questions.`;
         }
       }
       
-      return '';
+      // Enhanced fallback when no RAG results found
+      logger.info('No RAG results found, providing basic salon context');
+      return `${this.businessName} offers professional salon services. Contact us for details about our services, pricing, and availability.`;
     } catch (error) {
       logger.warn('Error in getGroundingContext', { 
         error: error instanceof Error ? error.message : String(error) 
@@ -1256,8 +1272,8 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
     } finally {
       this.currentTTSAbortController = null
       
-      // CRITICAL: Add 300ms post-TTS cooldown before resuming VAD per Azure engineer recommendation
-      logger.debug('Adding 300ms post-TTS cooldown before resuming VAD')
+      // CRITICAL: Add 700ms post-TTS cooldown before resuming VAD per Azure engineer recommendation
+      logger.debug(`Adding ${POST_TTS_COOLDOWN_MS}ms post-TTS cooldown before resuming VAD`)
       await new Promise(resolve => setTimeout(resolve, POST_TTS_COOLDOWN_MS))
       
       // Now return to LISTENING state
