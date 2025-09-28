@@ -56,7 +56,7 @@ const BARGE_IN_MIN_DURATION_MS = 350  // Increased to 350ms per Azure engineer r
 const BARGE_IN_BUFFER_FRAMES = 12  // ~240ms buffer for detection (12 frames * 20ms)
 
 // Turn-taking timing constants
-const POST_TTS_COOLDOWN_MS = 300  // 300ms cooldown after TTS before resuming VAD
+const POST_TTS_COOLDOWN_MS = 700  // 700ms cooldown after TTS before resuming VAD (increased from 300ms per senior architect)
 
 // Turn management states
 enum TurnState {
@@ -315,8 +315,8 @@ class AIVoiceSession {
   private lastUserActivityTime = Date.now()
   private idleTimeoutHandle: number | null = null
   private hasPromptedForActivity = false
-  private readonly IDLE_TIMEOUT_MS = 8000 // 8 seconds idle before prompt
-  private readonly FINAL_TIMEOUT_MS = 8000 // Another 8 seconds after prompt before close
+  private readonly IDLE_TIMEOUT_MS = 45000 // 45 seconds idle before prompt (increased from 8s per senior architect)
+  private readonly FINAL_TIMEOUT_MS = 45000 // Another 45 seconds after prompt before close (increased from 8s per senior architect)
   
   constructor(
     ws: WebSocket,
@@ -784,7 +784,7 @@ class AIVoiceSession {
   
   private async handleBargeIn(): Promise<void> {
     try {
-      // CRITICAL FIX: Send clear message to stop pending audio
+      // CRITICAL FIX: Send clear message to stop pending audio (only if WebSocket is ready)
       if (this.streamSid && this.ws.readyState === 1) {
         const clearMessage = {
           event: 'clear',
@@ -1158,21 +1158,52 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
         }
       }
       
-      // General RAG search using the embeddings system
-      const { data: results, error } = await supabase.rpc('search_knowledge', {
-        tenant_id: tenantId,
-        query_text: userQuery,
-        match_threshold: 0.3,
-        match_count: 3
-      });
-      
-      if (error) {
-        logger.warn('RAG search failed', { error: error.message });
-        return '';
-      }
-      
-      if (results && results.length > 0) {
-        return results.map((r: any) => r.content).join('\n\n');
+      // General RAG search using the embeddings system with fallback mechanism
+      try {
+        const { data: results, error } = await supabase.rpc('search_knowledge', {
+          tenant_id: tenantId,
+          query_text: userQuery,
+          match_threshold: 0.3,
+          match_count: 3
+        });
+        
+        if (error) {
+          logger.warn('Primary RAG search failed, attempting fallback', { error: error.message });
+          throw error; // Trigger fallback
+        }
+        
+        if (results && results.length > 0) {
+          return results.map((r: any) => r.content).join('\n\n');
+        }
+      } catch (rpcError) {
+        // CRITICAL FIX: Fallback to Supabase Edge Function 'search'
+        logger.info('Falling back to Edge Function search', {
+          originalError: rpcError instanceof Error ? rpcError.message : String(rpcError)
+        });
+        
+        try {
+          const { data: fallbackResults, error: fallbackError } = await supabase.functions.invoke('search', {
+            body: {
+              tenant_id: tenantId,
+              query: userQuery,
+              k: 3
+            }
+          });
+          
+          if (fallbackError) {
+            logger.warn('Fallback search also failed', { error: fallbackError.message });
+            return '';
+          }
+          
+          if (fallbackResults?.results && fallbackResults.results.length > 0) {
+            logger.info('✅ Fallback search successful', { resultCount: fallbackResults.results.length });
+            return fallbackResults.results.map((r: any) => r.content).join('\n\n');
+          }
+        } catch (fallbackError) {
+          logger.error('Both primary and fallback RAG searches failed', {
+            fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+          });
+        }
       }
       
       return '';
@@ -2070,7 +2101,7 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       isAzureTtsStreaming: this.isAzureTtsStreaming
     })
     
-    // If Azure TTS is still streaming, defer the actual cleanup
+    // CRITICAL FIX: Add shutdown gate - if Azure TTS is still streaming, defer cleanup
     if (this.isAzureTtsStreaming) {
       logger.info('Deferring cleanup - Azure TTS is still streaming audio')
       this.pendingCleanup = true
@@ -2227,14 +2258,15 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
   
   // CRITICAL FIX: New function to send base64 audio directly without re-encoding
   private async sendOutboundFrameDirect(base64Audio: string): Promise<void> {
-    // Guard against sending after close or without streamSid
-    // Allow sending if ElevenLabs is still streaming, even if cleanup is pending
-    if (!this.streamSid || (this.isClosed && !this.isAzureTtsStreaming) || this.ws.readyState !== 1) {
+    // CRITICAL FIX: Enhanced guards - only send if WebSocket is ready AND we have streamSid AND not closed
+    if (!this.isClosed && this.ws.readyState === 1 && this.streamSid) {
+      // Continue with sending
+    } else {
       logger.debug('Skipping direct frame send', {
         hasStreamSid: !!this.streamSid,
         isClosed: this.isClosed,
         wsReadyState: this.ws.readyState,
-        isElevenLabsStreaming: this.isAzureTtsStreaming,
+        isAzureTtsStreaming: this.isAzureTtsStreaming,
         pendingCleanup: this.pendingCleanup
       })
       return
@@ -2473,9 +2505,13 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
     })
     
     try {
-      // Use custom greeting or Azure-recommended short greeting
-      const greetingText = this.greeting || `Thanks for calling ${this.businessName}—how can I help you today?`
+      // CRITICAL FIX: Professional salon greeting with warmth and clear service offering
+      const greetingText = this.greeting || `Thank you for calling ${this.businessName}. This is the automated receptionist. I can help with appointments, hours, and services. How may I help you today?`
+      
       await this.speakResponseFixed(greetingText)
+      
+      // Add 600-800ms pause before any potential reprompt to allow natural conversation flow
+      await new Promise(resolve => setTimeout(resolve, 700))
     } catch (error) {
       logger.error('Failed to deliver greeting', {
         error: error instanceof Error ? error.message : String(error),
