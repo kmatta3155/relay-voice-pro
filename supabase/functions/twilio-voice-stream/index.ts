@@ -855,8 +855,8 @@ class AIVoiceSession {
   }
   
   private async generateResponse(userText: string): Promise<string> {
-    // Get business-specific system prompt with enhanced fallback
-    let systemPrompt = `You are a professional AI receptionist for ${this.businessName}. Be helpful, friendly, and efficient. Answer questions about the business and help customers with their needs. Keep responses concise and conversational.`
+    // Get enhanced salon-specific system prompt with RAG integration
+    let systemPrompt = await this.buildEnhancedSalonPrompt(userText)
     
     if (this.tenantId && supabase) {
       try {
@@ -873,13 +873,14 @@ class AIVoiceSession {
             tenantId: this.tenantId
           })
         } else if (agent?.system_prompt) {
-          systemPrompt = agent.system_prompt
-          logger.debug('Using custom system prompt from database', {
+          // Enhance database prompt with salon-specific guidelines
+          systemPrompt = this.enhancePromptWithSalonGuidelines(agent.system_prompt, userText)
+          logger.debug('Using enhanced custom system prompt from database', {
             promptLength: systemPrompt.length,
             tenantId: this.tenantId
           })
         } else {
-          logger.debug('No custom prompt found, using default', {
+          logger.debug('No custom prompt found, using enhanced salon default', {
             tenantId: this.tenantId
           })
         }
@@ -887,7 +888,7 @@ class AIVoiceSession {
         logger.warn('Failed to fetch agent prompt from database', {
           error: error instanceof Error ? error.message : String(error),
           tenantId: this.tenantId,
-          fallbackPrompt: 'Using default prompt'
+          fallbackPrompt: 'Using enhanced salon prompt'
         })
       }
     }
@@ -949,6 +950,152 @@ class AIVoiceSession {
     this.conversationHistory.push({ role: 'assistant', content: aiResponse })
     
     return aiResponse
+  }
+
+  /**
+   * Build enhanced salon-specific system prompt with RAG integration
+   */
+  private async buildEnhancedSalonPrompt(userText: string): Promise<string> {
+    // Get business knowledge for context
+    let knowledgeContext = '';
+    
+    if (this.tenantId && supabase) {
+      try {
+        knowledgeContext = await this.getGroundingContext(this.tenantId, userText);
+      } catch (error) {
+        logger.warn('Failed to get grounding context', { 
+          error: error instanceof Error ? error.message : String(error),
+          tenantId: this.tenantId 
+        });
+      }
+    }
+
+    return `You are the expert AI receptionist for ${this.businessName}, a professional salon and beauty establishment. You have deep knowledge of hair and beauty services and excel at customer service.
+
+SALON EXPERTISE:
+You understand all hair services (cuts, color, styling, treatments), beauty services (facials, lashes, brows, nails), and salon operations. You know typical service durations, maintenance schedules, and industry best practices.
+
+BUSINESS KNOWLEDGE:
+${knowledgeContext}
+
+CONVERSATIONAL GUIDELINES FOR SALON CUSTOMERS:
+✅ ALWAYS engage naturally - never say "I don't have enough information"
+✅ Use your salon expertise to provide helpful responses even when specifics aren't available
+✅ For hours questions: If specific hours are in the knowledge base, provide them. If not, give helpful guidance like "We're typically open weekdays and weekends, let me have someone confirm our exact hours for you today"
+✅ Ask follow-up questions to understand customer needs better
+✅ Suggest complementary services when appropriate
+✅ Be enthusiastic about beauty and helping clients look their best
+✅ Handle requests gracefully by offering alternatives and solutions
+✅ Keep responses natural, warm, and conversational (1-2 sentences ideal)
+✅ NEVER go silent - always provide a helpful response
+
+EXAMPLE SALON RESPONSES:
+• "What hours are you open?" → "We're open most days of the week! Let me have someone confirm our exact schedule for today and call you right back. Are you looking to book an appointment?"
+• "Do you do highlights?" → "Absolutely! We specialize in all types of hair coloring including highlights, balayage, and color correction. What look are you hoping to achieve?"
+• "I need my roots done" → "Perfect timing! Root touch-ups are one of our most popular services. When was your last color? I can connect you with our colorist to get you scheduled."
+
+STRICT RULES:
+- NEVER respond with just "yes" or "no" - always provide helpful context
+- NEVER say you don't have information without offering an alternative
+- ALWAYS sound professional yet friendly and approachable
+- ALWAYS offer next steps (scheduling, consultation, call back)
+
+Remember: You represent a professional salon, so be knowledgeable, helpful, and proactive in every response.`;
+  }
+
+  /**
+   * Enhance existing database prompt with salon-specific guidelines
+   */
+  private enhancePromptWithSalonGuidelines(basePrompt: string, userText: string): string {
+    // Get business knowledge for context
+    let knowledgeContext = '';
+    
+    if (this.tenantId && supabase) {
+      this.getGroundingContext(this.tenantId, userText)
+        .then(context => knowledgeContext = context)
+        .catch(error => {
+          logger.warn('Failed to get grounding context for prompt enhancement', { 
+            error: error instanceof Error ? error.message : String(error) 
+          });
+        });
+    }
+
+    return `${basePrompt}
+
+ENHANCED SALON-SPECIFIC GUIDELINES:
+${knowledgeContext ? `BUSINESS KNOWLEDGE:\n${knowledgeContext}\n` : ''}
+
+CRITICAL SALON CONVERSATIONAL RULES:
+✅ NEVER respond with just "yes/no" - always provide helpful context and next steps
+✅ For hours questions: Provide specific hours if available, or offer to have someone confirm and call back
+✅ Use your salon expertise to be helpful even when specific information isn't available
+✅ NEVER go silent or say "I don't have enough information" - always engage with a helpful response
+✅ Ask follow-up questions to understand customer needs better
+✅ Keep responses warm, natural, and conversational (1-2 sentences ideal)
+✅ ALWAYS offer next steps like scheduling, consultation, or having someone call back
+
+EXAMPLE ENHANCED RESPONSES:
+• Hours questions → "We're open most days! Let me have someone confirm our exact schedule and call you right back. Looking to book something?"
+• Service questions → "Absolutely! We specialize in [service type]. What specific look are you hoping to achieve?"
+• General inquiries → "I'd love to help with that! Let me connect you with our team for all the details."
+
+Remember: You represent ${this.businessName} professionally - be knowledgeable, helpful, and proactive.`;
+  }
+
+  /**
+   * Get relevant business knowledge for the user's question using RAG
+   */
+  private async getGroundingContext(tenantId: string, userQuery: string): Promise<string> {
+    if (!supabase) return '';
+    
+    try {
+      // Enhanced RAG search for business hours
+      const lowerQuery = userQuery.toLowerCase();
+      const hasHoursIntent = /(hour|open|close|opening|closing|time)/i.test(lowerQuery);
+      
+      if (hasHoursIntent) {
+        // Try to get structured business hours first
+        const { data: hours, error: hoursError } = await supabase
+          .from('business_hours')
+          .select('dow, is_closed, open_time, close_time')
+          .eq('tenant_id', tenantId)
+          .order('dow', { ascending: true });
+        
+        if (!hoursError && hours && hours.length > 0) {
+          const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          const hoursStr = hours.map((h: any) => {
+            const day = daysOfWeek[h.dow] || `Day ${h.dow}`;
+            return h.is_closed ? `${day}: Closed` : `${day}: ${h.open_time} - ${h.close_time}`;
+          }).join(', ');
+          
+          return `Business Hours: ${hoursStr}`;
+        }
+      }
+      
+      // General RAG search using the embeddings system
+      const { data: results, error } = await supabase.rpc('search_knowledge', {
+        tenant_id: tenantId,
+        query_text: userQuery,
+        match_threshold: 0.3,
+        match_count: 3
+      });
+      
+      if (error) {
+        logger.warn('RAG search failed', { error: error.message });
+        return '';
+      }
+      
+      if (results && results.length > 0) {
+        return results.map((r: any) => r.content).join('\n\n');
+      }
+      
+      return '';
+    } catch (error) {
+      logger.warn('Error in getGroundingContext', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+      return '';
+    }
   }
   
   private async speakResponse(text: string): Promise<void> {

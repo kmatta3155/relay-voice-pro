@@ -97,12 +97,12 @@ serve(async (req) => {
         table: 'agent_settings',
         lookupField: 'twilio_number',
         lookupValue: to,
-        selectFields: 'tenant_id,greeting,elevenlabs_voice_id'
+        selectFields: 'tenant_id,greeting'
       })
       
       const { data: agent, error: agentError } = await sb
         .from('agent_settings')
-        .select('tenant_id,greeting,elevenlabs_voice_id')
+        .select('tenant_id,greeting')
         .eq('twilio_number', to)
         .maybeSingle()
       
@@ -115,7 +115,6 @@ serve(async (req) => {
       
       if (agent?.tenant_id) {
         if (!tenantId) tenantId = agent.tenant_id
-        if (!voiceId && agent.elevenlabs_voice_id) voiceId = agent.elevenlabs_voice_id as string
         if (!greeting && (agent as any).greeting) greeting = String((agent as any).greeting)
         
         console.log('[twilio-router] Updated from agent_settings', {
