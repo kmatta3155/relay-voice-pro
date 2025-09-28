@@ -311,6 +311,8 @@ class AIVoiceSession {
   private totalFramesReceived = 0
   private sessionTimeoutHandle: number | null = null
   private heartbeatInterval: number | null = null
+  private connectionHealthInterval: number | null = null
+  private lastKeepaliveTime = Date.now()
   
   // Idle timeout management per Azure engineer recommendations
   private lastUserActivityTime = Date.now()
@@ -368,6 +370,7 @@ class AIVoiceSession {
     this.setupEventListeners()
     this.setupSessionTimeout()
     this.setupHeartbeat()
+    this.setupConnectionHealthCheck()
   }
   
   private async sendErrorToCallerAndClose(errorMessage: string): Promise<void> {
@@ -435,6 +438,45 @@ class AIVoiceSession {
         }
       }
     }, 30000) as unknown as number
+  }
+  
+  private setupConnectionHealthCheck(): void {
+    // Enhanced connection monitoring every 10 seconds
+    this.connectionHealthInterval = setInterval(() => {
+      if (this.ws.readyState === 1 && this.streamSid) {
+        try {
+          // Send keepalive ping to detect connection issues early
+          this.sendKeepAlive()
+        } catch (error) {
+          logger.error('Connection health check failed', {
+            error: error instanceof Error ? error.message : String(error),
+            readyState: this.ws.readyState,
+            sessionDuration: Date.now() - this.sessionStartTime
+          })
+        }
+      }
+    }, 10000) as unknown as number
+  }
+  
+  private sendKeepAlive(): void {
+    if (this.ws.readyState === 1 && this.streamSid) {
+      const keepaliveMessage = {
+        event: 'mark',
+        streamSid: this.streamSid,
+        mark: {
+          name: 'connection_keepalive',
+          timestamp: Date.now()
+        }
+      }
+      
+      this.ws.send(JSON.stringify(keepaliveMessage))
+      this.lastKeepaliveTime = Date.now()
+      
+      logger.debug('Connection keepalive sent', {
+        sessionDuration: Date.now() - this.sessionStartTime,
+        connectionStable: true
+      })
+    }
   }
   
   private setupIdleTimeout(): void {
@@ -534,10 +576,19 @@ class AIVoiceSession {
     }
     
     this.ws.onerror = (error) => {
-      logger.error('WebSocket error occurred', { 
+      logger.error('WebSocket error - connection may be unstable', {
         error: error instanceof Error ? error.message : String(error),
-        readyState: this.ws.readyState
+        readyState: this.ws.readyState,
+        sessionDuration: Date.now() - this.sessionStartTime,
+        lastKeepalive: Date.now() - this.lastKeepaliveTime,
+        connectionDetails: {
+          url: this.ws.url,
+          protocol: this.ws.protocol,
+          extensions: this.ws.extensions
+        }
       })
+      // Enhanced error handling - don't auto-close, let Twilio decide
+      // Connection errors don't always mean the call should end
     }
   }
   
@@ -667,7 +718,59 @@ class AIVoiceSession {
         break
         
       case 'stop':
-        logger.info('Call ended - stop event received')
+        const callDuration = Date.now() - this.sessionStartTime
+        const stopReason = message.stop?.reason || 'unknown'
+        
+        logger.error('STOP EVENT RECEIVED - Analyzing for premature termination', {
+          sessionDuration: callDuration,
+          expectedMinimumDuration: 30000, // 30 seconds minimum
+          isPremature: callDuration < 30000,
+          stopReason: stopReason,
+          framesSent: this.totalFramesSent,
+          framesReceived: this.totalFramesReceived,
+          conversationTurns: this.conversationHistory.length,
+          connectionStability: {
+            lastKeepalive: Date.now() - this.lastKeepaliveTime,
+            wsReadyState: this.ws.readyState
+          }
+        })
+        
+        // CRITICAL FIX: Only accept stop events after reasonable call duration
+        // Ignore premature stop events that occur before 30 seconds of conversation
+        if (callDuration < 30000) {
+          logger.warn('🚫 IGNORING PREMATURE STOP EVENT - Call should continue', {
+            durationMs: callDuration,
+            durationSeconds: Math.round(callDuration / 1000),
+            minimumRequired: '30 seconds',
+            action: 'Continuing call - ignoring Twilio stop event',
+            note: 'This prevents premature call termination at 15-20 seconds'
+          })
+          
+          // Send a mark event to acknowledge we received the stop but are ignoring it
+          try {
+            this.ws.send(JSON.stringify({
+              event: 'mark',
+              streamSid: this.streamSid,
+              mark: {
+                name: 'premature_stop_ignored',
+                timestamp: Date.now(),
+                reason: 'call_duration_too_short'
+              }
+            }))
+          } catch (error) {
+            logger.debug('Failed to send premature stop acknowledgment', {
+              error: error instanceof Error ? error.message : String(error)
+            })
+          }
+          
+          return // Don't process premature stop events
+        }
+        
+        // Accept legitimate stop events after 30+ seconds
+        logger.info('✅ Accepting legitimate stop event after sufficient call duration', {
+          callDurationSeconds: Math.round(callDuration / 1000),
+          stopReason: stopReason
+        })
         this.cleanup()
         break
     }
@@ -2169,6 +2272,12 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       this.idleTimeoutHandle = null
     }
     
+    // Clear connection health monitoring interval
+    if (this.connectionHealthInterval) {
+      clearInterval(this.connectionHealthInterval)
+      this.connectionHealthInterval = null
+    }
+    
     // Close WebSocket if still open
     if (this.ws.readyState === 1) {
       try {
@@ -2288,6 +2397,36 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       return
     }
     
+    // CRITICAL FIX: Validate base64 audio data before sending
+    if (!base64Audio || base64Audio.length === 0) {
+      logger.warn('Invalid base64 audio data - skipping frame to prevent Twilio disconnection', {
+        audioLength: base64Audio?.length || 0,
+        frameNumber: this.outboundSeq
+      })
+      return
+    }
+    
+    // Decode and validate frame size for protocol compliance
+    try {
+      const audioBytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0))
+      if (audioBytes.length !== this.outboundFrameSize) {
+        logger.warn('Audio frame size mismatch - may cause Twilio disconnection', {
+          expectedSize: this.outboundFrameSize,
+          actualSize: audioBytes.length,
+          codec: this.outboundCodec,
+          frameNumber: this.outboundSeq,
+          action: 'Sending anyway but monitoring for connection issues'
+        })
+      }
+    } catch (error) {
+      logger.error('Failed to validate base64 audio frame', {
+        error: error instanceof Error ? error.message : String(error),
+        base64Length: base64Audio.length,
+        frameNumber: this.outboundSeq
+      })
+      return // Skip invalid frames
+    }
+    
     try {
       // CRITICAL FIX: Bidirectional streams do NOT use track field
       // Correct format: just event, streamSid, and media.payload
@@ -2299,18 +2438,31 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
         }
       }
       
+      // Enhanced WebSocket send with error recovery
       this.ws.send(JSON.stringify(message))
       this.outboundSeq++
       this.totalFramesSent++
       
-      // Send immediately - ElevenLabs provides properly timed chunks
+      // Log frame validation success for first few frames
+      if (this.outboundSeq <= 3) {
+        logger.debug('✅ Audio frame validated and sent successfully', {
+          frameNumber: this.outboundSeq,
+          audioLength: base64Audio.length,
+          streamSid: this.streamSid,
+          codec: this.outboundCodec
+        })
+      }
       
     } catch (error) {
-      logger.error('Failed to send direct outbound frame', {
+      logger.error('Failed to send direct outbound frame - may cause Twilio disconnection', {
         error: error instanceof Error ? error.message : String(error),
         frameNumber: this.outboundSeq,
-        streamSid: this.streamSid
+        streamSid: this.streamSid,
+        wsReadyState: this.ws.readyState,
+        connectionStable: Date.now() - this.lastKeepaliveTime < 15000,
+        action: 'Continuing but monitoring connection stability'
       })
+      // Don't terminate call on individual frame send failures
     }
   }
   

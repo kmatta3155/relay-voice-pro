@@ -1,5 +1,13 @@
 {
   "imports": {
     "https://esm.sh/@supabase/supabase-js@2.54.0": "https://esm.sh/@supabase/supabase-js@2.54.0"
-  }
+  },
+  "tasks": {
+    "dev": "deno run --allow-all --watch=static/,routes/ dev.ts"
+  },
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.window"]
+  },
+  "timeout": 300
 }
