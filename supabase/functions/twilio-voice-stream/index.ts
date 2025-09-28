@@ -45,10 +45,10 @@ enum AudioCodec {
   PCM16 = 'pcm16'
 }
 
-// Voice Activity Detection settings - tightened thresholds for better responsiveness
+// Voice Activity Detection settings - optimized for natural speech patterns
 const VAD_SILENCE_THRESHOLD = 700
-const VAD_MIN_SPEECH_MS = 300
-const VAD_END_SILENCE_MS = 500  // Reduced from 600ms to 500ms for faster response
+const VAD_MIN_SPEECH_MS = 600  // Increased to capture complete words
+const VAD_END_SILENCE_MS = 1200  // Increased to allow natural pauses in speech
 
 // Barge-in detection settings
 const BARGE_IN_THRESHOLD = 800  // Slightly higher than VAD to avoid false positives
@@ -60,6 +60,89 @@ enum TurnState {
   LISTENING = 'LISTENING',
   THINKING = 'THINKING', 
   SPEAKING = 'SPEAKING'
+}
+
+// ========== SMART TRANSCRIPT FILTERING ==========
+
+// Smart filtering constants
+const MIN_TRANSCRIPT_LENGTH = 3  // Reduced from 10 to allow short but meaningful responses
+const COMMON_RESPONSES = new Set([
+  'yes', 'no', 'ok', 'okay', 'hi', 'hello', 'thanks', 'thank you', 
+  'bye', 'goodbye', 'am', 'pm', 'help', 'sure', 'right', 'yeah', 
+  'yep', 'nope', 'stop', 'wait', 'done', 'fine', 'good', 'bad'
+])
+
+// Time pattern regex (matches patterns like "2pm", "10am", "3:30", "noon", etc.)
+const TIME_PATTERNS = [
+  /\b\d{1,2}(:\d{2})?\s*(am|pm)\b/i,  // 2pm, 10:30am
+  /\b\d{1,2}(:\d{2})?\b/,             // 3:30, 2
+  /\b(noon|midnight)\b/i,             // noon, midnight
+  /\b(morning|afternoon|evening|night)\b/i // morning, etc.
+]
+
+// Stop-words filter to reject low-content single-word utterances
+const STOP_WORDS = new Set([
+  'you', 'i', 'me', 'we', 'they', 'uh', 'um', 'hmm', 'huh', 'hey', 'eh', 'ah'
+])
+
+/**
+ * Smart transcript filtering that allows meaningful short responses while filtering out fragments
+ * Replaces the problematic 10-character minimum filter
+ */
+function isValidTranscript(transcript: string): { isValid: boolean; reason: string } {
+  const trimmed = transcript.trim().toLowerCase()
+  
+  // Always reject empty transcripts
+  if (!trimmed) {
+    return { isValid: false, reason: 'empty' }
+  }
+  
+  // Reject single characters that are likely transcription errors
+  if (trimmed.length === 1) {
+    return { isValid: false, reason: 'single_character' }
+  }
+  
+  // CRITICAL FIX: Check whitelist BEFORE length validation
+  // Allow whitelisted common responses regardless of length (including 2-char responses like "hi", "ok", "no", "am", "pm")
+  if (COMMON_RESPONSES.has(trimmed)) {
+    return { isValid: true, reason: 'whitelisted_response' }
+  }
+  
+  // Check for time patterns (2pm, 10am, 3:30, etc.) BEFORE length validation
+  for (const pattern of TIME_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return { isValid: true, reason: 'time_pattern' }
+    }
+  }
+  
+  // Apply basic length filter (3-4 characters minimum) AFTER whitelist/time validation
+  if (trimmed.length < MIN_TRANSCRIPT_LENGTH) {
+    return { isValid: false, reason: 'too_short' }
+  }
+  
+  // STOP-WORDS CHECK: Reject single stop-words to block low-content utterances
+  const words = trimmed.split(/\s+/)
+  if (words.length === 1 && STOP_WORDS.has(words[0])) {
+    return { isValid: false, reason: 'stop_word' }
+  }
+  
+  // Check if transcript contains at least one word with letters/digits
+  // This filters out fragments like isolated "You" but allows meaningful responses
+  const hasValidWord = words.some(word => {
+    // Must contain at least one letter or digit
+    const hasLetterOrDigit = /[a-z0-9]/i.test(word)
+    // Should be at least 2 characters for non-whitelisted words
+    const isReasonableLength = word.length >= 2
+    return hasLetterOrDigit && isReasonableLength
+  })
+  
+  if (!hasValidWord) {
+    return { isValid: false, reason: 'no_valid_words' }
+  }
+  
+  // For longer utterances, use VAD-based completeness check
+  // Allow any transcript that passes the basic checks above
+  return { isValid: true, reason: 'valid_content' }
 }
 
 // ========== AUDIO PROCESSING ==========
@@ -264,7 +347,8 @@ class AIVoiceSession {
       features: [
         'Azure TTS streaming',
         'Barge-in detection',
-        'VAD with 500ms silence',
+        'VAD with 1200ms silence detection',
+        'Smart transcript filtering',
         'Database-driven prompts',
         'Session timeout protection'
       ]
@@ -549,14 +633,15 @@ class AIVoiceSession {
       this.audioBuffer = this.audioBuffer.slice(-200)
     }
     
-    // Check for end of speech
-    if (this.audioBuffer.length >= 10 && !this.isProcessing) { // At least 200ms
-      const recentFrames = this.audioBuffer.slice(-30) // Last 600ms
+    // Check for end of speech - require minimum speech duration
+    const speechDurationMs = this.audioBuffer.length * FRAME_DURATION_MS
+    if (this.audioBuffer.length >= 30 && !this.isProcessing && speechDurationMs >= VAD_MIN_SPEECH_MS) {
+      const recentFrames = this.audioBuffer.slice(-60) // Last 1200ms to match VAD_END_SILENCE_MS
       const recentRMS = calculateRMS(recentFrames)
       
       if (recentRMS < VAD_SILENCE_THRESHOLD) {
         const silenceDuration = Date.now() - this.lastActivityTime
-        if (silenceDuration > VAD_END_SILENCE_MS && this.audioBuffer.length > 15) {
+        if (silenceDuration > VAD_END_SILENCE_MS && this.audioBuffer.length > 30) {
           await this.processUserSpeech()
         }
       }
@@ -653,13 +738,26 @@ class AIVoiceSession {
   private async processUserSpeech(): Promise<void> {
     if (this.isProcessing || this.audioBuffer.length === 0) return
     
+    // Check minimum speech duration to prevent processing very short audio
+    const speechDurationMs = this.audioBuffer.length * FRAME_DURATION_MS
+    if (speechDurationMs < VAD_MIN_SPEECH_MS) {
+      logger.debug('Speech too short, ignoring', {
+        durationMs: speechDurationMs,
+        minRequiredMs: VAD_MIN_SPEECH_MS,
+        bufferLength: this.audioBuffer.length
+      })
+      this.audioBuffer = []
+      return
+    }
+    
     this.isProcessing = true
     this.turnState = TurnState.THINKING
     
     try {
       logger.info('Processing user speech', {
         bufferLength: this.audioBuffer.length,
-        durationMs: this.audioBuffer.length * FRAME_DURATION_MS
+        durationMs: speechDurationMs,
+        minRequiredMs: VAD_MIN_SPEECH_MS
       })
       
       // Convert μ-law to PCM (inbound is always μ-law from Twilio)
@@ -678,17 +776,32 @@ class AIVoiceSession {
       // Transcribe with OpenAI Whisper
       const transcript = await this.transcribeAudio(wavData)
       
-      if (transcript.trim()) {
-        logger.info('Transcription completed', {
-          transcript,
-          transcriptLength: transcript.length
+      // Apply smart filtering to allow meaningful short utterances while filtering out fragments
+      const trimmedTranscript = transcript.trim()
+      const validationResult = isValidTranscript(trimmedTranscript)
+      
+      if (validationResult.isValid) {
+        logger.info('Transcription completed and validated', {
+          transcript: trimmedTranscript,
+          transcriptLength: trimmedTranscript.length,
+          validationReason: validationResult.reason,
+          smartFilteringEnabled: true
         })
         
         // Generate AI response
-        const response = await this.generateResponse(transcript)
+        const response = await this.generateResponse(trimmedTranscript)
         
         // Convert to speech and stream back
         await this.speakResponse(response)
+      } else {
+        logger.info('Transcription filtered out by smart filtering', {
+          transcript: trimmedTranscript,
+          transcriptLength: trimmedTranscript.length,
+          rejectionReason: validationResult.reason,
+          minRequiredLength: MIN_TRANSCRIPT_LENGTH,
+          note: 'Smart filtering prevents processing of meaningless fragments while allowing valid short responses'
+        })
+        // Don't respond to filtered transcriptions
       }
       
     } catch (error) {

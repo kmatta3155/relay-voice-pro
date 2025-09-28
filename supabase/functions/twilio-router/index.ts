@@ -65,33 +65,106 @@ serve(async (req) => {
   let voiceId = (search.get('voiceId') || (form?.get('voiceId') as string) || '').trim()
   let greeting = ''
 
+  // LOG: Initial request parameters
+  console.log('[twilio-router] Processing request', {
+    method: req.method,
+    fromRaw,
+    toRaw,
+    from,
+    to,
+    phoneNumber,
+    initialTenantId: tenantId,
+    initialBusinessName: businessName,
+    initialVoiceId: voiceId
+  })
+
   // Resolve tenant + business by the called number if possible (fast lookups)
   try {
     const SB_URL = Deno.env.get('SUPABASE_URL')
     const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    
+    console.log('[twilio-router] Environment check', {
+      hasSupabaseUrl: !!SB_URL,
+      hasSupabaseKey: !!SB_KEY,
+      toNumber: to,
+      canPerformLookup: !!(to && SB_URL && SB_KEY)
+    })
+    
     if (to && (SB_URL && SB_KEY)) {
       const sb = createClient(SB_URL, SB_KEY)
-      const { data: agent } = await sb
+      
+      console.log('[twilio-router] Querying agent_settings', {
+        table: 'agent_settings',
+        lookupField: 'twilio_number',
+        lookupValue: to,
+        selectFields: 'tenant_id,greeting,elevenlabs_voice_id'
+      })
+      
+      const { data: agent, error: agentError } = await sb
         .from('agent_settings')
         .select('tenant_id,greeting,elevenlabs_voice_id')
         .eq('twilio_number', to)
         .maybeSingle()
+      
+      console.log('[twilio-router] Agent lookup result', {
+        agent,
+        agentError,
+        hasAgent: !!agent,
+        agentTenantId: agent?.tenant_id
+      })
+      
       if (agent?.tenant_id) {
         if (!tenantId) tenantId = agent.tenant_id
         if (!voiceId && agent.elevenlabs_voice_id) voiceId = agent.elevenlabs_voice_id as string
         if (!greeting && (agent as any).greeting) greeting = String((agent as any).greeting)
+        
+        console.log('[twilio-router] Updated from agent_settings', {
+          tenantId,
+          voiceId,
+          greeting: greeting?.substring(0, 50) + '...'
+        })
+        
         try {
-          const { data: t } = await sb
+          console.log('[twilio-router] Querying tenants table', {
+            table: 'tenants',
+            lookupField: 'id',
+            lookupValue: agent.tenant_id
+          })
+          
+          const { data: t, error: tenantError } = await sb
             .from('tenants')
             .select('name')
             .eq('id', agent.tenant_id)
             .maybeSingle()
+          
+          console.log('[twilio-router] Tenant lookup result', {
+            tenant: t,
+            tenantError,
+            tenantName: t?.name
+          })
+          
           if (t?.name) businessName = t.name
-        } catch {}
+        } catch (tenantLookupError) {
+          console.error('[twilio-router] Tenant lookup error', tenantLookupError)
+        }
+      } else {
+        console.warn('[twilio-router] No agent found or agent has no tenant_id', {
+          agentFound: !!agent,
+          agentData: agent
+        })
       }
+    } else {
+      console.warn('[twilio-router] Cannot perform lookup - missing requirements', {
+        hasToNumber: !!to,
+        hasSupabaseUrl: !!SB_URL,
+        hasSupabaseKey: !!SB_KEY
+      })
     }
   } catch (e) {
-    console.warn('[twilio-router] tenant lookup failed', e)
+    console.error('[twilio-router] tenant lookup failed', {
+      error: e instanceof Error ? e.message : String(e),
+      stack: e instanceof Error ? e.stack : undefined
+    })
   }
 
 
@@ -101,6 +174,27 @@ serve(async (req) => {
   const host = url.host
   // Production AI voice system with ElevenLabs TTS and business-specific agents
   const wsUrl = streamUrlEnv || `wss://${host}/functions/v1/twilio-voice-stream`
+
+  // LOG: Final parameters being passed to stream
+  console.log('[twilio-router] Final stream parameters', {
+    wsUrl,
+    phoneNumber,
+    from,
+    to,
+    tenantId,
+    businessName,
+    voiceId,
+    greeting: greeting ? greeting.substring(0, 50) + '...' : 'none',
+    hasParameters: {
+      phoneNumber: !!phoneNumber,
+      from: !!from,
+      to: !!to,
+      tenantId: !!tenantId,
+      businessName: !!businessName,
+      voiceId: !!voiceId,
+      greeting: !!greeting
+    }
+  })
 
   // Build clean TwiML response with proper Stream element
   // Note: Greeting is handled in WebSocket, so no <Say> element needed
@@ -118,6 +212,11 @@ serve(async (req) => {
     </Stream>
   </Connect>
 </Response>`
+  
+  console.log('[twilio-router] Generated TwiML response', {
+    twimlLength: twiml.length,
+    twimlPreview: twiml.substring(0, 200) + '...'
+  })
 
   const headers = new Headers({ 'Content-Type': 'text/xml; charset=utf-8' })
   for (const [k, v] of Object.entries(corsHeaders)) headers.set(k, v)
