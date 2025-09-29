@@ -1847,9 +1847,18 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
                 totalAudioFrames: framesReceived
               })
               
-              // Mark streaming as complete before closing
+              // Mark streaming as complete - DO NOT close main WebSocket
               this.isAzureTtsStreaming = false
-              ws.close()
+              
+              // CRITICAL FIX: Close only the ElevenLabs WebSocket, not the main Twilio WebSocket
+              // This prevents code 1005 errors during TTS completion
+              logger.info('✅ ElevenLabs TTS stream complete - closing TTS WebSocket only', {
+                mainWebSocketState: this.ws.readyState,
+                willCloseTtsWebSocket: true,
+                willKeepMainConnection: true
+              })
+              
+              ws.close() // This closes only the ElevenLabs WebSocket
               
               // Check if we need to perform deferred cleanup
               if (this.pendingCleanup) {
@@ -2861,10 +2870,80 @@ serve(async (req) => {
   }
   
   // Extract context from URL parameters with validation
-  const tenantId = url.searchParams.get('tenantId') || ''
-  const businessName = url.searchParams.get('businessName') || 'this business'
+  let tenantId = url.searchParams.get('tenantId') || ''
+  let businessName = url.searchParams.get('businessName') || 'this business'
   const voiceId = url.searchParams.get('voiceId') || 'Xb7hH8MSUJpSbSDYk0k2' // Default ElevenLabs voice
-  const greeting = url.searchParams.get('greeting') || ''
+  let greeting = url.searchParams.get('greeting') || ''
+  
+  // CRITICAL FIX: If no tenantId or wrong tenantId passed, derive from "to" number
+  // This implements the architect's plan for proper tenant resolution
+  if (!tenantId || tenantId === 'f3760fe8-4491-4ab1-83dd-4069b1a2d688') {
+    logger.warn('Invalid or missing tenantId, deriving from phone number', {
+      providedTenantId: tenantId,
+      willDerive: true
+    })
+    
+    // Extract "to" number from URL params (Twilio passes this)
+    const toNumber = url.searchParams.get('to') || ''
+    
+    if (toNumber && supabase) {
+      try {
+        logger.info('Deriving tenant context from phone number', {
+          toNumber,
+          reason: 'Invalid tenantId provided'
+        })
+        
+        const { data: agentSettings, error: settingsError } = await supabase
+          .from('agent_settings')
+          .select('tenant_id, greeting')
+          .eq('twilio_number', toNumber)
+          .maybeSingle()
+        
+        if (settingsError) {
+          logger.error('Failed to derive tenant from phone number', {
+            error: settingsError.message,
+            toNumber
+          })
+        } else if (agentSettings?.tenant_id) {
+          tenantId = agentSettings.tenant_id
+          if (agentSettings.greeting) {
+            greeting = agentSettings.greeting
+          }
+          
+          logger.info('✅ Successfully derived tenant context', {
+            tenantId: tenantId,
+            greetingLength: greeting.length,
+            source: 'agent_settings'
+          })
+          
+          // Get business name from tenants table
+          const { data: tenantData, error: tenantError } = await supabase
+            .from('tenants')
+            .select('name')
+            .eq('id', tenantId)
+            .maybeSingle()
+          
+          if (tenantData?.name) {
+            businessName = tenantData.name
+            logger.info('✅ Business name resolved', {
+              businessName,
+              source: 'tenants table'
+            })
+          }
+        } else {
+          logger.error('No agent_settings found for phone number', {
+            toNumber,
+            agentSettings
+          })
+        }
+      } catch (error) {
+        logger.error('Error deriving tenant from phone number', {
+          error: error instanceof Error ? error.message : String(error),
+          toNumber
+        })
+      }
+    }
+  }
   
   // Log connection attempt with full context
   logger.info('Twilio WebSocket connection request', {

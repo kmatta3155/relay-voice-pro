@@ -158,6 +158,10 @@ serve(async (req) => {
         hasSupabaseUrl: !!SB_URL,
         hasSupabaseKey: !!SB_KEY
       })
+      // CRITICAL FIX: Clear any potentially wrong cached values if DB lookup fails
+      tenantId = ''
+      businessName = 'this business'
+      greeting = ''
     }
   } catch (e) {
     console.error('[twilio-router] tenant lookup failed', {
