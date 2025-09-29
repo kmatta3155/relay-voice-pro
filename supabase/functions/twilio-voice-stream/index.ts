@@ -256,6 +256,22 @@ function createWavFile(pcmData: Int16Array, sampleRate: number): Uint8Array {
   return new Uint8Array(buffer)
 }
 
+// CRITICAL FIX 2: Codec transcoding function for μ-law to PCM16 conversion
+function transcodeMulawFrameToPcm16(mulawFrame: Uint8Array): Uint8Array {
+  // Input: 160 bytes μ-law (160 samples at 8kHz, 20ms)
+  // Output: 320 bytes PCM16 (160 samples * 2 bytes per sample)
+  const pcm16Frame = new Uint8Array(FRAME_SIZE_PCM16)
+  const view = new DataView(pcm16Frame.buffer)
+  
+  for (let i = 0; i < FRAME_SIZE_MULAW; i++) {
+    const mulawSample = mulawFrame[i]
+    const pcm16Sample = mulawToPcm(mulawSample)
+    view.setInt16(i * 2, pcm16Sample, true) // Little-endian
+  }
+  
+  return pcm16Frame
+}
+
 // ========== AI VOICE SESSION ==========
 
 class AIVoiceSession {
@@ -570,8 +586,37 @@ class AIVoiceSession {
       }
     }
     
-    this.ws.onclose = () => {
-      logger.info('WebSocket connection closed')
+    this.ws.onclose = (event) => {
+      // CRITICAL FIX 3: Enhanced WebSocket close handling with immediate cleanup
+      logger.error('WebSocket closed during session', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+        phase: this.hasGreeted ? 'DURING_TTS' : 'BEFORE_GREETING',
+        sessionDuration: Date.now() - this.sessionStartTime,
+        framesSent: this.totalFramesSent,
+        framesReceived: this.totalFramesReceived,
+        connectionState: {
+          isAzureTtsStreaming: this.isAzureTtsStreaming,
+          turnState: this.turnState,
+          isClosed: this.isClosed
+        }
+      })
+      
+      // CRITICAL: Immediately stop all processing
+      this.isClosed = true
+      
+      // Stop any active TTS streaming immediately
+      if (this.currentTTSAbortController) {
+        logger.info('Aborting active TTS due to WebSocket closure')
+        this.currentTTSAbortController.abort()
+        this.currentTTSAbortController = null
+      }
+      
+      // Mark that TTS is no longer streaming
+      this.isAzureTtsStreaming = false
+      
+      // Stop all timers and processing immediately
       this.cleanup()
     }
     
@@ -677,18 +722,27 @@ class AIVoiceSession {
           this.outboundFrameSize = FRAME_SIZE_MULAW
         }
         
-        // CRITICAL: Force outbound codec to μ-law as required for zero static audio quality
-        // This overrides any automatic detection to ensure consistent ElevenLabs integration
-        this.outboundCodec = AudioCodec.MULAW
-        this.outboundFrameSize = FRAME_SIZE_MULAW
-        
-        logger.info('✅ FORCED codec configuration to μ-law for optimal audio quality', {
-          codec: this.outboundCodec,
+        // CRITICAL FIX 2: Remove forced μ-law override - respect negotiated codec from Twilio
+        // This allows proper codec alignment as required by senior architect
+        logger.info('✅ Using negotiated codec from Twilio (no override)', {
+          negotiatedCodec: this.outboundCodec,
           frameSize: this.outboundFrameSize,
           framesPerSecond: 50,
           durationPerFrame: FRAME_DURATION_MS,
-          note: 'Outbound codec explicitly forced to μ-law for ElevenLabs compatibility'
+          note: 'Respecting Twilio negotiated codec instead of forcing μ-law'
         })
+        
+        // Validate frame size matches negotiated codec
+        const expectedFrameSize = this.outboundCodec === AudioCodec.MULAW ? FRAME_SIZE_MULAW : FRAME_SIZE_PCM16
+        if (this.outboundFrameSize !== expectedFrameSize) {
+          logger.error('Frame size mismatch after codec negotiation', {
+            codec: this.outboundCodec,
+            currentFrameSize: this.outboundFrameSize,
+            expectedFrameSize: expectedFrameSize,
+            action: 'Correcting frame size to match codec'
+          })
+          this.outboundFrameSize = expectedFrameSize
+        }
         
         // Extract custom parameters if provided
         if (message.start?.customParameters) {
@@ -1471,14 +1525,36 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
             newBuffer.set(value, audioBuffer.length)
             audioBuffer = newBuffer
             
-            // Process μ-law audio in 160-byte frames (20ms at 8kHz)
+            // Process μ-law audio from Azure TTS and transcode if needed
             let processedBytes = 0
             while (audioBuffer.length - processedBytes >= FRAME_SIZE_MULAW) {
               checkAbort()
               
-              const frame = audioBuffer.slice(processedBytes, processedBytes + FRAME_SIZE_MULAW)
-              // Convert frame to base64 and send directly to Twilio
-              const base64Frame = safeBase64Encode(frame)
+              const rawFrame = audioBuffer.slice(processedBytes, processedBytes + FRAME_SIZE_MULAW)
+              
+              // CRITICAL FIX 2: Transcode if PCM16 is negotiated
+              let finalFrame: Uint8Array
+              if (this.outboundCodec === AudioCodec.PCM16) {
+                // Transcode μ-law to PCM16
+                finalFrame = transcodeMulawFrameToPcm16(rawFrame)
+                
+                // Log transcoding for first few frames
+                if (framesStreamed < 3) {
+                  logger.debug('Transcoding μ-law to PCM16', {
+                    inputFrameSize: rawFrame.length,
+                    outputFrameSize: finalFrame.length,
+                    inputCodec: 'mulaw',
+                    outputCodec: 'pcm16',
+                    frameNumber: framesStreamed
+                  })
+                }
+              } else {
+                // Use μ-law directly
+                finalFrame = rawFrame
+              }
+              
+              // Convert frame to base64 and send to Twilio
+              const base64Frame = safeBase64Encode(finalFrame)
               await this.sendOutboundFrameDirect(base64Frame)
               processedBytes += FRAME_SIZE_MULAW
               framesStreamed++
@@ -1507,7 +1583,16 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
           const paddedFrame = new Uint8Array(FRAME_SIZE_MULAW)
           paddedFrame.set(audioBuffer)
           paddedFrame.fill(0xFF, audioBuffer.length) // μ-law silence padding
-          const base64Frame = safeBase64Encode(paddedFrame)
+          
+          // Apply same transcoding logic for remaining audio
+          let finalFrame: Uint8Array
+          if (this.outboundCodec === AudioCodec.PCM16) {
+            finalFrame = transcodeMulawFrameToPcm16(paddedFrame)
+          } else {
+            finalFrame = paddedFrame
+          }
+          
+          const base64Frame = safeBase64Encode(finalFrame)
           await this.sendOutboundFrameDirect(base64Frame)
           framesStreamed++
         }
@@ -2383,11 +2468,23 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
   
   // CRITICAL FIX: New function to send base64 audio directly without re-encoding
   private async sendOutboundFrameDirect(base64Audio: string): Promise<void> {
-    // CRITICAL FIX: Enhanced guards - only send if WebSocket is ready AND we have streamSid AND not closed
-    if (!this.isClosed && this.ws.readyState === 1 && this.streamSid) {
-      // Continue with sending
-    } else {
-      logger.debug('Skipping direct frame send', {
+    // CRITICAL FIX 3: Enhanced connection state checks - gate all sends with readyState check
+    if (this.ws.readyState !== 1) {  // 1 = OPEN
+      logger.warn('Cannot send audio - WebSocket not open', {
+        readyState: this.ws.readyState,
+        readyStateText: this.ws.readyState === 0 ? 'CONNECTING' : 
+                       this.ws.readyState === 2 ? 'CLOSING' : 
+                       this.ws.readyState === 3 ? 'CLOSED' : 'UNKNOWN',
+        isClosed: this.isClosed,
+        hasStreamSid: !!this.streamSid,
+        isAzureTtsStreaming: this.isAzureTtsStreaming
+      })
+      return
+    }
+    
+    // Additional guards for session state
+    if (this.isClosed || !this.streamSid) {
+      logger.debug('Skipping direct frame send - session not ready', {
         hasStreamSid: !!this.streamSid,
         isClosed: this.isClosed,
         wsReadyState: this.ws.readyState,
@@ -2428,14 +2525,38 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
     }
     
     try {
-      // CRITICAL FIX: Bidirectional streams do NOT use track field
-      // Correct format: just event, streamSid, and media.payload
+      // CRITICAL FIX 1: Add track field for bidirectional streams as required by senior architect
+      // Outbound media messages MUST include track: 'outbound' to prevent connection closure
       const message = {
         event: 'media',
         streamSid: this.streamSid,
         media: {
-          payload: base64Audio  // Already base64 encoded μ-law from ElevenLabs
+          payload: base64Audio,  // Already base64 encoded audio
+          track: 'outbound'      // CRITICAL: Required for bidirectional streams
         }
+      }
+      
+      // Enhanced logging for first outbound send
+      if (this.outboundSeq === 0) {
+        logger.info('🎯 FIRST OUTBOUND SEND - Schema and codec details', {
+          messageSchema: {
+            event: message.event,
+            streamSid: !!message.streamSid,
+            hasTrackField: 'track' in message.media,
+            trackValue: message.media.track,
+            payloadLength: message.media.payload.length
+          },
+          codecInfo: {
+            outboundCodec: this.outboundCodec,
+            frameSize: this.outboundFrameSize,
+            expectedBytesPerFrame: this.outboundCodec === AudioCodec.MULAW ? 160 : 320
+          },
+          connectionState: {
+            wsReadyState: this.ws.readyState,
+            streamSid: this.streamSid,
+            isClosed: this.isClosed
+          }
+        })
       }
       
       // Enhanced WebSocket send with error recovery
@@ -2495,12 +2616,13 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       }
       
       // PRODUCTION FIX: Use exact Twilio media format for bidirectional streams
-      // CRITICAL FIX: Bidirectional streams do NOT use track field
+      // CRITICAL FIX 1: Add track field for bidirectional streams as required by senior architect
       const message = {
         event: 'media',
         streamSid: this.streamSid,
         media: {
-          payload: payload   // Base64 encoded μ-law audio
+          payload: payload,     // Base64 encoded audio
+          track: 'outbound'     // CRITICAL: Required for bidirectional streams
         }
       }
       
