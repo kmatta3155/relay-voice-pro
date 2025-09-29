@@ -16,10 +16,14 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.54.0'
-import { EdgeLogger } from '../_shared/logger.ts'
 
-// Initialize logger
-const logger = new EdgeLogger('twilio-voice-stream')
+// Simple logger implementation for Edge Function deployment
+const logger = {
+  info: (message: string, data?: any) => console.log(`[INFO] ${message}`, data ? JSON.stringify(data) : ''),
+  warn: (message: string, data?: any) => console.warn(`[WARN] ${message}`, data ? JSON.stringify(data) : ''),
+  error: (message: string, data?: any) => console.error(`[ERROR] ${message}`, data ? JSON.stringify(data) : ''),
+  debug: (message: string, data?: any) => console.log(`[DEBUG] ${message}`, data ? JSON.stringify(data) : '')
+}
 
 const corsHeaders = { 
   'Access-Control-Allow-Origin': '*',
