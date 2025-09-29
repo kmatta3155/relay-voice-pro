@@ -748,13 +748,125 @@ class AIVoiceSession {
           this.outboundFrameSize = expectedFrameSize
         }
         
-        // Extract custom parameters if provided
-        if (message.start?.customParameters) {
-          const params = message.start.customParameters
-          if (params.tenantId) this.tenantId = params.tenantId
-          if (params.businessName) this.businessName = params.businessName
-          if (params.voiceId) this.voiceId = params.voiceId
-          if (params.greeting) this.greeting = params.greeting
+        // CRITICAL FIX: Robust parameter parsing with database override
+        // Extract and normalize customParameters case-insensitively
+        const customParams = message.start?.customParameters || {}
+        const tenantIdFromParams = customParams.tenantId || customParams.tenant_id || ''
+        const toNumber = customParams.to || customParams.To || customParams.called || ''
+        const fromNumber = customParams.from || customParams.From || customParams.phoneNumber || ''
+        
+        logger.info('Extracted custom parameters', {
+          tenantIdFromParams,
+          toNumber,
+          fromNumber,
+          businessName: customParams.businessName || customParams.business_name || '',
+          voiceId: customParams.voiceId || customParams.voice_id || '',
+          greeting: customParams.greeting ? customParams.greeting.substring(0, 50) + '...' : 'none'
+        })
+        
+        // ALWAYS derive tenant from database using called number ('to'), NOT caller ('phoneNumber')
+        if (toNumber && supabase) {
+          logger.info('Performing database lookup for tenant using called number', {
+            toNumber,
+            source: 'DATABASE_AUTHORITATIVE'
+          })
+          
+          try {
+            const { data: agentSettings, error: agentError } = await supabase
+              .from('agent_settings')
+              .select('tenant_id, greeting')
+              .eq('twilio_number', toNumber)
+              .maybeSingle()
+            
+            if (agentError) {
+              logger.error('Database lookup error for agent settings', {
+                error: agentError.message,
+                toNumber
+              })
+            }
+            
+            if (agentSettings?.tenant_id) {
+              // ALWAYS override with database values - NEVER trust inbound parameters
+              this.tenantId = agentSettings.tenant_id
+              logger.info('OVERRIDE tenant_id from database', {
+                tenantId: this.tenantId,
+                previousValue: tenantIdFromParams,
+                source: 'DATABASE_AUTHORITATIVE'
+              })
+              
+              if (agentSettings.greeting) {
+                this.greeting = agentSettings.greeting
+                logger.info('OVERRIDE greeting from database', {
+                  greetingLength: this.greeting.length,
+                  greetingPreview: this.greeting.substring(0, 50) + '...',
+                  source: 'DATABASE_AUTHORITATIVE'
+                })
+              }
+              
+              // Fetch business name from tenants table
+              try {
+                const { data: tenantData, error: tenantError } = await supabase
+                  .from('tenants')
+                  .select('name')
+                  .eq('id', agentSettings.tenant_id)
+                  .maybeSingle()
+                
+                if (tenantError) {
+                  logger.warn('Failed to fetch tenant name', {
+                    error: tenantError.message,
+                    tenantId: agentSettings.tenant_id
+                  })
+                }
+                
+                if (tenantData?.name) {
+                  this.businessName = tenantData.name
+                  logger.info('OVERRIDE business name from database', {
+                    businessName: this.businessName,
+                    source: 'DATABASE_AUTHORITATIVE'
+                  })
+                }
+              } catch (tenantLookupError) {
+                logger.error('Exception during tenant name lookup', {
+                  error: tenantLookupError instanceof Error ? tenantLookupError.message : String(tenantLookupError)
+                })
+              }
+            } else {
+              logger.warn('No agent settings found for called number', {
+                toNumber,
+                fallingBackToParams: true
+              })
+              
+              // Fallback to parameters only if database lookup fails
+              if (tenantIdFromParams) this.tenantId = tenantIdFromParams
+              if (customParams.businessName) this.businessName = customParams.businessName
+              if (customParams.voiceId) this.voiceId = customParams.voiceId
+              if (customParams.greeting) this.greeting = customParams.greeting
+            }
+          } catch (dbError) {
+            logger.error('Database query exception', {
+              error: dbError instanceof Error ? dbError.message : String(dbError),
+              toNumber,
+              fallingBackToParams: true
+            })
+            
+            // Fallback to parameters on exception
+            if (tenantIdFromParams) this.tenantId = tenantIdFromParams
+            if (customParams.businessName) this.businessName = customParams.businessName
+            if (customParams.voiceId) this.voiceId = customParams.voiceId
+            if (customParams.greeting) this.greeting = customParams.greeting
+          }
+        } else {
+          logger.warn('Cannot perform database lookup - missing toNumber or supabase', {
+            hasToNumber: !!toNumber,
+            hasSupabase: !!supabase,
+            usingParametersOnly: true
+          })
+          
+          // Use parameters only if no database lookup possible
+          if (tenantIdFromParams) this.tenantId = tenantIdFromParams
+          if (customParams.businessName) this.businessName = customParams.businessName
+          if (customParams.voiceId) this.voiceId = customParams.voiceId
+          if (customParams.greeting) this.greeting = customParams.greeting
         }
         
         // Reset outbound audio tracking
@@ -763,6 +875,21 @@ class AIVoiceSession {
         
         // Send buffer warmup silence frames
         await this.sendBufferWarmup()
+        
+        // CRITICAL FIX: Fast keepalives for first 5 seconds to prevent premature termination
+        const earlyKeepaliveInterval = setInterval(() => {
+          if (Date.now() - this.sessionStartTime < 5000) {
+            this.sendKeepAlive()
+          } else {
+            clearInterval(earlyKeepaliveInterval)
+          }
+        }, 1000) as unknown as number  // Every 1 second for first 5 seconds
+        
+        logger.info('Fast keepalives started for session stability', {
+          duration: '5 seconds',
+          frequency: '1 second',
+          purpose: 'Prevent premature termination'
+        })
         
         // Now we're ready - start greeting
         this.isReady = true

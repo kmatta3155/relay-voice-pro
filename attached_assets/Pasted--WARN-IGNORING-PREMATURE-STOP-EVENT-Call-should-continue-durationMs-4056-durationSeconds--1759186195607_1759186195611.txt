@@ -1,0 +1,57 @@
+[WARN] 🚫 IGNORING PREMATURE STOP EVENT - Call should continue {"durationMs":4056,"durationSeconds":4,"minimumRequired":"30 seconds","action":"Continuing call - ignoring Twilio stop event","note":"This prevents premature call termination at 15-20 seconds"}
+[ERROR] STOP EVENT RECEIVED - Analyzing for premature termination {"sessionDuration":4056,"expectedMinimumDuration":30000,"isPremature":true,"stopReason":"unknown","framesSent":135,"framesReceived":201,"conversationTurns":1,"connectionStability":{"lastKeepalive":4056,"wsReadyState":1}}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[DEBUG] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[DEBUG] OpenAI chat request {"model":"gpt-4o-mini","messageCount":2,"maxTokens":150,"temperature":0.7}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Transcription completed and validated {"transcript":"you","transcriptLength":3,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] Whisper transcription result {"hasText":true,"textLength":3}
+[DEBUG] Starting Whisper transcription with English language enforcement {"audioSize":12844,"model":"whisper-1","language":"en","format":"8kHz μ-law audio converted to WAV"}
+[INFO] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":3,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":1,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":2,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":2240,"frameSize":160}
+[DEBUG] Azure TTS stream complete {"totalBytesProcessed":20000,"framesStreamed":125}
+[INFO] ✅ Azure TTS streaming complete {"totalBytesProcessed":20000,"framesStreamed":125,"avgFrameSize":160}
+[DEBUG] Adding 700ms post-TTS cooldown before resuming VAD
+[DEBUG] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4134,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4106,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4178,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4178,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] Azure TTS response received, processing audio stream
+[INFO] Starting greeting {"streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad","greetingLength":29,"businessName":"Salon Blu"}
+[DEBUG] Buffer warmup complete {"framesSent":10}
+[INFO] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":29,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[INFO] Starting Azure TTS with REST API streaming {"textLength":29,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[DEBUG] ✅ Audio frame validated and sent successfully {"frameNumber":3,"audioLength":216,"streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad","codec":"mulaw"}
+[INFO] 🎯 FIRST OUTBOUND SEND - Schema and codec details {"messageSchema":{"event":"media","streamSid":true,"hasTrackField":true,"trackValue":"outbound","payloadLength":216},"codecInfo":{"outboundCodec":"mulaw","frameSize":160,"expectedBytesPerFrame":160},"connectionState":{"wsReadyState":1,"streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad","isClosed":false}}
+[DEBUG] ✅ Audio frame validated and sent successfully {"frameNumber":2,"audioLength":216,"streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad","codec":"mulaw"}
+[DEBUG] ✅ Audio frame validated and sent successfully {"frameNumber":1,"audioLength":216,"streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad","codec":"mulaw"}
+[INFO] Connected to Twilio WebSocket - waiting for start event
+[INFO] ✅ Using negotiated codec from Twilio (no override) {"negotiatedCodec":"mulaw","frameSize":160,"framesPerSecond":50,"durationPerFrame":20,"note":"Respecting Twilio negotiated codec instead of forcing μ-law"}
+[DEBUG] Detected encoding type {"encoding":"audio/x-mulaw","originalEncoding":"audio/x-mulaw"}
+[DEBUG] Full start event received {"startEvent":{"accountSid":"ACe6e513d70609f6d6376a80db0b4214d5","streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad","callSid":"CAc75d6477bd805243c86708d03e95f044","tracks":["inbound"],"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"customParameters":{"to":"+19194203058","phoneNumber":"+19169450065","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","greeting":"Thanks for calling Salon Blu!","businessName":"Salon Blu","from":"+19169450065"}}}
+[INFO] StreamSid captured {"streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad"}
+[DEBUG] Starting buffer warmup {"codec":"mulaw","frameSize":160,"warmupFrames":10,"warmupDurationMs":200}
+[INFO] Call started {"streamSid":"MZ212b21bcf38fb1a52726edc32bdd4dad","callSid":"CAc75d6477bd805243c86708d03e95f044"}
+[INFO] ✅ Codec set to μ-law {"codec":"mulaw","frameSize":160,"bytesPerFrame":160}
+[DEBUG] Using μ-law silence pattern {"fillValue":"0xFF","frameSize":160}
+[INFO] Media format negotiated {"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1}
+[INFO] WebSocket connection established
+[DEBUG] Idle timeout reset {"idleTimeoutMs":45000,"hasPromptedForActivity":false}
+[INFO] AIVoiceSession initialized successfully {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingLength":0,"hasOpenAIKey":true,"hasAzureTtsKey":true,"azureTtsRegion":"eastus","maxSessionDuration":"150s (Free) / 400s (Pro)","features":["Azure TTS streaming","Barge-in detection","VAD with 1200ms silence detection","Smart transcript filtering","Database-driven prompts","Session timeout protection"]}
+[INFO] Twilio WebSocket connection request {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingProvided":false,"headers":{"host":"edge-runtime.supabase.com","origin":null,"userAgent":"Twilio.TmeWs/1.0"},"production":true,"authRequired":false}
+[WARN] Invalid or missing tenantId, deriving from phone number {"providedTenantId":"","willDerive":true}
+Listening on http://localhost:9999/

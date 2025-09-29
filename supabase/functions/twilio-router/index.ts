@@ -114,13 +114,15 @@ serve(async (req) => {
       })
       
       if (agent?.tenant_id) {
-        if (!tenantId) tenantId = agent.tenant_id
-        if (!greeting && (agent as any).greeting) greeting = String((agent as any).greeting)
+        // ALWAYS override with database values - NEVER trust inbound parameters
+        tenantId = agent.tenant_id
+        greeting = (agent as any).greeting || ''
         
-        console.log('[twilio-router] Updated from agent_settings', {
+        console.log('[twilio-router] OVERRIDE from agent_settings (authoritative)', {
           tenantId,
           voiceId,
-          greeting: greeting?.substring(0, 50) + '...'
+          greeting: greeting?.substring(0, 50) + '...',
+          source: 'DATABASE_AUTHORITATIVE'
         })
         
         try {
@@ -142,7 +144,10 @@ serve(async (req) => {
             tenantName: t?.name
           })
           
-          if (t?.name) businessName = t.name
+          if (t?.name) {
+            // ALWAYS override with database tenant name
+            businessName = t.name
+          }
         } catch (tenantLookupError) {
           console.error('[twilio-router] Tenant lookup error', tenantLookupError)
         }
