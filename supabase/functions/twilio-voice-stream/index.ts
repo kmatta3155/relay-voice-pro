@@ -873,23 +873,54 @@ class AIVoiceSession {
         this.outboundSeq = 0
         this.outboundTsBase = Date.now()
         
-        // Send buffer warmup silence frames
-        await this.sendBufferWarmup()
+        // CRITICAL FIX: IMMEDIATE warmup with silent μ-law frames
+        // Send 10 silent frames immediately to prime Twilio's buffer and prevent initial static
+        const silenceFrame = new Uint8Array(160).fill(0xFF) // μ-law silence (160 bytes = 20ms at 8kHz)
+        const warmupStartTime = Date.now()
         
-        // CRITICAL FIX: Fast keepalives for first 5 seconds to prevent premature termination
+        for (let i = 0; i < 10; i++) {
+          const media = {
+            event: 'media',
+            streamSid: this.streamSid,
+            media: {
+              payload: safeBase64Encode(silenceFrame)
+            }
+          }
+          this.ws.send(JSON.stringify(media))
+        }
+        
+        logger.info('✅ Warmup frames sent', {
+          frameCount: 10,
+          totalDurationMs: 200,
+          elapsedMs: Date.now() - warmupStartTime,
+          purpose: 'Prime Twilio buffer and prevent premature termination'
+        })
+        
+        // CRITICAL FIX: Fast keepalives every 1 second for first 5 seconds
+        // This prevents premature termination during the critical first 5 seconds
         const earlyKeepaliveInterval = setInterval(() => {
-          if (Date.now() - this.sessionStartTime < 5000) {
-            this.sendKeepAlive()
+          const elapsed = Date.now() - this.sessionStartTime
+          if (elapsed < 5000) {
+            // Send keepalive mark with elapsed timestamp
+            const mark = {
+              event: 'mark',
+              streamSid: this.streamSid,
+              mark: { name: `keepalive_${elapsed}` }
+            }
+            this.ws.send(JSON.stringify(mark))
+            logger.debug('Early keepalive sent', { 
+              elapsed,
+              elapsedSeconds: (elapsed / 1000).toFixed(1),
+              remainingMs: 5000 - elapsed
+            })
           } else {
             clearInterval(earlyKeepaliveInterval)
+            logger.info('✅ Early keepalive period complete', {
+              totalDuration: '5 seconds',
+              purpose: 'Prevented premature termination'
+            })
           }
-        }, 1000) as unknown as number  // Every 1 second for first 5 seconds
-        
-        logger.info('Fast keepalives started for session stability', {
-          duration: '5 seconds',
-          frequency: '1 second',
-          purpose: 'Prevent premature termination'
-        })
+        }, 1000) as unknown as number
         
         // Now we're ready - start greeting
         this.isReady = true
