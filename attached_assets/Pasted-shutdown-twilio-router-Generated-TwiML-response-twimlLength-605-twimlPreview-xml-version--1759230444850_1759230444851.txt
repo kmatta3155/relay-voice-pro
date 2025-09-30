@@ -1,0 +1,23 @@
+shutdown
+[twilio-router] Generated TwiML response { twimlLength: 605, twimlPreview: '<?xml version="1.0" encoding="UTF-8"?>\n' + "<Response>\n" + " <Connect>\n" + ' <Stream url="wss://gnqqktmslswgjtvxfvdo.supabase.co/functions/v1/twilio-voice-stream">\n' + ' <Parameter name="phoneNumber" value="+191...' }
+[twilio-router] Tenant lookup result { tenant: { name: "Salon Blu" }, tenantError: null, tenantName: "Salon Blu" }
+[twilio-router] Final stream parameters { wsUrl: "wss://gnqqktmslswgjtvxfvdo.supabase.co/functions/v1/twilio-voice-stream", phoneNumber: "+19169450065", from: "+19169450065", to: "+19194203058", tenantId: "f3760fe8-4491-4ab1-83dd-4069b1a2d688", businessName: "Salon Blu", voiceId: "", greeting: "Hello, thank you for calling Salon Blu. How can I ...", hasParameters: { phoneNumber: true, from: true, to: true, tenantId: true, businessName: true, voiceId: false, greeting: true } }
+[twilio-router] OVERRIDE from agent_settings (authoritative) { tenantId: "f3760fe8-4491-4ab1-83dd-4069b1a2d688", voiceId: "", greeting: "Hello, thank you for calling Salon Blu. How can I ...", source: "DATABASE_AUTHORITATIVE" }
+[twilio-router] Querying tenants table { table: "tenants", lookupField: "id", lookupValue: "f3760fe8-4491-4ab1-83dd-4069b1a2d688" }
+[twilio-router] Agent lookup result { agent: { tenant_id: "f3760fe8-4491-4ab1-83dd-4069b1a2d688", greeting: "Hello, thank you for calling Salon Blu. How can I help you today?" }, agentError: null, hasAgent: true, agentTenantId: "f3760fe8-4491-4ab1-83dd-4069b1a2d688" }
+[twilio-router] Querying agent_settings { table: "agent_settings", lookupField: "twilio_number", lookupValue: "+19194203058", selectFields: "tenant_id,greeting" }
+[twilio-router] Environment check { hasSupabaseUrl: true, hasSupabaseKey: true, toNumber: "+19194203058", canPerformLookup: true }
+[twilio-router] Processing request { method: "POST", fromRaw: "+19169450065", toRaw: "+19194203058", from: "+19169450065", to: "+19194203058", phoneNumber: "+19169450065", initialTenantId: "", initialBusinessName: "this business", initialVoiceId: "" }
+Listening on http://localhost:9999/
+booted (time: 27ms)
+shutdown
+[twilio-router] Generated TwiML response { twimlLength: 605, twimlPreview: '<?xml version="1.0" encoding="UTF-8"?>\n' + "<Response>\n" + " <Connect>\n" + ' <Stream url="wss://gnqqktmslswgjtvxfvdo.supabase.co/functions/v1/twilio-voice-stream">\n' + ' <Parameter name="phoneNumber" value="+191...' }
+[twilio-router] Final stream parameters { wsUrl: "wss://gnqqktmslswgjtvxfvdo.supabase.co/functions/v1/twilio-voice-stream", phoneNumber: "+19169450065", from: "+19169450065", to: "+19194203058", tenantId: "f3760fe8-4491-4ab1-83dd-4069b1a2d688", businessName: "Salon Blu", voiceId: "", greeting: "Hello, thank you for calling Salon Blu. How can I ...", hasParameters: { phoneNumber: true, from: true, to: true, tenantId: true, businessName: true, voiceId: false, greeting: true } }
+[twilio-router] Tenant lookup result { tenant: { name: "Salon Blu" }, tenantError: null, tenantName: "Salon Blu" }
+[twilio-router] Agent lookup result { agent: { tenant_id: "f3760fe8-4491-4ab1-83dd-4069b1a2d688", greeting: "Hello, thank you for calling Salon Blu. How can I help you today?" }, agentError: null, hasAgent: true, agentTenantId: "f3760fe8-4491-4ab1-83dd-4069b1a2d688" }
+[twilio-router] OVERRIDE from agent_settings (authoritative) { tenantId: "f3760fe8-4491-4ab1-83dd-4069b1a2d688", voiceId: "", greeting: "Hello, thank you for calling Salon Blu. How can I ...", source: "DATABASE_AUTHORITATIVE" }
+[twilio-router] Querying tenants table { table: "tenants", lookupField: "id", lookupValue: "f3760fe8-4491-4ab1-83dd-4069b1a2d688" }
+[twilio-router] Querying agent_settings { table: "agent_settings", lookupField: "twilio_number", lookupValue: "+19194203058", selectFields: "tenant_id,greeting" }
+[twilio-router] Environment check { hasSupabaseUrl: true, hasSupabaseKey: true, toNumber: "+19194203058", canPerformLookup: true }
+[twilio-router] Processing request { method: "POST", fromRaw: "+19169450065", toRaw: "+19194203058", from: "+19169450065", to: "+19194203058", phoneNumber: "+19169450065", initialTenantId: "", initialBusinessName: "this business", initialVoiceId: "" }
+Listening on http://localhost:9999/
