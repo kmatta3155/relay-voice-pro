@@ -176,12 +176,16 @@ serve(async (req) => {
   }
 
 
-  // Get the WebSocket URL for the twilio-voice-stream function
+  // Get the WebSocket URL for the twilio-voice-realtime function
   // Allow overriding via environment variable, otherwise derive from request host
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
-  // Production AI voice system with ElevenLabs TTS and business-specific agents
-  const wsUrl = streamUrlEnv || `wss://${host}/functions/v1/twilio-voice-stream`
+  // Production AI voice system with OpenAI Realtime API (server-side VAD, perfect turn-taking)
+  // Append tenant_id to query string AND keep it in Parameters for redundancy
+  const baseWsUrl = streamUrlEnv || `wss://${host}/functions/v1/twilio-voice-realtime`
+  const wsUrl = tenantId 
+    ? `${baseWsUrl}?tenant_id=${encodeURIComponent(tenantId)}`
+    : baseWsUrl
 
   // LOG: Final parameters being passed to stream
   console.log('[twilio-router] Final stream parameters', {
