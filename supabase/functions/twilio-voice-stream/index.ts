@@ -50,8 +50,8 @@ enum AudioCodec {
 }
 
 // Voice Activity Detection settings - optimized for natural speech patterns
-const VAD_SILENCE_THRESHOLD = 700
-const VAD_MIN_SPEECH_MS = 800  // Increased to 800ms per Azure engineer recommendation
+const VAD_SILENCE_THRESHOLD = 900
+const VAD_MIN_SPEECH_MS = 1200  // Increased to 1200ms to prevent false detections
 const VAD_END_SILENCE_MS = 1200  // Within 1000-1300ms range as recommended
 
 // Barge-in detection settings
@@ -94,52 +94,36 @@ const STOP_WORDS = new Set([
 ])
 
 /**
- * Smart transcript filtering that allows meaningful short responses while filtering out fragments
- * Replaces the problematic 10-character minimum filter
+ * Strengthened transcript validation to prevent false positives like "you"
+ * Rejects single-word false positives and requires meaningful content
  */
-function isValidTranscript(transcript: string): { isValid: boolean; reason: string } {
-  const trimmed = transcript.trim().toLowerCase()
+function isValidTranscript(text: string): { isValid: boolean, reason: string } {
+  const trimmed = text.trim()
   
-  // Always reject empty transcripts
-  if (!trimmed) {
-    return { isValid: false, reason: 'empty' }
-  }
-  
-  // Reject single characters that are likely transcription errors
-  if (trimmed.length === 1) {
-    return { isValid: false, reason: 'single_character' }
-  }
-  
-  // CRITICAL FIX: Check whitelist BEFORE length validation
-  // Allow whitelisted common responses regardless of length (including 2-char responses like "hi", "ok", "no", "am", "pm")
-  if (COMMON_RESPONSES.has(trimmed)) {
-    return { isValid: true, reason: 'whitelisted_response' }
-  }
-  
-  // Check for time patterns (2pm, 10am, 3:30, etc.) BEFORE length validation
-  for (const pattern of TIME_PATTERNS) {
-    if (pattern.test(trimmed)) {
-      return { isValid: true, reason: 'time_pattern' }
-    }
-  }
-  
-  // Apply basic length filter (3-4 characters minimum) AFTER whitelist/time validation
-  if (trimmed.length < MIN_TRANSCRIPT_LENGTH) {
+  // Reject empty or very short transcripts
+  if (trimmed.length < 3) {
     return { isValid: false, reason: 'too_short' }
   }
   
-  // STOP-WORDS CHECK: Reject single stop-words to block low-content utterances
-  const words = trimmed.split(/\s+/)
-  if (words.length === 1 && STOP_WORDS.has(words[0])) {
-    return { isValid: false, reason: 'stop_word' }
+  // Reject single-word transcripts that are likely false positives
+  const words = trimmed.split(/\s+/).filter(w => w.length >= 2)
+  if (words.length === 1) {
+    const singleWord = words[0].toLowerCase()
+    // Common false positive words from Whisper
+    const falsePositives = ['you', 'the', 'a', 'i', 'um', 'uh', 'yeah', 'ok', 'hmm']
+    if (falsePositives.includes(singleWord)) {
+      return { isValid: false, reason: 'common_false_positive' }
+    }
   }
   
-  // Check if transcript contains at least one word with letters/digits
-  // This filters out fragments like isolated "You" but allows meaningful responses
+  // Require at least 2 words OR a single meaningful word (5+ chars)
+  if (words.length < 2 && words[0]?.length < 5) {
+    return { isValid: false, reason: 'insufficient_content' }
+  }
+  
+  // Check for actual content (letters or digits)
   const hasValidWord = words.some(word => {
-    // Must contain at least one letter or digit
-    const hasLetterOrDigit = /[a-z0-9]/i.test(word)
-    // Should be at least 2 characters for non-whitelisted words
+    const hasLetterOrDigit = /[a-zA-Z0-9]/.test(word)
     const isReasonableLength = word.length >= 2
     return hasLetterOrDigit && isReasonableLength
   })
@@ -148,8 +132,6 @@ function isValidTranscript(transcript: string): { isValid: boolean; reason: stri
     return { isValid: false, reason: 'no_valid_words' }
   }
   
-  // For longer utterances, use VAD-based completeness check
-  // Allow any transcript that passes the basic checks above
   return { isValid: true, reason: 'valid_content' }
 }
 
