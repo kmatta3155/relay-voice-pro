@@ -1,0 +1,257 @@
+[INFO] Session metrics {"duration":25703,"framesReceived":1231,"framesSent":2619,"conversationTurns":4,"avgFramesPerSecond":47.89324203400381,"idleTimeoutImplemented":true,"azureRecommendationsApplied":true}
+[INFO] Cleanup requested {"hasGreeted":true,"conversationLength":8,"isReady":true,"sessionDuration":25703,"totalFramesSent":2619,"totalFramesReceived":1231,"isAzureTtsStreaming":false}
+[INFO] Performing actual cleanup {"wasDeferred":false}
+[ERROR] WebSocket closed during session {"code":1005,"reason":"","wasClean":true,"phase":"DURING_TTS","sessionDuration":25703,"framesSent":2619,"framesReceived":1231,"connectionState":{"isAzureTtsStreaming":false,"turnState":"LISTENING","isClosed":false}}
+[DEBUG] Resumed LISTENING state after post-TTS cooldown
+[ERROR] STOP EVENT RECEIVED - Analyzing for premature termination {"sessionDuration":24702,"expectedMinimumDuration":30000,"isPremature":true,"stopReason":"unknown","framesSent":2619,"framesReceived":1231,"conversationTurns":8,"connectionStability":{"lastKeepalive":4700,"wsReadyState":1}}
+[WARN] 🚫 IGNORING PREMATURE STOP EVENT - Call should continue {"durationMs":24702,"durationSeconds":25,"minimumRequired":"30 seconds","action":"Continuing call - ignoring Twilio stop event","note":"This prevents premature call termination at 15-20 seconds"}
+[DEBUG] Adding 700ms post-TTS cooldown before resuming VAD
+[INFO] ✅ Azure TTS streaming complete {"totalBytesProcessed":110880,"framesStreamed":694,"avgFrameSize":159.76945244956772}
+[DEBUG] Azure TTS stream complete {"totalBytesProcessed":110880,"framesStreamed":693}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":675,"totalBytesProcessed":108000,"bufferSize":4240,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":625,"totalBytesProcessed":100000,"bufferSize":4177,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":650,"totalBytesProcessed":104000,"bufferSize":2070,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":600,"totalBytesProcessed":96000,"bufferSize":4234,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":575,"totalBytesProcessed":92000,"bufferSize":4138,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":550,"totalBytesProcessed":88000,"bufferSize":1370,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":525,"totalBytesProcessed":84000,"bufferSize":4099,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":500,"totalBytesProcessed":80000,"bufferSize":4225,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":475,"totalBytesProcessed":76000,"bufferSize":4162,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":450,"totalBytesProcessed":72000,"bufferSize":4228,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":4132,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":4231,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":2122,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4135,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":4116,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":4180,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":2170,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4118,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":4182,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":4121,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":4185,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4165,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":1375,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4127,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4093,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4179,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4179,"frameSize":160}
+[DEBUG] Azure TTS response received, processing audio stream
+[DEBUG] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3923,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3923,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3923,"frameSize":160}
+[INFO] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":225,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[DEBUG] OpenAI response received {"hasResponse":true,"responseLength":225,"usage":{"prompt_tokens":1595,"completion_tokens":48,"total_tokens":1643,"prompt_tokens_details":{"cached_tokens":1536,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] Starting Azure TTS with REST API streaming {"textLength":225,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[DEBUG] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[DEBUG] OpenAI chat request {"model":"gpt-4o-mini","messageCount":8,"maxTokens":150,"temperature":0.7}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[DEBUG] Whisper transcription result {"hasText":true,"textLength":3}
+[INFO] Transcription completed and validated {"transcript":"you","transcriptLength":3,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] Connection keepalive sent {"sessionDuration":20002,"connectionStable":true}
+[INFO] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] Starting Whisper transcription with English language enforcement {"audioSize":12844,"model":"whisper-1","language":"en","format":"8kHz μ-law audio converted to WAV"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.1","hexDump":"7e fe 7e 7e 7e fe fe 7e fe ff ff ff fe ff 7e 7e... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.6","hexDump":"7e 7e 7e ff 7e ff 7e 7e 7e 7e ff 7d 7e 7e 7e ff... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.2","hexDump":"ff 7e ff fe ff 7e ff 7e fe 7e ff fe 7e 7e ff 7e... (160 bytes total)"}
+[DEBUG] Resumed LISTENING state after post-TTS cooldown
+[INFO] ✅ Azure TTS streaming complete {"totalBytesProcessed":98720,"framesStreamed":618,"avgFrameSize":159.7411003236246}
+[DEBUG] Adding 700ms post-TTS cooldown before resuming VAD
+[DEBUG] Azure TTS stream complete {"totalBytesProcessed":98720,"framesStreamed":617}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":600,"totalBytesProcessed":96000,"bufferSize":4115,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":575,"totalBytesProcessed":92000,"bufferSize":3545,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":550,"totalBytesProcessed":88000,"bufferSize":3492,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":525,"totalBytesProcessed":84000,"bufferSize":4141,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":500,"totalBytesProcessed":80000,"bufferSize":2925,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":475,"totalBytesProcessed":76000,"bufferSize":4205,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":450,"totalBytesProcessed":72000,"bufferSize":2195,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":4143,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":4207,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":4117,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4092,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":3362,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":2989,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":4095,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":4097,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4193,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":1447,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":4142,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":4238,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4241,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4145,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":2455,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4185,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":2977,"frameSize":160}
+[DEBUG] Azure TTS response received, processing audio stream
+[DEBUG] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3923,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3923,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3923,"frameSize":160}
+[INFO] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":187,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[DEBUG] OpenAI response received {"hasResponse":true,"responseLength":187,"usage":{"prompt_tokens":1545,"completion_tokens":41,"total_tokens":1586,"prompt_tokens_details":{"cached_tokens":1408,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] Starting Azure TTS with REST API streaming {"textLength":187,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[DEBUG] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[DEBUG] OpenAI chat request {"model":"gpt-4o-mini","messageCount":6,"maxTokens":150,"temperature":0.7}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Transcription completed and validated {"transcript":"you","transcriptLength":3,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] Whisper transcription result {"hasText":true,"textLength":3}
+[INFO] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] Starting Whisper transcription with English language enforcement {"audioSize":12844,"model":"whisper-1","language":"en","format":"8kHz μ-law audio converted to WAV"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"6.6","hexDump":"7e 7e 7d 7e 7e 7d 7e 7e 7d fe ff ff 7e 7d 7e 7e... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"6.5","hexDump":"7e ff fe 7e ff 7e 7d 7e 7e 7e 7e 7e 7d 7e fd 7e... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"6.3","hexDump":"7d 7d fd 7e 7c 7e fe 7e 7e fe fe ff 7e 7e fe 7e... (160 bytes total)"}
+[DEBUG] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] Azure TTS stream complete {"totalBytesProcessed":103680,"framesStreamed":648}
+[INFO] ✅ Azure TTS streaming complete {"totalBytesProcessed":103680,"framesStreamed":649,"avgFrameSize":159.75346687211095}
+[DEBUG] Adding 700ms post-TTS cooldown before resuming VAD
+[DEBUG] Azure TTS audio streaming {"framesStreamed":625,"totalBytesProcessed":100000,"bufferSize":4092,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":600,"totalBytesProcessed":96000,"bufferSize":4158,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":550,"totalBytesProcessed":88000,"bufferSize":4096,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":575,"totalBytesProcessed":92000,"bufferSize":2147,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":525,"totalBytesProcessed":84000,"bufferSize":4160,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":475,"totalBytesProcessed":76000,"bufferSize":4205,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":500,"totalBytesProcessed":80000,"bufferSize":4141,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":450,"totalBytesProcessed":72000,"bufferSize":2195,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":4143,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":4207,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":4146,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4210,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":4190,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":1400,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":4170,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4151,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":4215,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":2205,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":4153,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":4217,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4197,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] Azure TTS response received, processing audio stream
+[DEBUG] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4178,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":2827,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4093,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4178,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] OpenAI response received {"hasResponse":true,"responseLength":210,"usage":{"prompt_tokens":1493,"completion_tokens":43,"total_tokens":1536,"prompt_tokens_details":{"cached_tokens":1408,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] Starting Azure TTS with REST API streaming {"textLength":210,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[INFO] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":210,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[DEBUG] Connection keepalive sent {"sessionDuration":10002,"connectionStable":true}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[DEBUG] OpenAI chat request {"model":"gpt-4o-mini","messageCount":4,"maxTokens":150,"temperature":0.7}
+[DEBUG] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[INFO] Transcription completed and validated {"transcript":"What","transcriptLength":4,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] Whisper transcription result {"hasText":true,"textLength":4}
+[DEBUG] Starting Whisper transcription with English language enforcement {"audioSize":27244,"model":"whisper-1","language":"en","format":"8kHz μ-law audio converted to WAV"}
+[INFO] Processing user speech {"bufferLength":85,"durationMs":1700,"minRequiredMs":800}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"9.7","hexDump":"fe 7e fe 7e 7e fe 7c ff 7d 7d ff 7e 7e 7e fd 7e... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"14.6","hexDump":"fd 7e fe fe ff 7b 7b 7e 7d 7a 7e 7e ff fb 7d 7e... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"15.5","hexDump":"fc fe fd 7c ff 7c fe 7d fe fd 7b 7d 7c ff fe 7c... (160 bytes total)"}
+[DEBUG] Resumed LISTENING state after post-TTS cooldown
+[INFO] ✅ Azure TTS streaming complete {"totalBytesProcessed":85120,"framesStreamed":533,"avgFrameSize":159.69981238273922}
+[DEBUG] Azure TTS stream complete {"totalBytesProcessed":85120,"framesStreamed":532}
+[DEBUG] Adding 700ms post-TTS cooldown before resuming VAD
+[DEBUG] Azure TTS audio streaming {"framesStreamed":525,"totalBytesProcessed":84000,"bufferSize":1435,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":475,"totalBytesProcessed":76000,"bufferSize":4206,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":500,"totalBytesProcessed":80000,"bufferSize":4225,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":450,"totalBytesProcessed":72000,"bufferSize":4110,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":425,"totalBytesProcessed":68000,"bufferSize":2100,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":400,"totalBytesProcessed":64000,"bufferSize":4208,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":375,"totalBytesProcessed":60000,"bufferSize":4112,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":350,"totalBytesProcessed":56000,"bufferSize":4253,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":325,"totalBytesProcessed":52000,"bufferSize":4157,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":300,"totalBytesProcessed":48000,"bufferSize":2147,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":275,"totalBytesProcessed":44000,"bufferSize":4096,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":250,"totalBytesProcessed":40000,"bufferSize":4160,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":225,"totalBytesProcessed":36000,"bufferSize":4098,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":200,"totalBytesProcessed":32000,"bufferSize":4162,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":175,"totalBytesProcessed":28000,"bufferSize":1512,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":150,"totalBytesProcessed":24000,"bufferSize":4142,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":4170,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":1514,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4178,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4171,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4171,"frameSize":160}
+[DEBUG] Azure TTS response received, processing audio stream
+[DEBUG] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3923,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3923,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3923,"frameSize":160}
+[DEBUG] OpenAI response received {"hasResponse":true,"responseLength":151,"usage":{"prompt_tokens":1452,"completion_tokens":32,"total_tokens":1484,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}}}
+[INFO] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":151,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[INFO] Starting Azure TTS with REST API streaming {"textLength":151,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[INFO] ✅ Early keepalive period complete {"totalDuration":"5 seconds","purpose":"Prevented premature termination"}
+[DEBUG] Early keepalive sent {"elapsed":4151,"elapsedSeconds":"4.2","remainingMs":849}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[DEBUG] OpenAI chat request {"model":"gpt-4o-mini","messageCount":2,"maxTokens":150,"temperature":0.7}
+[DEBUG] Using enhanced custom system prompt from database {"promptLength":5614,"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[WARN] Fallback search also failed {"error":"Edge Function returned a non-2xx status code"}
+[INFO] Falling back to Edge Function search {"originalError":"[object Object]"}
+[WARN] Primary RAG search failed, attempting fallback {"error":"Could not find the function public.search_knowledge(match_count, match_threshold, query_text, tenant_id) in the schema cache"}
+[INFO] Transcription completed and validated {"transcript":"you","transcriptLength":3,"validationReason":"valid_content","smartFilteringEnabled":true}
+[DEBUG] Whisper transcription result {"hasText":true,"textLength":3}
+[DEBUG] Early keepalive sent {"elapsed":3150,"elapsedSeconds":"3.1","remainingMs":1850}
+[DEBUG] Early keepalive sent {"elapsed":2149,"elapsedSeconds":"2.1","remainingMs":2851}
+[DEBUG] Starting Whisper transcription with English language enforcement {"audioSize":12844,"model":"whisper-1","language":"en","format":"8kHz μ-law audio converted to WAV"}
+[INFO] Processing user speech {"bufferLength":40,"durationMs":800,"minRequiredMs":800}
+[DEBUG] Early keepalive sent {"elapsed":1148,"elapsedSeconds":"1.1","remainingMs":3852}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":3,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":2,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] Incoming audio frame (LISTENING) {"frameNumber":1,"frameSize":160,"rms":"4.0","hexDump":"ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff... (160 bytes total)"}
+[DEBUG] Resumed LISTENING state after post-TTS cooldown
+[DEBUG] Adding 700ms post-TTS cooldown before resuming VAD
+[INFO] ✅ Azure TTS streaming complete {"totalBytesProcessed":20000,"framesStreamed":125,"avgFrameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":125,"totalBytesProcessed":20000,"bufferSize":640,"frameSize":160}
+[DEBUG] Azure TTS stream complete {"totalBytesProcessed":20000,"framesStreamed":125}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":100,"totalBytesProcessed":16000,"bufferSize":4127,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":75,"totalBytesProcessed":12000,"bufferSize":4107,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":50,"totalBytesProcessed":8000,"bufferSize":4178,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":25,"totalBytesProcessed":4000,"bufferSize":4178,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":2,"totalBytesProcessed":320,"bufferSize":3922,"frameSize":160}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":3,"totalBytesProcessed":480,"bufferSize":3922,"frameSize":160}
+[DEBUG] ✅ Audio frame validated and sent successfully {"frameNumber":2,"audioLength":216,"streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578","codec":"mulaw"}
+[DEBUG] ✅ Audio frame validated and sent successfully {"frameNumber":3,"audioLength":216,"streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578","codec":"mulaw"}
+[INFO] 🎯 FIRST OUTBOUND SEND - Schema and codec details {"messageSchema":{"event":"media","streamSid":true,"hasTrackField":true,"trackValue":"outbound","payloadLength":216},"codecInfo":{"outboundCodec":"mulaw","frameSize":160,"expectedBytesPerFrame":160},"connectionState":{"wsReadyState":1,"streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578","isClosed":false}}
+[DEBUG] ✅ Audio frame validated and sent successfully {"frameNumber":1,"audioLength":216,"streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578","codec":"mulaw"}
+[DEBUG] Azure TTS audio streaming {"framesStreamed":1,"totalBytesProcessed":160,"bufferSize":3922,"frameSize":160}
+[DEBUG] Azure TTS response received, processing audio stream
+[DEBUG] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":2,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":1,"frameSize":160,"rms":"4.0","threshold":800}
+[DEBUG] Incoming audio frame (SPEAKING - barge-in detection) {"frameNumber":3,"frameSize":160,"rms":"4.0","threshold":800}
+[INFO] Starting greeting {"streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578","greetingLength":29,"businessName":"Salon Blu"}
+[INFO] Starting Azure TTS with REST API streaming {"textLength":29,"region":"eastus","codec":"mulaw","frameSize":160,"streamingMode":"azure-rest"}
+[INFO] Starting Azure TTS REST API call {"endpoint":"https://eastus.tts.speech.microsoft.com/cognitiveservices/v1","region":"eastus","textLength":29,"outputFormat":"raw-8khz-8bit-mono-mulaw","authentication":"Ocp-Apim-Subscription-Key header"}
+[INFO] ✅ Warmup frames sent {"frameCount":10,"totalDurationMs":200,"elapsedMs":0,"purpose":"Prime Twilio buffer and prevent premature termination"}
+[INFO] OVERRIDE business name from database {"businessName":"Salon Blu","source":"DATABASE_AUTHORITATIVE"}
+[INFO] OVERRIDE greeting from database {"greetingLength":29,"greetingPreview":"Thanks for calling Salon Blu!...","source":"DATABASE_AUTHORITATIVE"}
+[INFO] OVERRIDE tenant_id from database {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","previousValue":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","source":"DATABASE_AUTHORITATIVE"}
+[DEBUG] Detected encoding type {"encoding":"audio/x-mulaw","originalEncoding":"audio/x-mulaw"}
+[INFO] ✅ Using negotiated codec from Twilio (no override) {"negotiatedCodec":"mulaw","frameSize":160,"framesPerSecond":50,"durationPerFrame":20,"note":"Respecting Twilio negotiated codec instead of forcing μ-law"}
+[INFO] StreamSid captured {"streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578"}
+[INFO] Extracted custom parameters {"tenantIdFromParams":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","toNumber":"+19194203058","fromNumber":"+19169450065","businessName":"Salon Blu","voiceId":"","greeting":"Thanks for calling Salon Blu!..."}
+[INFO] ✅ Codec set to μ-law {"codec":"mulaw","frameSize":160,"bytesPerFrame":160}
+[INFO] Call started {"streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578","callSid":"CA2db2f55a1a474acf2e58eb9ee33022f4"}
+[INFO] Media format negotiated {"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1}
+[INFO] Connected to Twilio WebSocket - waiting for start event
+[DEBUG] Full start event received {"startEvent":{"accountSid":"ACe6e513d70609f6d6376a80db0b4214d5","streamSid":"MZ89cc1b29ef8f13cf19016b3ed8756578","callSid":"CA2db2f55a1a474acf2e58eb9ee33022f4","tracks":["inbound"],"mediaFormat":{"encoding":"audio/x-mulaw","sampleRate":8000,"channels":1},"customParameters":{"businessName":"Salon Blu","from":"+19169450065","to":"+19194203058","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","phoneNumber":"+19169450065","greeting":"Thanks for calling Salon Blu!"}}}
+[INFO] Performing database lookup for tenant using called number {"toNumber":"+19194203058","source":"DATABASE_AUTHORITATIVE"}
+[DEBUG] Idle timeout reset {"idleTimeoutMs":45000,"hasPromptedForActivity":false}
+[INFO] WebSocket connection established
+[INFO] AIVoiceSession initialized successfully {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingLength":0,"hasOpenAIKey":true,"hasAzureTtsKey":true,"azureTtsRegion":"eastus","maxSessionDuration":"150s (Free) / 400s (Pro)","features":["Azure TTS streaming","Barge-in detection","VAD with 1200ms silence detection","Smart transcript filtering","Database-driven prompts","Session timeout protection"]}
+[WARN] Invalid or missing tenantId, deriving from phone number {"providedTenantId":"","willDerive":true}
+[INFO] Twilio WebSocket connection request {"tenantId":"","businessName":"this business","voiceId":"Xb7hH8MSUJpSbSDYk0k2","greetingProvided":false,"headers":{"host":"edge-runtime.supabase.com","origin":null,"userAgent":"Twilio.TmeWs/1.0"},"production":true,"authRequired":false}
+Listening on http://localhost:9999/
