@@ -10,6 +10,23 @@ The system features a modern React-based dashboard for managing calls, leads, ap
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+### Voice Call Architecture Migration (September 2025)
+**Migration from Custom VAD to OpenAI Realtime API for Phone Calls**
+
+- **Previous Architecture**: Custom client-side VAD → Whisper STT → OpenAI Chat → Azure TTS (complex, quality issues)
+- **New Architecture**: OpenAI Realtime API with server-side VAD (simple, production-grade)
+- **Key Improvements**:
+  - Eliminated false voice detection issues through server-side VAD
+  - Reduced latency with single-hop WebSocket architecture
+  - Improved audio quality with native μ-law ↔ PCM16 conversion
+  - Unified architecture with customer simulation (both use Realtime API)
+  - Native RAG integration via function calls
+  
+- **Implementation**: New Edge Function `twilio-voice-realtime` bridges Twilio Media Streams to OpenAI Realtime API with proper audio codec conversion (μ-law ↔ PCM16, 8kHz ↔ 24kHz resampling)
+- **Status**: Production-ready, architect approved
+
 ## System Architecture
 
 ### Frontend Architecture
@@ -47,8 +64,7 @@ Preferred communication style: Simple, everyday language.
 - **Supabase**: Backend-as-a-Service providing database, auth, storage, and edge functions
 - **Stripe**: Payment processing and subscription billing management
 - **Twilio**: Voice calls, SMS messaging, and phone number provisioning
-- **ElevenLabs**: AI voice synthesis for realistic call interactions
-- **OpenAI**: Conversation intelligence and natural language processing
+- **OpenAI Realtime API**: Primary voice AI engine for phone calls with server-side VAD, speech recognition, and natural language processing
 - **Resend**: Transactional email delivery service
 - **Sentry**: Error monitoring and performance tracking
 
