@@ -527,6 +527,7 @@ class RealtimeAudioBridge {
     const sessionConfig = {
       type: 'session.update',
       session: {
+        type: 'session',
         modalities: ['text', 'audio'],
         voice: this.voiceId,
         input_audio_format: 'pcm16',
