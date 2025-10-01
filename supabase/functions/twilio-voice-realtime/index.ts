@@ -205,6 +205,13 @@ class RealtimeAudioBridge {
         return
       }
       
+      // If tenantId is empty, it will come from customParameters later
+      if (!this.tenantId) {
+        logger.info('No tenant_id yet, will be set from Twilio customParameters')
+        this.agentInstructions = 'You are a helpful AI assistant for phone calls.'
+        return
+      }
+      
       const supabase = createClient(supabaseUrl, supabaseKey)
       
       const { data: agent, error } = await supabase
@@ -329,8 +336,20 @@ class RealtimeAudioBridge {
         
         // Extract parameters from Twilio customParameters
         const customParameters = message.start.customParameters || {}
+        const tenantIdFromParams = customParameters.tenantId || customParameters.tenant_id
         const voiceFromParams = customParameters.voiceId || customParameters.voice_id
         const greetingFromParams = customParameters.greeting
+        
+        logger.info('Received customParameters', { customParameters })
+        
+        // Apply tenant_id from customParameters if we don't have it yet
+        if (tenantIdFromParams && !this.tenantId) {
+          this.tenantId = tenantIdFromParams
+          logger.info('Tenant ID set from customParameters', { tenantId: this.tenantId })
+          
+          // Now that we have tenant_id, fetch agent config from database
+          await this.fetchAgentConfig()
+        }
         
         // Apply customParameters with precedence over DB values
         if (voiceFromParams) {
@@ -345,7 +364,9 @@ class RealtimeAudioBridge {
         
         logger.info('Twilio stream started', {
           streamSid: this.streamSid,
-          callSid: this.callSid
+          callSid: this.callSid,
+          tenantId: this.tenantId,
+          hasGreeting: !!this.greeting
         })
         break
         
@@ -700,23 +721,21 @@ serve(async (req) => {
   if (upgradeHeader?.toLowerCase() === 'websocket') {
     const tenantId = url.searchParams.get('tenant_id')
     
-    logger.info('WebSocket upgrade request', { tenantId })
+    logger.info('WebSocket upgrade request', { 
+      tenantId,
+      hasTenantId: !!tenantId,
+      note: 'tenant_id can also come from Twilio customParameters'
+    })
     
-    if (!tenantId) {
-      logger.error('Missing tenant_id in WebSocket upgrade')
-      return new Response('Missing tenant_id parameter', { 
-        status: 400,
-        headers: corsHeaders 
-      })
-    }
-    
+    // Allow connection even without tenant_id - it will come from Twilio customParameters
     const { socket: twilioWs, response } = Deno.upgradeWebSocket(req)
     
     twilioWs.onopen = async () => {
-      logger.info('Twilio WebSocket connected', { tenantId })
+      logger.info('Twilio WebSocket connected', { tenantIdFromUrl: tenantId })
       
       try {
-        const bridge = new RealtimeAudioBridge(twilioWs, tenantId)
+        // Pass tenantId from URL if available, otherwise will get from customParameters
+        const bridge = new RealtimeAudioBridge(twilioWs, tenantId || '')
         await bridge.initialize()
       } catch (error) {
         logger.error('Failed to initialize bridge', {
