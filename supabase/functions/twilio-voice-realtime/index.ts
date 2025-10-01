@@ -681,17 +681,29 @@ class RealtimeAudioBridge {
 // ========== MAIN HTTP HANDLER ==========
 
 serve(async (req) => {
+  const url = new URL(req.url)
+  const upgradeHeader = req.headers.get('upgrade')
+  
+  logger.info('Incoming request', {
+    method: req.method,
+    url: url.toString(),
+    upgradeHeader,
+    searchParams: Object.fromEntries(url.searchParams)
+  })
+  
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
   
   // Handle WebSocket upgrade
-  if (req.headers.get('upgrade') === 'websocket') {
-    const url = new URL(req.url)
+  if (upgradeHeader?.toLowerCase() === 'websocket') {
     const tenantId = url.searchParams.get('tenant_id')
     
+    logger.info('WebSocket upgrade request', { tenantId })
+    
     if (!tenantId) {
+      logger.error('Missing tenant_id in WebSocket upgrade')
       return new Response('Missing tenant_id parameter', { 
         status: 400,
         headers: corsHeaders 
