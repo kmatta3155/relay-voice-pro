@@ -266,8 +266,9 @@ class RealtimeAudioBridge {
     
     // Use subprotocols for auth - this is the correct approach for Deno
     this.openaiWs = new WebSocket(openaiUrl, [
-      'realtime',  // Required subprotocol for OpenAI Realtime API
-      `openai-insecure-api-key.${openaiApiKey}`  // Auth via subprotocol
+      'realtime',  // Base protocol identifier
+      `openai-insecure-api-key.${openaiApiKey}`,  // API authentication
+      'openai-beta.realtime-v1'  // Required beta protocol version
     ])
     
     this.openaiWs.onopen = () => {

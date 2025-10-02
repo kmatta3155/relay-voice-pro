@@ -1,0 +1,23 @@
+[INFO] twilio-voice-realtime: Twilio WebSocket closed {"code":1005,"reason":""}
+[INFO] twilio-voice-realtime: OpenAI WebSocket closed {"code":1005,"reason":"","wasClean":true}
+[INFO] twilio-voice-realtime: Twilio stream stopped
+[INFO] twilio-voice-realtime: Cleaning up bridge {"streamSid":"MZ813c9597c8b8fe4c1fdaec257f5e5dab","callSid":"CAb2bee7f0e0e368cbbe47c0a0d303d10d"}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"missing_required_parameter","message":"Missing required parameter: 'session.type'.","param":"session.type","event_id":null}}
+[INFO] twilio-voice-realtime: Configuring OpenAI session {"voice":"alloy","hasInstructions":true,"toolCount":1}
+[INFO] twilio-voice-realtime: OpenAI WebSocket connected successfully
+[INFO] twilio-voice-realtime: Greeting overridden from customParameters {"greeting":"Hello, thank you for calling Salon Blu. How can I help you today?"}
+[INFO] twilio-voice-realtime: Reconfiguring OpenAI session with tenant settings
+[INFO] twilio-voice-realtime: Twilio stream started {"streamSid":"MZ813c9597c8b8fe4c1fdaec257f5e5dab","callSid":"CAb2bee7f0e0e368cbbe47c0a0d303d10d","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasGreeting":true}
+[INFO] twilio-voice-realtime: Agent config loaded {"hasInstructions":true,"voice":"alloy","hasGreeting":false}
+[INFO] twilio-voice-realtime: Tenant ID set from customParameters {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] twilio-voice-realtime: Received customParameters {"customParameters":{"from":"+19169450065","greeting":"Hello, thank you for calling Salon Blu. How can I help you today?","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","phoneNumber":"+19169450065","businessName":"Salon Blu","to":"+19194203058"}}
+[DEBUG] twilio-voice-realtime: Unhandled Twilio event {"event":"connected"}
+[INFO] twilio-voice-realtime: Connecting to OpenAI Realtime API
+[INFO] twilio-voice-realtime: Bridge initialization complete
+[INFO] twilio-voice-realtime: No tenant_id yet, will be set from Twilio customParameters
+[INFO] twilio-voice-realtime: Twilio WebSocket connected {"tenantIdFromUrl":null}
+[INFO] twilio-voice-realtime: RealtimeAudioBridge initialized {"tenantId":""}
+[INFO] twilio-voice-realtime: Incoming request {"method":"GET","url":"http://gnqqktmslswgjtvxfvdo.supabase.co/twilio-voice-realtime","upgradeHeader":"websocket","searchParams":{}}
+[INFO] twilio-voice-realtime: WebSocket upgrade request {"tenantId":null,"hasTenantId":false,"note":"tenant_id can also come from Twilio customParameters"}
+Listening on http://localhost:9999/
+booted (time: 29ms)
