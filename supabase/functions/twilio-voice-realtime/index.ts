@@ -368,6 +368,10 @@ class RealtimeAudioBridge {
           tenantId: this.tenantId,
           hasGreeting: !!this.greeting
         })
+        
+        // Reconfigure OpenAI session with tenant-specific settings
+        logger.info('Reconfiguring OpenAI session with tenant settings')
+        await this.configureSession()
         break
         
       case 'media':
@@ -527,7 +531,6 @@ class RealtimeAudioBridge {
     const sessionConfig = {
       type: 'session.update',
       session: {
-        type: 'session',
         modalities: ['text', 'audio'],
         voice: this.voiceId,
         input_audio_format: 'pcm16',
