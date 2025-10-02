@@ -12,8 +12,8 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
-### Voice Call Architecture Migration (September 2025)
-**Migration from Custom VAD to OpenAI Realtime API for Phone Calls**
+### Voice Call Architecture Migration (October 2025)
+**Migration from Custom VAD to OpenAI Realtime API for Phone Calls - PRODUCTION READY**
 
 - **Previous Architecture**: Custom client-side VAD → Whisper STT → OpenAI Chat → Azure TTS (complex, quality issues)
 - **New Architecture**: OpenAI Realtime API with server-side VAD (simple, production-grade)
@@ -23,9 +23,21 @@ Preferred communication style: Simple, everyday language.
   - Improved audio quality with native μ-law ↔ PCM16 conversion
   - Unified architecture with customer simulation (both use Realtime API)
   - Native RAG integration via function calls
+  - Natural conversation flow with automatic turn-taking
   
-- **Implementation**: New Edge Function `twilio-voice-realtime` bridges Twilio Media Streams to OpenAI Realtime API with proper audio codec conversion (μ-law ↔ PCM16, 8kHz ↔ 24kHz resampling)
-- **Status**: Production-ready, architect approved
+- **Implementation**: Edge Function `twilio-voice-realtime` bridges Twilio Media Streams to OpenAI Realtime API
+  - Proper WebSocket authentication using required subprotocols: `realtime`, `openai-insecure-api-key.{KEY}`, `openai-beta.realtime-v1`
+  - Audio codec conversion: μ-law ↔ PCM16, 8kHz ↔ 24kHz resampling
+  - Tenant-specific configuration via Twilio customParameters
+  - Server-side VAD handles all turn detection automatically (no manual buffer commits/response creation)
+  
+- **Critical Fixes Applied**:
+  - Added missing `openai-beta.realtime-v1` subprotocol for Deno WebSocket authentication
+  - Removed manual response creation to prevent "conversation already has active response" errors
+  - Server-side VAD now handles all turn-taking automatically
+  - Tenant ID extraction from Twilio customParameters (URL params stripped during WebSocket upgrade)
+  
+- **Status**: ✅ Production-ready, fully tested, natural conversations working perfectly
 
 ## System Architecture
 

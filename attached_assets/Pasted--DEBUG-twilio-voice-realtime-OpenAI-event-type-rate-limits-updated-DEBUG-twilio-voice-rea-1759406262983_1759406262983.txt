@@ -1,0 +1,316 @@
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"rate_limits.updated"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio_transcript.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio.done"}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"conversation_already_has_active_response","message":"Conversation already has an active response in progress: resp_CMCAlezo18bSk2osQCAx1. Wait until the response is finished before creating a new one.","param":null,"event_id":null}}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"input_audio_buffer_commit_empty","message":"Error committing input audio buffer: buffer too small. Expected at least 100ms of audio, but buffer only has 0.00ms of audio.","param":null,"event_id":null}}
+[INFO] twilio-voice-realtime: User said {"transcript":"Bye-bye. "}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.input_audio_transcription.delta"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"!"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Blu"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Salon"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" at"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" needs"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" beauty"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" your"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" all"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" with"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" you"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" help"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" to"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" here"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" I'm"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"."}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" ask"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" to"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" free"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" feel"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":","}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" details"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" further"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" need"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" or"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" questions"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" other"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" any"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" have"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" you"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"If"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.added"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.added"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"input_audio_buffer.committed"}
+[INFO] twilio-voice-realtime: User speech stopped, triggering response generation
+[DEBUG] twilio-voice-realtime: Speech started
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"rate_limits.updated"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio_transcript.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio.done"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"?"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" service"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" specific"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" any"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" about"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" more"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" know"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" to"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" like"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" you"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"Would"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"21"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"ing"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Tint"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Brow"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"151"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Head"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Full"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"age"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"ay"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Bal"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"68"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Highlights"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Partial"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"85"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Color"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Process"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Single"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"53"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Color"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Root"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"351"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"out"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Blow"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Brazilian"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"50"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"out"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Blow"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"37"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"cut"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Hair"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"men"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Gentle"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"53"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"cut"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Hair"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Ladies"}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"conversation_already_has_active_response","message":"Conversation already has an active response in progress: resp_CMCALqrgBZF3KeY0Fe7aE. Wait until the response is finished before creating a new one.","param":null,"event_id":null}}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"input_audio_buffer_commit_empty","message":"Error committing input audio buffer: buffer too small. Expected at least 100ms of audio, but buffer only has 0.00ms of audio.","param":null,"event_id":null}}
+[INFO] twilio-voice-realtime: User said {"transcript":"What other services do you offer?"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.input_audio_transcription.delta"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"-"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":\n\n"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" including"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":","}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" services"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" of"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" wide"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" range"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" a"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" offer"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.added"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"We"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.added"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[INFO] twilio-voice-realtime: User speech stopped, triggering response generation
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"input_audio_buffer.committed"}
+[DEBUG] twilio-voice-realtime: Speech started
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"rate_limits.updated"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio_transcript.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio.done"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"!"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" appointment"}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"conversation_already_has_active_response","message":"Conversation already has an active response in progress: resp_CMCA7aZ7s9sZSZpME3jJE. Wait until the response is finished before creating a new one.","param":null,"event_id":null}}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"input_audio_buffer_commit_empty","message":"Error committing input audio buffer: buffer too small. Expected at least 100ms of audio, but buffer only has 0.00ms of audio.","param":null,"event_id":null}}
+[INFO] twilio-voice-realtime: User said {"transcript":"What hours are you open today?"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.input_audio_transcription.delta"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" an"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" book"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" to"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" like"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" you'd"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" if"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" know"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" me"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" let"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" or"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" visit"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"."}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" PM"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" free"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"8"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" "}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Feel"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"00"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" to"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" to"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"00"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" AM"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":":"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"9"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" "}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" from"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" open"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" we're"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":","}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.added"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"Today"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.added"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.created"}
+[INFO] twilio-voice-realtime: User speech stopped, triggering response generation
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"input_audio_buffer.committed"}
+[DEBUG] twilio-voice-realtime: Speech started
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"rate_limits.updated"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio_transcript.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio.done"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"?"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" information"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" more"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" get"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" an"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" appointment"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" or"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" schedule"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" to"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" like"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" you"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Would"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"."}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"37"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" is"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"cut"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Hair"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"men"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Gentle"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" a"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" and"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":","}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" $"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"53"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" at"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" priced"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" is"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"cut"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Hair"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" A"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Ladies"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"."}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Blu"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Salon"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" at"}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"conversation_already_has_active_response","message":"Conversation already has an active response in progress: resp_CMC9pLVtRXmlBZ2oqcd4t. Wait until the response is finished before creating a new one.","param":null,"event_id":null}}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"input_audio_buffer_commit_empty","message":"Error committing input audio buffer: buffer too small. Expected at least 100ms of audio, but buffer only has 0.00ms of audio.","param":null,"event_id":null}}
+[INFO] twilio-voice-realtime: User said {"transcript":"And that's just a haircut."}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.input_audio_transcription.delta"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"cuts"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Hair"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"men"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Gentle"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" and"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Ladies"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" both"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" offer"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.added"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"We"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.added"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"input_audio_buffer.committed"}
+[INFO] twilio-voice-realtime: User speech stopped, triggering response generation
+[DEBUG] twilio-voice-realtime: Speech started
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"rate_limits.updated"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio.done"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.audio_transcript.done"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"?"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" today"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Blu"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" Salon"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" at"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" you"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" I"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" can"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" assist"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" How"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"!"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":" day"}
+[DEBUG] twilio-voice-realtime: Transcript delta {"text":"Good"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.content_part.added"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.output_item.added"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"conversation.item.created"}
+[DEBUG] twilio-voice-realtime: OpenAI event {"type":"response.created"}
+[ERROR] twilio-voice-realtime: OpenAI error event {"error":{"type":"invalid_request_error","code":"invalid_value","message":"Invalid value: 'input_text'. Value must be 'text'.","param":"item.content[0].type","event_id":null}}
+[INFO] twilio-voice-realtime: OpenAI session ready
+[INFO] twilio-voice-realtime: OpenAI WebSocket connected successfully
+[INFO] twilio-voice-realtime: Configuring OpenAI session {"voice":"alloy","hasInstructions":true,"toolCount":1}
+[INFO] twilio-voice-realtime: Greeting overridden from customParameters {"greeting":"Hello, thank you for calling Salon Blu. How can I help you today?"}
+[INFO] twilio-voice-realtime: Twilio stream started {"streamSid":"MZ6f6f505ebe7af1c7d8179138e97daf0d","callSid":"CA47485be0eee8cde9693e0666932ea1d2","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasGreeting":true}
+[INFO] twilio-voice-realtime: Agent config loaded {"hasInstructions":true,"voice":"alloy","hasGreeting":false}
+[INFO] twilio-voice-realtime: Reconfiguring OpenAI session with tenant settings
+[DEBUG] twilio-voice-realtime: Unhandled Twilio event {"event":"connected"}
+[INFO] twilio-voice-realtime: Received customParameters {"customParameters":{"greeting":"Hello, thank you for calling Salon Blu. How can I help you today?","businessName":"Salon Blu","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","phoneNumber":"+19169450065","from":"+19169450065","to":"+19194203058"}}
+[INFO] twilio-voice-realtime: Tenant ID set from customParameters {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] twilio-voice-realtime: Connecting to OpenAI Realtime API
+[INFO] twilio-voice-realtime: No tenant_id yet, will be set from Twilio customParameters
+[INFO] twilio-voice-realtime: Bridge initialization complete
+[INFO] twilio-voice-realtime: Twilio WebSocket connected {"tenantIdFromUrl":null}
+[INFO] twilio-voice-realtime: RealtimeAudioBridge initialized {"tenantId":""}
+[INFO] twilio-voice-realtime: Incoming request {"method":"GET","url":"http://gnqqktmslswgjtvxfvdo.supabase.co/twilio-voice-realtime","upgradeHeader":"websocket","searchParams":{}}
+[INFO] twilio-voice-realtime: WebSocket upgrade request {"tenantId":null,"hasTenantId":false,"note":"tenant_id can also come from Twilio customParameters"}
+Listening on http://localhost:9999/
+booted (time: 28ms)

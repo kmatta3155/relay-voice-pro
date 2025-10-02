@@ -476,17 +476,9 @@ class RealtimeAudioBridge {
           break
           
         case 'input_audio_buffer.speech_stopped':
-          logger.info('User speech stopped, triggering response generation')
-          
-          // Commit the audio buffer
-          this.openaiWs?.send(JSON.stringify({
-            type: 'input_audio_buffer.commit'
-          }))
-          
-          // Trigger response generation
-          this.openaiWs?.send(JSON.stringify({
-            type: 'response.create'
-          }))
+          // With server_vad enabled, OpenAI automatically commits buffer and creates response
+          // We don't need to do it manually - that causes "already has active response" errors
+          logger.debug('Speech stopped - server VAD will handle response')
           break
           
         case 'conversation.item.input_audio_transcription.completed':
