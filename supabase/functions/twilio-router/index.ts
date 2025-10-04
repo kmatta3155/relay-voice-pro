@@ -177,11 +177,11 @@ serve(async (req) => {
 
 
   // Get the WebSocket URL for the twilio-voice-realtime function
-  // Allow overriding via environment variable, otherwise derive from request host
+  // MIGRATION: Set TWILIO_STREAM_URL env var to use Render.com deployment (bypasses Supabase 6-min limit)
+  // Example: TWILIO_STREAM_URL=wss://voice-relay-realtime.onrender.com
+  // If not set, defaults to local Supabase Edge Function (has 400s WebSocket limit)
   const streamUrlEnv = Deno.env.get('TWILIO_STREAM_URL')
   const host = url.host
-  // Production AI voice system with OpenAI Realtime API (server-side VAD, perfect turn-taking)
-  // Append tenant_id to query string AND keep it in Parameters for redundancy
   const baseWsUrl = streamUrlEnv || `wss://${host}/functions/v1/twilio-voice-realtime`
   const wsUrl = tenantId 
     ? `${baseWsUrl}?tenant_id=${encodeURIComponent(tenantId)}`

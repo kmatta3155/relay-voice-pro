@@ -39,6 +39,41 @@ Preferred communication style: Simple, everyday language.
   
 - **Status**: ✅ Production-ready, fully tested, natural conversations working perfectly
 
+### Render.com Deployment Migration (October 2025)
+**Solving Supabase's 6-Minute WebSocket Limit - PRODUCTION READY**
+
+- **Problem Identified**: Supabase Edge Functions has a **400-second (6m 40s) wall clock limit** for WebSocket connections, causing calls to disconnect
+- **Solution**: Hybrid architecture deploying voice function to Render.com while keeping all other infrastructure on Supabase
+- **Architecture**:
+  - `twilio-router` remains on Supabase (quick TwiML generation, no WebSocket)
+  - `twilio-voice-realtime` deployed to Render.com (unlimited WebSocket duration)
+  - Router uses `TWILIO_STREAM_URL` environment variable to route to Render
+  - Render service still integrates with Supabase for tenant config and knowledge base
+  
+- **Implementation Details**:
+  - Standalone Deno service on Render.com with Docker deployment
+  - Same audio pipeline and OpenAI Realtime API integration
+  - Health check endpoint at `/health` for monitoring
+  - Environment-based configuration switching via `TWILIO_STREAM_URL=wss://voice-relay-realtime.onrender.com`
+  - **Critical**: Must use `wss://` protocol (WebSocket Secure), not `https://`
+  
+- **Deployment Files** (in `render/` directory):
+  - `Dockerfile` - Docker configuration for Deno runtime
+  - `twilio-voice-realtime.ts` - Standalone voice service
+  - `QUICK_START.md` - 5-minute deployment guide
+  - `RENDER_DEPLOYMENT_GUIDE.md` - Complete setup instructions
+  - `MIGRATION_SUMMARY.md` - Architecture overview and testing
+  
+- **Cost**: $7/month for Render.com Starter plan (always-on, no WebSocket limits)
+- **Benefits**: 
+  - ✅ No call duration limits (vs 6-minute Supabase cutoff)
+  - ✅ Keep Supabase for database, auth, storage, other functions
+  - ✅ Simple environment variable switch between architectures
+  - ✅ Production-ready with health checks and monitoring
+  - ✅ Easy rollback (remove `TWILIO_STREAM_URL` env var)
+  
+- **Status**: ✅ Implementation complete, documentation verified, ready for production deployment
+
 ## System Architecture
 
 ### Frontend Architecture
