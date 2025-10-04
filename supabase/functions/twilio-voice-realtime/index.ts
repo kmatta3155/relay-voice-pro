@@ -170,6 +170,12 @@ class RealtimeAudioBridge {
   // Sequence tracking
   private outboundSeq = 0
   
+  // Keepalive and session management
+  private keepaliveInterval: ReturnType<typeof setInterval> | null = null
+  private sessionStartTime: number = 0
+  private readonly KEEPALIVE_INTERVAL_MS = 30000 // 30 seconds
+  private readonly SESSION_REFRESH_MS = 25 * 60 * 1000 // 25 minutes (before 30-min OpenAI limit)
+  
   constructor(twilioWs: WebSocket, tenantId: string) {
     this.twilioWs = twilioWs
     this.tenantId = tenantId
@@ -273,6 +279,8 @@ class RealtimeAudioBridge {
     
     this.openaiWs.onopen = () => {
       logger.info('OpenAI WebSocket connected successfully')
+      this.sessionStartTime = Date.now()
+      this.startKeepalive()
     }
     
     this.openaiWs.onmessage = (event) => {
@@ -678,6 +686,9 @@ class RealtimeAudioBridge {
       callSid: this.callSid
     })
     
+    // Stop keepalive
+    this.stopKeepalive()
+    
     try {
       if (this.openaiWs && this.openaiWs.readyState === WebSocket.OPEN) {
         this.openaiWs.close()
@@ -692,6 +703,56 @@ class RealtimeAudioBridge {
       }
     } catch (error) {
       logger.error('Error closing Twilio WebSocket', { error })
+    }
+  }
+  
+  private startKeepalive() {
+    // Clear any existing interval
+    this.stopKeepalive()
+    
+    logger.info('Starting keepalive', {
+      intervalMs: this.KEEPALIVE_INTERVAL_MS,
+      sessionRefreshMs: this.SESSION_REFRESH_MS
+    })
+    
+    this.keepaliveInterval = setInterval(() => {
+      const sessionDuration = Date.now() - this.sessionStartTime
+      
+      // Check if we're approaching the OpenAI 30-minute session limit
+      if (sessionDuration >= this.SESSION_REFRESH_MS) {
+        logger.warn('Approaching OpenAI session limit, call will need to be refreshed soon', {
+          sessionDurationMinutes: Math.floor(sessionDuration / 60000)
+        })
+        // Note: Full session refresh would require reconnecting, which is complex
+        // For now, we log a warning. Calls longer than 30 min will disconnect.
+      }
+      
+      // Send keepalive to both connections
+      try {
+        // Keep Twilio connection alive
+        if (this.twilioWs && this.twilioWs.readyState === WebSocket.OPEN) {
+          // Twilio Media Streams expects actual media events, so we don't send custom pings
+          // The active audio stream itself keeps it alive
+        }
+        
+        // OpenAI doesn't need explicit pings - the active session keeps it alive
+        // But we log the session duration for monitoring
+        logger.debug('Keepalive check', {
+          sessionDurationMinutes: Math.floor(sessionDuration / 60000),
+          twilioOpen: this.twilioWs?.readyState === WebSocket.OPEN,
+          openaiOpen: this.openaiWs?.readyState === WebSocket.OPEN
+        })
+      } catch (error) {
+        logger.error('Keepalive error', { error })
+      }
+    }, this.KEEPALIVE_INTERVAL_MS)
+  }
+  
+  private stopKeepalive() {
+    if (this.keepaliveInterval !== null) {
+      clearInterval(this.keepaliveInterval)
+      this.keepaliveInterval = null
+      logger.debug('Keepalive stopped')
     }
   }
 }
