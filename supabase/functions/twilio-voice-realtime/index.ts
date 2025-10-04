@@ -383,6 +383,24 @@ class RealtimeAudioBridge {
         // Reconfigure OpenAI session with tenant-specific settings
         logger.info('Reconfiguring OpenAI session with tenant settings')
         await this.configureSession()
+        
+        // Send greeting immediately if configured
+        if (this.greeting && !this.hasGreeted && this.isReady) {
+          this.hasGreeted = true
+          logger.info('Sending greeting', { greeting: this.greeting })
+          this.openaiWs?.send(JSON.stringify({
+            type: 'conversation.item.create',
+            item: {
+              type: 'message',
+              role: 'assistant',
+              content: [{
+                type: 'input_text',
+                text: this.greeting
+              }]
+            }
+          }))
+          this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
+        }
         break
         
       case 'media':
@@ -444,30 +462,13 @@ class RealtimeAudioBridge {
       
       switch (event.type) {
         case 'session.created':
-          // Don't configure here - wait until we have tenant data from Twilio
-          logger.info('OpenAI session created, waiting for tenant configuration')
+          // Mark as ready - we'll configure when we have tenant data
+          this.isReady = true
+          logger.info('OpenAI session created and ready')
           break
           
         case 'session.updated':
-          this.isReady = true
-          logger.info('OpenAI session ready')
-          
-          // Send greeting if configured
-          if (this.greeting && !this.hasGreeted) {
-            this.hasGreeted = true
-            this.openaiWs?.send(JSON.stringify({
-              type: 'conversation.item.create',
-              item: {
-                type: 'message',
-                role: 'assistant',
-                content: [{
-                  type: 'input_text',
-                  text: this.greeting
-                }]
-              }
-            }))
-            this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
-          }
+          logger.info('OpenAI session updated')
           break
           
         case 'response.audio.delta':
