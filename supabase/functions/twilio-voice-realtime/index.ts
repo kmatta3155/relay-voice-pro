@@ -163,7 +163,6 @@ class RealtimeAudioBridge {
   private isReady = false
   private hasGreeted = false
   private isClosed = false
-  private connectionStartTime: number = Date.now()
   
   // Audio buffering
   private audioBuffer: Uint8Array[] = []
@@ -171,20 +170,11 @@ class RealtimeAudioBridge {
   // Sequence tracking
   private outboundSeq = 0
   
-  // Timeout monitoring (Supabase Edge Functions have 400s wall-clock limit)
-  private timeoutWarningTimer?: ReturnType<typeof setTimeout>
-  private readonly MAX_CALL_DURATION_MS = 360000 // 6 minutes (safe margin before 400s limit)
-  
   constructor(twilioWs: WebSocket, tenantId: string) {
     this.twilioWs = twilioWs
     this.tenantId = tenantId
     
     logger.info('RealtimeAudioBridge initialized', { tenantId })
-    
-    // Set timeout warning at 6 minutes (before 400s Edge Function limit)
-    this.timeoutWarningTimer = setTimeout(() => {
-      this.handleTimeoutWarning()
-    }, this.MAX_CALL_DURATION_MS)
   }
   
   async initialize() {
@@ -383,24 +373,6 @@ class RealtimeAudioBridge {
         // Reconfigure OpenAI session with tenant-specific settings
         logger.info('Reconfiguring OpenAI session with tenant settings')
         await this.configureSession()
-        
-        // Send greeting immediately if configured
-        if (this.greeting && !this.hasGreeted && this.isReady) {
-          this.hasGreeted = true
-          logger.info('Sending greeting', { greeting: this.greeting })
-          this.openaiWs?.send(JSON.stringify({
-            type: 'conversation.item.create',
-            item: {
-              type: 'message',
-              role: 'assistant',
-              content: [{
-                type: 'input_text',
-                text: this.greeting
-              }]
-            }
-          }))
-          this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
-        }
         break
         
       case 'media':
@@ -462,13 +434,29 @@ class RealtimeAudioBridge {
       
       switch (event.type) {
         case 'session.created':
-          // Mark as ready - we'll configure when we have tenant data
-          this.isReady = true
-          logger.info('OpenAI session created and ready')
+          await this.configureSession()
           break
           
         case 'session.updated':
-          logger.info('OpenAI session updated')
+          this.isReady = true
+          logger.info('OpenAI session ready')
+          
+          // Send greeting if configured
+          if (this.greeting && !this.hasGreeted) {
+            this.hasGreeted = true
+            this.openaiWs?.send(JSON.stringify({
+              type: 'conversation.item.create',
+              item: {
+                type: 'message',
+                role: 'assistant',
+                content: [{
+                  type: 'input_text',
+                  text: this.greeting
+                }]
+              }
+            }))
+            this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
+          }
           break
           
         case 'response.audio.delta':
@@ -681,45 +669,13 @@ class RealtimeAudioBridge {
     }
   }
   
-  private async handleTimeoutWarning() {
-    const durationMinutes = Math.floor((Date.now() - this.connectionStartTime) / 60000)
-    logger.warn('Approaching Edge Function timeout limit', {
-      durationMinutes,
-      callSid: this.callSid,
-      note: 'Supabase Edge Functions have 400s (6.67min) wall-clock limit'
-    })
-    
-    // Send polite warning to caller
-    if (this.openaiWs && this.openaiWs.readyState === WebSocket.OPEN) {
-      this.openaiWs.send(JSON.stringify({
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'assistant',
-          content: [{
-            type: 'input_text',
-            text: 'I apologize, but our call is approaching the maximum duration. Is there anything else I can quickly help you with?'
-          }]
-        }
-      }))
-      this.openaiWs.send(JSON.stringify({ type: 'response.create' }))
-    }
-  }
-  
   private cleanup() {
     if (this.isClosed) return
     this.isClosed = true
     
-    // Clear timeout timer
-    if (this.timeoutWarningTimer) {
-      clearTimeout(this.timeoutWarningTimer)
-    }
-    
-    const durationSeconds = Math.floor((Date.now() - this.connectionStartTime) / 1000)
     logger.info('Cleaning up bridge', {
       streamSid: this.streamSid,
-      callSid: this.callSid,
-      durationSeconds
+      callSid: this.callSid
     })
     
     try {
