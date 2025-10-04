@@ -80,8 +80,10 @@ serve(async (req) => {
 
   // Resolve tenant + business by the called number if possible (fast lookups)
   try {
+    // SUPABASE_URL is auto-injected by Supabase platform
     const SB_URL = Deno.env.get('SUPABASE_URL')
-    const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    // Service role key must use non-reserved name (Supabase blocks SUPABASE_* prefixed custom secrets)
+    const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || ''
     
     console.log('[twilio-router] Environment check', {
       hasSupabaseUrl: !!SB_URL,

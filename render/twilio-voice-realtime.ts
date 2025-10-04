@@ -23,7 +23,8 @@ const logger = {
 
 // Environment setup
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+// Service role key supports both names (SUPABASE_* prefix blocked in Supabase Edge Functions)
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || ''
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || ''
 const PORT = parseInt(Deno.env.get('PORT') || '8000')
 
