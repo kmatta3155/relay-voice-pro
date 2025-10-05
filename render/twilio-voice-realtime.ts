@@ -249,16 +249,39 @@ class TwilioOpenAIBridge {
           this.callSid = message.start.callSid
           const customParams = message.start.customParameters || {}
           
+          // Log ALL received parameters for debugging
+          logger.info('Twilio start event received', {
+            streamSid: this.streamSid,
+            callSid: this.callSid,
+            customParametersReceived: customParams,
+            tenantIdBeforeCheck: this.tenantId
+          })
+          
           // Support both naming conventions (router sends tenantId, but allow tenant_id too)
           const customTenantId = customParams.tenant_id || customParams.tenantId || customParams.TENANT_ID || ''
           if (customTenantId) {
             this.tenantId = customTenantId.trim()
+            logger.info('Tenant ID updated from customParameters', {
+              source: 'customParameters',
+              tenantId: this.tenantId
+            })
+          } else if (this.tenantId) {
+            logger.info('Using tenant ID from URL query parameter', {
+              source: 'url',
+              tenantId: this.tenantId
+            })
+          } else {
+            logger.error('CRITICAL: No tenant ID available from any source!', {
+              urlTenantId: this.tenantId,
+              customParams
+            })
           }
           
-          logger.info('Twilio stream started', {
+          logger.info('Twilio stream started - Final state', {
             streamSid: this.streamSid,
             callSid: this.callSid,
-            tenantId: this.tenantId
+            tenantId: this.tenantId,
+            hasTenantId: !!this.tenantId
           })
           
           this.initOpenAI()
@@ -485,15 +508,18 @@ Deno.serve({ port: PORT }, (req) => {
   // WebSocket upgrade
   const upgradeHeader = req.headers.get('upgrade')
   if (upgradeHeader?.toLowerCase() === 'websocket') {
-    const tenantId = url.searchParams.get('tenant_id') || ''
+    // Extract tenant_id from URL query parameter (sent by router)
+    const tenantIdFromUrl = url.searchParams.get('tenant_id') || ''
     
     logger.info('WebSocket upgrade request', { 
-      tenantId,
-      note: 'tenant_id can also come from Twilio customParameters'
+      fullUrl: req.url,
+      queryParams: Object.fromEntries(url.searchParams.entries()),
+      tenantIdFromUrl,
+      note: 'tenant_id will also be checked in Twilio customParameters'
     })
 
     const { socket, response } = Deno.upgradeWebSocket(req)
-    new TwilioOpenAIBridge(socket, tenantId)
+    new TwilioOpenAIBridge(socket, tenantIdFromUrl)
     
     return response
   }
