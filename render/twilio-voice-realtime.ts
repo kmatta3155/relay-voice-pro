@@ -249,8 +249,10 @@ class TwilioOpenAIBridge {
           this.callSid = message.start.callSid
           const customParams = message.start.customParameters || {}
           
-          if (customParams.tenant_id) {
-            this.tenantId = customParams.tenant_id
+          // Support both naming conventions (router sends tenantId, but allow tenant_id too)
+          const customTenantId = customParams.tenant_id || customParams.tenantId || customParams.TENANT_ID || ''
+          if (customTenantId) {
+            this.tenantId = customTenantId.trim()
           }
           
           logger.info('Twilio stream started', {
