@@ -114,6 +114,11 @@ class TwilioOpenAIBridge {
   private isClosed = false
   private outboundSeq = 0
   
+  // Custom parameters from Twilio (fallback if database fails)
+  private greeting = ''
+  private businessName = ''
+  private customInstructions = ''
+  
   // Keepalive and session management
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null
   private sessionStartTime: number = 0
@@ -187,26 +192,60 @@ class TwilioOpenAIBridge {
 
   private async fetchAgentConfig() {
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/tenants?id=eq.${this.tenantId}&select=voice_settings`, {
+      logger.info('Fetching agent config from Supabase', {
+        tenantId: this.tenantId,
+        supabaseUrl: SUPABASE_URL,
+        hasServiceKey: !!SUPABASE_SERVICE_ROLE_KEY
+      })
+
+      const url = `${SUPABASE_URL}/rest/v1/tenants?id=eq.${this.tenantId}&select=voice_settings`
+      const response = await fetch(url, {
         headers: {
           'apikey': SUPABASE_SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json'
         }
       })
 
+      logger.info('Supabase fetch response', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      })
+
       if (!response.ok) {
-        throw new Error(`Failed to fetch tenant config: ${response.statusText}`)
+        const errorText = await response.text()
+        logger.error('Supabase fetch failed', {
+          status: response.status,
+          statusText: response.statusText,
+          errorBody: errorText
+        })
+        throw new Error(`Failed to fetch tenant config: ${response.statusText} - ${errorText}`)
       }
 
       const data = await response.json()
+      logger.info('Agent config fetched successfully', {
+        hasData: !!data,
+        dataLength: data?.length,
+        hasVoiceSettings: !!data[0]?.voice_settings
+      })
+
       return data[0]?.voice_settings || {}
     } catch (error) {
-      logger.error('Error fetching agent config', { error })
+      logger.error('Error fetching agent config', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        tenantId: this.tenantId
+      })
       return {}
     }
   }
 
   private configureSession(config: any) {
+    // Use custom instructions from parameters if database config is empty
+    const instructions = config?.instructions || this.customInstructions || 
+      `You are a helpful AI receptionist for ${this.businessName || 'this business'}. Be professional, friendly, and helpful.`
+    
     const sessionConfig = {
       type: 'session.update',
       session: {
@@ -215,7 +254,7 @@ class TwilioOpenAIBridge {
         output_audio_format: 'pcm16',
         input_audio_transcription: { model: 'whisper-1' },
         voice: config?.voice || 'alloy',
-        instructions: config?.instructions || 'You are a helpful voice assistant.',
+        instructions,
         temperature: config?.temperature || 0.8,
         max_response_output_tokens: 4096,
         tools: [
@@ -236,7 +275,44 @@ class TwilioOpenAIBridge {
     }
 
     this.openaiWs.send(JSON.stringify(sessionConfig))
-    logger.info('OpenAI session configured', { voice: sessionConfig.session.voice })
+    logger.info('OpenAI session configured', {
+      voice: sessionConfig.session.voice,
+      hasCustomInstructions: !!config?.instructions,
+      instructionsLength: instructions.length
+    })
+
+    // CRITICAL FIX: Send greeting to make AI speak first
+    if (this.greeting) {
+      logger.info('Sending initial greeting', { greeting: this.greeting.substring(0, 50) + '...' })
+      
+      // Wait a moment for session.updated, then send greeting
+      setTimeout(() => {
+        const greetingMessage = {
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: `Please say: "${this.greeting}"`
+              }
+            ]
+          }
+        }
+        
+        const createResponse = {
+          type: 'response.create'
+        }
+        
+        this.openaiWs.send(JSON.stringify(greetingMessage))
+        this.openaiWs.send(JSON.stringify(createResponse))
+        
+        logger.info('Greeting message sent to OpenAI')
+      }, 500)
+    } else {
+      logger.warn('No greeting provided - AI will wait for user to speak first')
+    }
   }
 
   private handleTwilioMessage(data: string) {
@@ -276,12 +352,20 @@ class TwilioOpenAIBridge {
               customParams
             })
           }
+
+          // Store custom parameters as fallback
+          this.greeting = (customParams.greeting || '').trim()
+          this.businessName = (customParams.businessName || '').trim()
+          this.customInstructions = (customParams.instructions || '').trim()
           
           logger.info('Twilio stream started - Final state', {
             streamSid: this.streamSid,
             callSid: this.callSid,
             tenantId: this.tenantId,
-            hasTenantId: !!this.tenantId
+            hasTenantId: !!this.tenantId,
+            hasGreeting: !!this.greeting,
+            hasBusinessName: !!this.businessName,
+            greeting: this.greeting ? this.greeting.substring(0, 50) + '...' : 'none'
           })
           
           this.initOpenAI()
