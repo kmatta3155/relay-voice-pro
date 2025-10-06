@@ -415,6 +415,16 @@ class TwilioOpenAIBridge {
         })
       }
 
+      // CRITICAL DEBUG: Log when we get audio delta
+      if (message.type === 'response.audio.delta') {
+        logger.info('🎵 AUDIO DELTA RECEIVED', {
+          hasDelta: !!message.delta,
+          deltaLength: message.delta?.length,
+          twilioOpen: this.twilioWs?.readyState === WebSocket.OPEN,
+          streamSid: this.streamSid
+        })
+      }
+
       switch (message.type) {
         case 'session.created':
         case 'session.updated':
@@ -423,6 +433,11 @@ class TwilioOpenAIBridge {
 
         case 'response.audio.delta':
         case 'response.audio_delta':  // Try both event names
+          logger.info('📢 AUDIO CASE MATCHED!', {
+            hasDelta: !!message.delta,
+            twilioOpen: this.twilioWs?.readyState === WebSocket.OPEN
+          })
+          
           if (this.twilioWs?.readyState === WebSocket.OPEN && message.delta) {
             try {
               // CRITICAL FIX: Properly decode base64 PCM16 audio
