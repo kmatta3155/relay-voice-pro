@@ -410,13 +410,23 @@ class TwilioOpenAIBridge {
 
         case 'response.audio.delta':
           if (this.twilioWs?.readyState === WebSocket.OPEN && message.delta) {
-            const pcm24k = Int16Array.from(atob(message.delta), c => c.charCodeAt(0))
+            // CRITICAL FIX: Properly decode base64 PCM16 audio
+            // Step 1: Decode base64 to raw bytes
+            const audioBytes = Uint8Array.from(atob(message.delta), c => c.charCodeAt(0))
+            
+            // Step 2: Interpret bytes as 16-bit PCM samples (little-endian)
+            const pcm24k = new Int16Array(audioBytes.buffer)
+            
+            // Step 3: Resample from 24kHz to 8kHz
             const pcm8k = resample24kTo8k(pcm24k)
+            
+            // Step 4: Convert PCM16 to μ-law
             const mulaw = new Uint8Array(pcm8k.length)
             for (let i = 0; i < pcm8k.length; i++) {
               mulaw[i] = pcmToMulaw(pcm8k[i])
             }
             
+            // Step 5: Encode μ-law to base64 and send to Twilio
             const base64Mulaw = btoa(String.fromCharCode(...mulaw))
             this.twilioWs.send(JSON.stringify({
               event: 'media',

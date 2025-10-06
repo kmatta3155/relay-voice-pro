@@ -1,0 +1,199 @@
+
+Search
+
+Live tail
+EDT
+
+Menu
+
+==> Downloading cache...
+==> Cloning from https://github.com/kmatta3155/relay-voice-pro
+==> Checking out commit 9fdfa9df6347b4e8133af0e4154e6d9d0c1afd5e in branch main
+==> Transferred 76MB in 7s. Extraction took 0s.
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 748B done
+#1 DONE 0.0s
+#2 [internal] load metadata for docker.io/denoland/deno:1.40.0
+#2 ...
+#3 [auth] denoland/deno:pull render-prod/docker-mirror-repository/denoland/deno:pull token for us-west1-docker.pkg.dev
+#3 DONE 0.0s
+#2 [internal] load metadata for docker.io/denoland/deno:1.40.0
+#2 DONE 1.7s
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+#5 [1/3] FROM docker.io/denoland/deno:1.40.0@sha256:ed34bdaa9944b15375daf61282a727d721e5a18626604eba0868ea2052ad3af4
+#5 resolve docker.io/denoland/deno:1.40.0@sha256:ed34bdaa9944b15375daf61282a727d721e5a18626604eba0868ea2052ad3af4 done
+#5 DONE 0.0s
+#6 importing cache manifest from local:2090526627496204247
+#6 inferred cache manifest type: application/vnd.oci.image.index.v1+json done
+#6 DONE 0.0s
+#7 [internal] load build context
+#7 transferring context: 19.64kB done
+#7 DONE 0.0s
+#8 [2/3] WORKDIR /app
+#8 CACHED
+#9 [3/3] COPY twilio-voice-realtime.ts .
+#9 sha256:9532dfcb62dd7b77bbbd3b359c01984d8df09545ed759f6e68a3783d0702fe57 13.63MB / 29.13MB 0.2s
+#9 sha256:9532dfcb62dd7b77bbbd3b359c01984d8df09545ed759f6e68a3783d0702fe57 29.13MB / 29.13MB 0.3s done
+#9 extracting sha256:9532dfcb62dd7b77bbbd3b359c01984d8df09545ed759f6e68a3783d0702fe57
+#9 extracting sha256:9532dfcb62dd7b77bbbd3b359c01984d8df09545ed759f6e68a3783d0702fe57 1.0s done
+#9 sha256:1107c5b00ad32640c01aa6f10dfc012a8b752cac584480bf229e598f00ad1d6b 1.18kB / 1.18kB done
+#9 extracting sha256:1107c5b00ad32640c01aa6f10dfc012a8b752cac584480bf229e598f00ad1d6b 0.1s done
+#9 sha256:5979d60d8b2db8b756f0b29b02d7b64fb029eaf3323e79fcabc949a6a63cc02f 15.73MB / 49.67MB 0.2s
+#9 sha256:5979d60d8b2db8b756f0b29b02d7b64fb029eaf3323e79fcabc949a6a63cc02f 32.51MB / 49.67MB 0.3s
+#9 sha256:5979d60d8b2db8b756f0b29b02d7b64fb029eaf3323e79fcabc949a6a63cc02f 44.04MB / 49.67MB 0.5s
+#9 sha256:5979d60d8b2db8b756f0b29b02d7b64fb029eaf3323e79fcabc949a6a63cc02f 49.67MB / 49.67MB 0.5s done
+#9 extracting sha256:5979d60d8b2db8b756f0b29b02d7b64fb029eaf3323e79fcabc949a6a63cc02f
+#9 extracting sha256:5979d60d8b2db8b756f0b29b02d7b64fb029eaf3323e79fcabc949a6a63cc02f 0.9s done
+#9 sha256:bc59b05341e68f2f1c256ef4e8a7eef61542f75e525b36d836297830f5ba9f4e 9.46kB / 9.46kB done
+#9 extracting sha256:bc59b05341e68f2f1c256ef4e8a7eef61542f75e525b36d836297830f5ba9f4e done
+#9 sha256:3f5de54eb7dc96a55b6c592774f73e25b86dfe5f39af37211a13e93a9cc57271 428B / 428B done
+#9 extracting sha256:3f5de54eb7dc96a55b6c592774f73e25b86dfe5f39af37211a13e93a9cc57271 done
+#9 sha256:57695d294d002d155d6bfb67d77267e85e7dbcfdc6ab72c8705975ab9040cebe 424B / 424B done
+#9 extracting sha256:57695d294d002d155d6bfb67d77267e85e7dbcfdc6ab72c8705975ab9040cebe done
+#9 sha256:2f668dda1a1d3d100ac124bcd06d0113928156a1390d0ae45cc9f06caa896989 92B / 92B done
+#9 extracting sha256:2f668dda1a1d3d100ac124bcd06d0113928156a1390d0ae45cc9f06caa896989 done
+#9 sha256:9ca3d23d6eec9dd9075cdee8eb4fcb1ac60ce6ec347d6780db0f58a805b4e312 5.75kB / 5.75kB done
+#9 extracting sha256:9ca3d23d6eec9dd9075cdee8eb4fcb1ac60ce6ec347d6780db0f58a805b4e312 done
+#9 CACHED
+#10 exporting to docker image format
+#10 exporting layers done
+#10 exporting manifest sha256:379e338c6ac4fba21b15628bbd5c3b5c18095654db340b100f58409dc55e3be5 done
+#10 exporting config sha256:4722a3995e81357da451ff4b7d6a24db494e2e2fdcafe02e50b4ec3e67f0dc77 done
+#10 DONE 1.4s
+#11 exporting cache to client directory
+#11 writing cache manifest sha256:ac14c2454f9cc4561f765fedd4e75cddc80b4735e981b74e4b573bd6c2219168 done
+#11 DONE 0.0s
+Pushing image to registry...
+Upload succeeded
+==> Deploying...
+Listening on http://localhost:10000/
+[INFO] 🚀 Twilio Voice Realtime service running on port 10000 
+[INFO] Environment check {"hasSupabaseUrl":true,"hasSupabaseKey":true,"hasOpenAIKey":true}
+==> Your service is live 🎉
+==> 
+==> ///////////////////////////////////////////////////////////
+==> 
+==> Available at your primary URL https://relay-voice-pro.onrender.com
+==> 
+==> ///////////////////////////////////////////////////////////
+[INFO] WebSocket upgrade request {"fullUrl":"http://relay-voice-pro.onrender.com/","queryParams":{},"tenantIdFromUrl":"","note":"tenant_id will also be checked in Twilio customParameters"}
+[INFO] Twilio WebSocket connected {"tenantId":""}
+[INFO] Twilio start event received {"streamSid":"MZ2dc3b92ef345cd3d64f4b869b8cb3c6a","callSid":"CAbda8f07bca8f816aa500bc789827ab4c","customParametersReceived":{"businessName":"Salon Blu","from":"+19169450065","to":"+19194203058","greeting":"Hello, thank you for calling Salon Blu. How can I help you today?","phoneNumber":"+19169450065","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"},"tenantIdBeforeCheck":""}
+[INFO] Tenant ID updated from customParameters {"source":"customParameters","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Twilio stream started - Final state {"streamSid":"MZ2dc3b92ef345cd3d64f4b869b8cb3c6a","callSid":"CAbda8f07bca8f816aa500bc789827ab4c","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasTenantId":true,"hasGreeting":true,"hasBusinessName":true,"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] Fetching agent config from Supabase {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","supabaseUrl":"https://gnqqktmslswgjtvxfvdo.supabase.co","hasServiceKey":true}
+[INFO] Supabase fetch response {"status":400,"statusText":"Bad Request","ok":false}
+[ERROR] Supabase fetch failed {"status":400,"statusText":"Bad Request","errorBody":"{\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column tenants.voice_settings does not exist\"}"}
+[ERROR] Error fetching agent config {"errorMessage":"Failed to fetch tenant config: Bad Request - {\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column tenants.voice_settings does not exist\"}","errorStack":"Error: Failed to fetch tenant config: Bad Request - {\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column tenants.voice_settings does not exist\"}\n    at TwilioOpenAIBridge.fetchAgentConfig (file:///app/twilio-voice-realtime.ts:223:15)\n    at eventLoopTick (ext:core/01_core.js:59:7)\n    at async TwilioOpenAIBridge.initOpenAI (file:///app/twilio-voice-realtime.ts:154:27)","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Initializing OpenAI connection {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasConfig":true}
+[INFO] OpenAI WebSocket connected successfully 
+[INFO] Starting keepalive monitoring 
+[INFO] OpenAI session configured {"voice":"alloy","hasCustomInstructions":false,"instructionsLength":88}
+[INFO] Sending initial greeting {"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] OpenAI session.created 
+[INFO] OpenAI session.updated 
+[INFO] Greeting message sent to OpenAI 
+[DEBUG] AI speaking {"text":"Hello"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":" thank"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" for"}
+[DEBUG] AI speaking {"text":" calling"}
+[DEBUG] AI speaking {"text":" Salon"}
+[DEBUG] AI speaking {"text":" Bl"}
+[DEBUG] AI speaking {"text":"u"}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" How"}
+[DEBUG] AI speaking {"text":" can"}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" help"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" today"}
+[DEBUG] AI speaking {"text":"?"}
+[DEBUG] User started speaking 
+[DEBUG] AI speaking {"text":"I'm"}
+[DEBUG] AI speaking {"text":" sorry"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" didn"}
+[DEBUG] AI speaking {"text":"'t"}
+[DEBUG] AI speaking {"text":" quite"}
+[DEBUG] AI speaking {"text":" catch"}
+[DEBUG] AI speaking {"text":" that"}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" Could"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" please"}
+[DEBUG] AI speaking {"text":" repeat"}
+[DEBUG] AI speaking {"text":" your"}
+[DEBUG] AI speaking {"text":" question"}
+[DEBUG] AI speaking {"text":"?"}
+[INFO] User said {"transcript":"One is gently cooked without the ultra-processing."}
+[DEBUG] User started speaking 
+[DEBUG] User started speaking 
+[INFO] User said {"transcript":"I've only won."}
+[DEBUG] AI speaking {"text":"You're"}
+[DEBUG] AI speaking {"text":" speaking"}
+[DEBUG] AI speaking {"text":" with"}
+[DEBUG] AI speaking {"text":" an"}
+[INFO] User said {"transcript":"A human brain."}
+[DEBUG] AI speaking {"text":" AI"}
+[DEBUG] AI speaking {"text":" receptionist"}
+[DEBUG] AI speaking {"text":" for"}
+[DEBUG] AI speaking {"text":" Salon"}
+[DEBUG] AI speaking {"text":" Bl"}
+[DEBUG] AI speaking {"text":"u"}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" How"}
+[DEBUG] AI speaking {"text":" can"}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" assist"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" today"}
+[DEBUG] AI speaking {"text":"?"}
+[DEBUG] User started speaking 
+[INFO] User said {"transcript":"Oh"}
+[DEBUG] AI speaking {"text":"Certainly"}
+[DEBUG] AI speaking {"text":"!"}
+[DEBUG] AI speaking {"text":" Would"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" like"}
+[DEBUG] AI speaking {"text":" to"}
+[DEBUG] AI speaking {"text":" schedule"}
+[DEBUG] AI speaking {"text":" a"}
+[DEBUG] AI speaking {"text":" new"}
+[DEBUG] AI speaking {"text":" appointment"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":" res"}
+[DEBUG] AI speaking {"text":"chedule"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":" or"}
+[DEBUG] AI speaking {"text":" inquire"}
+[DEBUG] AI speaking {"text":" about"}
+[DEBUG] AI speaking {"text":" our"}
+[DEBUG] AI speaking {"text":" services"}
+[DEBUG] AI speaking {"text":"?"}
+[DEBUG] User started speaking 
+[DEBUG] AI speaking {"text":"I'm"}
+[DEBUG] AI speaking {"text":" sorry"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" didn"}
+[DEBUG] AI speaking {"text":"'t"}
+[DEBUG] AI speaking {"text":" understand"}
+[DEBUG] AI speaking {"text":" that"}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" Could"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" please"}
+[DEBUG] AI speaking {"text":" repeat"}
+[INFO] Twilio stream stopped {"streamSid":"MZ2dc3b92ef345cd3d64f4b869b8cb3c6a"}
+[INFO] Cleaning up bridge {"streamSid":"MZ2dc3b92ef345cd3d64f4b869b8cb3c6a","callSid":"CAbda8f07bca8f816aa500bc789827ab4c"}
+[DEBUG] Keepalive stopped 
+[INFO] Twilio WebSocket closed 
+[DEBUG] AI speaking {"text":" your"}
+[DEBUG] AI speaking {"text":" request"}
+[DEBUG] AI speaking {"text":"?"}
+[INFO] OpenAI WebSocket closed 
