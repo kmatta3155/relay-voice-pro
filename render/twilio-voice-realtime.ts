@@ -467,19 +467,28 @@ class TwilioOpenAIBridge {
                 }
               }
               
-              this.twilioWs.send(JSON.stringify(mediaMessage))
-              
-              // Log first audio chunk only to confirm it's working
+              // Log before sending
               if (this.outboundSeq === 0) {
+                logger.info('🚀 SENDING FIRST AUDIO PACKET', {
+                  mulawBytes: mulaw.length,
+                  base64Length: base64Mulaw.length,
+                  streamSid: this.streamSid
+                })
+              }
+              
+              this.twilioWs.send(JSON.stringify(mediaMessage))
+              this.outboundSeq++
+              
+              // Log every 10th chunk to confirm it's working
+              if (this.outboundSeq % 10 === 1) {
                 logger.info('✅ AUDIO SENT TO TWILIO', {
+                  seq: this.outboundSeq - 1,
                   pcm24kSamples: pcm24k.length,
                   pcm8kSamples: pcm8k.length,
                   mulawBytes: mulaw.length,
-                  base64Length: base64Mulaw.length,
-                  twilioReady: this.twilioWs.readyState === WebSocket.OPEN
+                  base64Length: base64Mulaw.length
                 })
               }
-              this.outboundSeq++
             } catch (error) {
               logger.error('❌ AUDIO PROCESSING ERROR', {
                 error: error instanceof Error ? error.message : String(error),
