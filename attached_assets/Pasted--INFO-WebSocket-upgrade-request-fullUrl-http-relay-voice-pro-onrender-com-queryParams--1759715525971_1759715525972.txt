@@ -1,0 +1,38 @@
+[INFO] WebSocket upgrade request {"fullUrl":"http://relay-voice-pro.onrender.com/","queryParams":{},"tenantIdFromUrl":"","note":"tenant_id will also be checked in Twilio customParameters"}
+[INFO] Twilio WebSocket connected {"tenantId":""}
+[INFO] Twilio start event received {"streamSid":"MZ988f47f3d796ffd5c2e472cd4d104828","callSid":"CA54e6f9f8c4fb967a3e8e8df37a03bc71","customParametersReceived":{"businessName":"Salon Blu","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","to":"+19194203058","greeting":"Hello, thank you for calling Salon Blu. How can I help you today?","phoneNumber":"+19169450065","from":"+19169450065"},"tenantIdBeforeCheck":""}
+[INFO] Tenant ID updated from customParameters {"source":"customParameters","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Twilio stream started - Final state {"streamSid":"MZ988f47f3d796ffd5c2e472cd4d104828","callSid":"CA54e6f9f8c4fb967a3e8e8df37a03bc71","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasTenantId":true,"hasGreeting":true,"hasBusinessName":true,"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] Fetching agent config from Supabase {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","supabaseUrl":"https://gnqqktmslswgjtvxfvdo.supabase.co","hasServiceKey":true}
+[INFO] Supabase fetch response {"status":400,"statusText":"Bad Request","ok":false}
+[ERROR] Supabase fetch failed {"status":400,"statusText":"Bad Request","errorBody":"{\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column tenants.voice_settings does not exist\"}"}
+[ERROR] Error fetching agent config {"errorMessage":"Failed to fetch tenant config: Bad Request - {\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column tenants.voice_settings does not exist\"}","errorStack":"Error: Failed to fetch tenant config: Bad Request - {\"code\":\"42703\",\"details\":null,\"hint\":null,\"message\":\"column tenants.voice_settings does not exist\"}\n    at TwilioOpenAIBridge.fetchAgentConfig (file:///app/twilio-voice-realtime.ts:223:15)\n    at eventLoopTick (ext:core/01_core.js:59:7)\n    at async TwilioOpenAIBridge.initOpenAI (file:///app/twilio-voice-realtime.ts:154:27)","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Initializing OpenAI connection {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasConfig":true}
+[INFO] OpenAI WebSocket connected successfully 
+[INFO] Starting keepalive monitoring 
+[INFO] OpenAI session configured {"voice":"alloy","hasCustomInstructions":false,"instructionsLength":88}
+[INFO] Sending initial greeting {"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] OpenAI session.created 
+[INFO] OpenAI session.updated 
+[INFO] Greeting message sent to OpenAI 
+[DEBUG] AI speaking {"text":"Hello"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":" thank"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" for"}
+[DEBUG] AI speaking {"text":" calling"}
+[DEBUG] AI speaking {"text":" Salon"}
+[DEBUG] AI speaking {"text":" Blu"}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" How"}
+[DEBUG] AI speaking {"text":" can"}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" help"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" today"}
+[DEBUG] AI speaking {"text":"?"}
+[INFO] Twilio stream stopped {"streamSid":"MZ988f47f3d796ffd5c2e472cd4d104828"}
+[INFO] Cleaning up bridge {"streamSid":"MZ988f47f3d796ffd5c2e472cd4d104828","callSid":"CA54e6f9f8c4fb967a3e8e8df37a03bc71"}
+[DEBUG] Keepalive stopped 
+[INFO] Twilio WebSocket closed 
+[INFO] OpenAI WebSocket closed 

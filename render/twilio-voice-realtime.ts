@@ -301,14 +301,19 @@ class TwilioOpenAIBridge {
           }
         }
         
+        // Explicitly request audio output in the response
         const createResponse = {
-          type: 'response.create'
+          type: 'response.create',
+          response: {
+            modalities: ['audio', 'text'],
+            instructions: `Say exactly: "${this.greeting}"`
+          }
         }
         
         this.openaiWs.send(JSON.stringify(greetingMessage))
         this.openaiWs.send(JSON.stringify(createResponse))
         
-        logger.info('Greeting message sent to OpenAI')
+        logger.info('Greeting message sent to OpenAI with audio modality')
       }, 500)
     } else {
       logger.warn('No greeting provided - AI will wait for user to speak first')
@@ -402,6 +407,14 @@ class TwilioOpenAIBridge {
     try {
       const message = JSON.parse(data)
 
+      // Log ALL events for debugging
+      if (!['response.audio_transcript.delta', 'input_audio_buffer.speech_started'].includes(message.type)) {
+        logger.info(`OpenAI event: ${message.type}`, { 
+          hasAudio: !!message.delta || !!message.audio,
+          keys: Object.keys(message)
+        })
+      }
+
       switch (message.type) {
         case 'session.created':
         case 'session.updated':
@@ -409,6 +422,7 @@ class TwilioOpenAIBridge {
           break
 
         case 'response.audio.delta':
+        case 'response.audio_delta':  // Try both event names
           if (this.twilioWs?.readyState === WebSocket.OPEN && message.delta) {
             // CRITICAL FIX: Properly decode base64 PCM16 audio
             // Step 1: Decode base64 to raw bytes
