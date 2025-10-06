@@ -424,32 +424,61 @@ class TwilioOpenAIBridge {
         case 'response.audio.delta':
         case 'response.audio_delta':  // Try both event names
           if (this.twilioWs?.readyState === WebSocket.OPEN && message.delta) {
-            // CRITICAL FIX: Properly decode base64 PCM16 audio
-            // Step 1: Decode base64 to raw bytes
-            const audioBytes = Uint8Array.from(atob(message.delta), c => c.charCodeAt(0))
-            
-            // Step 2: Interpret bytes as 16-bit PCM samples (little-endian)
-            const pcm24k = new Int16Array(audioBytes.buffer)
-            
-            // Step 3: Resample from 24kHz to 8kHz
-            const pcm8k = resample24kTo8k(pcm24k)
-            
-            // Step 4: Convert PCM16 to μ-law
-            const mulaw = new Uint8Array(pcm8k.length)
-            for (let i = 0; i < pcm8k.length; i++) {
-              mulaw[i] = pcmToMulaw(pcm8k[i])
+            try {
+              // CRITICAL FIX: Properly decode base64 PCM16 audio
+              // Step 1: Decode base64 to raw bytes
+              const audioBytes = Uint8Array.from(atob(message.delta), c => c.charCodeAt(0))
+              
+              // Step 2: Interpret bytes as 16-bit PCM samples (little-endian)
+              const pcm24k = new Int16Array(audioBytes.buffer)
+              
+              // Step 3: Resample from 24kHz to 8kHz
+              const pcm8k = resample24kTo8k(pcm24k)
+              
+              // Step 4: Convert PCM16 to μ-law
+              const mulaw = new Uint8Array(pcm8k.length)
+              for (let i = 0; i < pcm8k.length; i++) {
+                mulaw[i] = pcmToMulaw(pcm8k[i])
+              }
+              
+              // Step 5: Encode μ-law to base64 and send to Twilio
+              const base64Mulaw = btoa(String.fromCharCode(...mulaw))
+              
+              const mediaMessage = {
+                event: 'media',
+                streamSid: this.streamSid,
+                media: {
+                  payload: base64Mulaw
+                }
+              }
+              
+              this.twilioWs.send(JSON.stringify(mediaMessage))
+              
+              // Log first audio chunk only to confirm it's working
+              if (this.outboundSeq === 0) {
+                logger.info('✅ AUDIO SENT TO TWILIO', {
+                  pcm24kSamples: pcm24k.length,
+                  pcm8kSamples: pcm8k.length,
+                  mulawBytes: mulaw.length,
+                  base64Length: base64Mulaw.length,
+                  twilioReady: this.twilioWs.readyState === WebSocket.OPEN
+                })
+              }
+              this.outboundSeq++
+            } catch (error) {
+              logger.error('❌ AUDIO PROCESSING ERROR', {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                hasDelta: !!message.delta,
+                deltaLength: message.delta?.length
+              })
             }
-            
-            // Step 5: Encode μ-law to base64 and send to Twilio
-            const base64Mulaw = btoa(String.fromCharCode(...mulaw))
-            this.twilioWs.send(JSON.stringify({
-              event: 'media',
-              streamSid: this.streamSid,
-              media: {
-                payload: base64Mulaw
-              },
-              sequenceNumber: this.outboundSeq++
-            }))
+          } else {
+            logger.warn('Cannot send audio', {
+              twilioReady: this.twilioWs?.readyState === WebSocket.OPEN,
+              hasDelta: !!message.delta,
+              streamSid: this.streamSid
+            })
           }
           break
 
