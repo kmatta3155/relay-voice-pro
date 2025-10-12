@@ -95,11 +95,32 @@ function resample8kTo24k(pcm8k: Int16Array): Int16Array {
 }
 
 function resample24kTo8k(pcm24k: Int16Array): Int16Array {
+  // Anti-aliased resampling with low-pass filter to prevent aliasing/static
+  // Uses 7-tap FIR filter before decimation by 3
   const ratio = 3
   const pcm8k = new Int16Array(Math.floor(pcm24k.length / ratio))
+  
+  // Simple 7-tap low-pass FIR filter coefficients (normalized)
+  // Cutoff ~3.5kHz for 24kHz input, prevents aliasing when downsampling to 8kHz
+  const taps = [0.05, 0.1, 0.15, 0.2, 0.15, 0.1, 0.05]
+  const tapOffset = 3 // Center of 7-tap filter
+  
   for (let i = 0; i < pcm8k.length; i++) {
-    pcm8k[i] = pcm24k[i * ratio]
+    const srcIndex = i * ratio
+    let sum = 0
+    
+    // Apply FIR filter
+    for (let j = 0; j < taps.length; j++) {
+      const sampleIndex = srcIndex + j - tapOffset
+      if (sampleIndex >= 0 && sampleIndex < pcm24k.length) {
+        sum += pcm24k[sampleIndex] * taps[j]
+      }
+    }
+    
+    // Clamp to int16 range
+    pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(sum)))
   }
+  
   return pcm8k
 }
 
@@ -427,7 +448,7 @@ class TwilioOpenAIBridge {
               
               // Log before sending
               if (this.outboundSeq === 0) {
-                logger.info('🚀 SENDING FIRST AUDIO PACKET (NO GAIN - CLEAN SIGNAL)', {
+                logger.info('🚀 SENDING FIRST AUDIO PACKET (ANTI-ALIASED RESAMPLE)', {
                   mulawBytes: mulaw.length,
                   base64Length: base64Mulaw.length,
                   streamSid: this.streamSid
