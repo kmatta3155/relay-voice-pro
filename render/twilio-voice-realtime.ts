@@ -408,14 +408,7 @@ class TwilioOpenAIBridge {
               // Step 3: Resample from 24kHz to 8kHz
               const pcm8k = resample24kTo8k(pcm24k)
               
-              // Step 3.5: Apply moderate gain boost (1.5x) without clipping/distortion
-              const GAIN = 1.5
-              for (let i = 0; i < pcm8k.length; i++) {
-                // Apply gain and clamp to int16 range [-32768, 32767]
-                pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(pcm8k[i] * GAIN)))
-              }
-              
-              // Step 4: Convert PCM16 to μ-law
+              // Step 4: Convert PCM16 to μ-law (no gain - prevents clipping/static)
               const mulaw = new Uint8Array(pcm8k.length)
               for (let i = 0; i < pcm8k.length; i++) {
                 mulaw[i] = pcmToMulaw(pcm8k[i])
@@ -434,7 +427,7 @@ class TwilioOpenAIBridge {
               
               // Log before sending
               if (this.outboundSeq === 0) {
-                logger.info('🚀 SENDING FIRST AUDIO PACKET (1.5x GAIN)', {
+                logger.info('🚀 SENDING FIRST AUDIO PACKET (NO GAIN - CLEAN SIGNAL)', {
                   mulawBytes: mulaw.length,
                   base64Length: base64Mulaw.length,
                   streamSid: this.streamSid
