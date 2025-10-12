@@ -450,6 +450,13 @@ class TwilioOpenAIBridge {
               // Step 3: Resample from 24kHz to 8kHz
               const pcm8k = resample24kTo8k(pcm24k)
               
+              // Step 3.5: Apply gain boost (3x amplification) to compensate for resampling loss
+              const GAIN = 3.0
+              for (let i = 0; i < pcm8k.length; i++) {
+                // Apply gain and clamp to int16 range [-32768, 32767]
+                pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(pcm8k[i] * GAIN)))
+              }
+              
               // Step 4: Convert PCM16 to μ-law
               const mulaw = new Uint8Array(pcm8k.length)
               for (let i = 0; i < pcm8k.length; i++) {
@@ -469,7 +476,7 @@ class TwilioOpenAIBridge {
               
               // Log before sending
               if (this.outboundSeq === 0) {
-                logger.info('🚀 SENDING FIRST AUDIO PACKET', {
+                logger.info('🚀 SENDING FIRST AUDIO PACKET (3x GAIN APPLIED)', {
                   mulawBytes: mulaw.length,
                   base64Length: base64Mulaw.length,
                   streamSid: this.streamSid
