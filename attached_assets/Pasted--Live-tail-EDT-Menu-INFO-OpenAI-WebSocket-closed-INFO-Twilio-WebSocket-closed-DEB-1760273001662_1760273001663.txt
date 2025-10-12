@@ -1,0 +1,106 @@
+
+
+Live tail
+EDT
+
+Menu
+
+[INFO] OpenAI WebSocket closed 
+[INFO] Twilio WebSocket closed 
+[DEBUG] Keepalive stopped 
+[INFO] Cleaning up bridge {"streamSid":"MZcdd0c4c4233081d9ba49c76109030992","callSid":"CAe225305fd2ac11286b5877ca71300992"}
+[INFO] Twilio stream stopped {"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: rate_limits.updated {"hasAudio":false,"keys":["type","event_id","rate_limits"]}
+[INFO] OpenAI event: response.done {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: response.output_item.done {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] OpenAI event: response.content_part.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","part"]}
+[INFO] OpenAI event: response.audio_transcript.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","transcript"]}
+[INFO] OpenAI event: response.audio.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":44800,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] ✅ AUDIO SENT TO TWILIO {"seq":10,"pcm24kSamples":6000,"pcm8kSamples":2000,"mulawBytes":2000,"base64Length":2668}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":"?"}
+[DEBUG] AI speaking {"text":" today"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" help"}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" can"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" How"}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" Blu"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" Salon"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":16000,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":9600,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] ✅ AUDIO SENT TO TWILIO {"seq":0,"pcm24kSamples":2400,"pcm8kSamples":800,"mulawBytes":800,"base64Length":1068}
+[INFO] 🚀 SENDING FIRST AUDIO PACKET (ANTI-ALIASED RESAMPLE) {"mulawBytes":800,"base64Length":1068,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":6400,"twilioOpen":true,"streamSid":"MZcdd0c4c4233081d9ba49c76109030992"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" calling"}
+[DEBUG] AI speaking {"text":" for"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" thank"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":"Hello"}
+[INFO] OpenAI event: response.content_part.added {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","part"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] OpenAI event: response.output_item.added {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] OpenAI event: response.created {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] Greeting message sent to OpenAI with audio modality 
+[INFO] OpenAI session.updated 
+[INFO] OpenAI event: session.updated {"hasAudio":false,"keys":["type","event_id","session"]}
+[INFO] OpenAI session.created 
+[INFO] OpenAI event: session.created {"hasAudio":false,"keys":["type","event_id","session"]}
+[INFO] Sending initial greeting {"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] OpenAI session configured {"voice":"alloy","hasCustomInstructions":false,"instructionsLength":88}
+[INFO] Starting keepalive monitoring 
+[INFO] OpenAI WebSocket connected successfully 
+[INFO] Initializing OpenAI connection {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasConfig":true}
+[INFO] Using default agent config (voice_settings column not implemented) {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Twilio stream started - Final state {"streamSid":"MZcdd0c4c4233081d9ba49c76109030992","callSid":"CAe225305fd2ac11286b5877ca71300992","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasTenantId":true,"hasGreeting":true,"hasBusinessName":true,"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] Tenant ID updated from customParameters {"source":"customParameters","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Twilio start event received {"streamSid":"MZcdd0c4c4233081d9ba49c76109030992","callSid":"CAe225305fd2ac11286b5877ca71300992","customParametersReceived":{"phoneNumber":"+19169450065","greeting":"Hello, thank you for calling Salon Blu. How can I help you today?","to":"+19194203058","from":"+19169450065","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","businessName":"Salon Blu"},"tenantIdBeforeCheck":""}
+[INFO] Twilio WebSocket connected {"tenantId":""}
+[INFO] WebSocket upgrade request {"fullUrl":"http://relay-voice-pro.onrender.com/","queryParams":{},"tenantIdFromUrl":"","note":"tenant_id will also be checked in Twilio customParameters"}

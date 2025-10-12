@@ -95,30 +95,50 @@ function resample8kTo24k(pcm8k: Int16Array): Int16Array {
 }
 
 function resample24kTo8k(pcm24k: Int16Array): Int16Array {
-  // Anti-aliased resampling with low-pass filter to prevent aliasing/static
-  // Uses 7-tap FIR filter before decimation by 3
+  // Mathematically correct anti-aliased decimation by 3 (24kHz→8kHz)
+  // 48-tap symmetric Hamming-windowed sinc FIR, normalized to unity gain
   const ratio = 3
   const pcm8k = new Int16Array(Math.floor(pcm24k.length / ratio))
   
-  // Simple 7-tap low-pass FIR filter coefficients (normalized)
-  // Cutoff ~3.5kHz for 24kHz input, prevents aliasing when downsampling to 8kHz
-  const taps = [0.05, 0.1, 0.15, 0.2, 0.15, 0.1, 0.05]
-  const tapOffset = 3 // Center of 7-tap filter
+  // Generate 48-tap symmetric windowed-sinc low-pass filter
+  // Cutoff: 3.5kHz (fc/fs = 3500/24000 = 0.146)
+  const N = 48
+  const fc = 3500 / 24000  // Normalized cutoff frequency
+  const center = (N - 1) / 2
+  const taps: number[] = []
+  
+  // Generate windowed-sinc coefficients
+  for (let n = 0; n < N; n++) {
+    const t = n - center
+    // Sinc function
+    let h = (t === 0) ? (2 * fc) : (Math.sin(2 * Math.PI * fc * t) / (Math.PI * t))
+    // Hamming window
+    const w = 0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (N - 1))
+    taps.push(h * w)
+  }
+  
+  // Normalize to unity gain (sum = 1.0)
+  const sum = taps.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < taps.length; i++) {
+    taps[i] /= sum
+  }
+  
+  const tapOffset = Math.floor(N / 2)
   
   for (let i = 0; i < pcm8k.length; i++) {
     const srcIndex = i * ratio
-    let sum = 0
+    let convSum = 0
     
-    // Apply FIR filter
+    // Apply FIR convolution
     for (let j = 0; j < taps.length; j++) {
       const sampleIndex = srcIndex + j - tapOffset
       if (sampleIndex >= 0 && sampleIndex < pcm24k.length) {
-        sum += pcm24k[sampleIndex] * taps[j]
+        convSum += pcm24k[sampleIndex] * taps[j]
       }
     }
     
     // Clamp to int16 range
-    pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(sum)))
+    pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(convSum)))
   }
   
   return pcm8k
@@ -134,6 +154,7 @@ class TwilioOpenAIBridge {
   private callSid = ''
   private isClosed = false
   private outboundSeq = 0
+  private mulawBuffer: number[] = [] // Rolling buffer for 160-byte frames
   
   // Custom parameters from Twilio (fallback if database fails)
   private greeting = ''
@@ -435,37 +456,55 @@ class TwilioOpenAIBridge {
                 mulaw[i] = pcmToMulaw(pcm8k[i])
               }
               
-              // Step 5: Encode μ-law to base64 and send to Twilio
-              const base64Mulaw = btoa(String.fromCharCode(...mulaw))
+              // Step 5: Add to rolling buffer and send only full 160-byte frames
+              // This prevents noise amplification from partial packets
+              const FRAME_SIZE = 160 // 160 samples = 20ms @ 8kHz (Twilio optimal)
               
-              const mediaMessage = {
-                event: 'media',
-                streamSid: this.streamSid,
-                media: {
-                  payload: base64Mulaw
+              // Add new samples to buffer
+              for (let i = 0; i < mulaw.length; i++) {
+                this.mulawBuffer.push(mulaw[i])
+              }
+              
+              // Send full 160-byte frames only
+              let framesSent = 0
+              while (this.mulawBuffer.length >= FRAME_SIZE) {
+                const frame = new Uint8Array(FRAME_SIZE)
+                for (let i = 0; i < FRAME_SIZE; i++) {
+                  frame[i] = this.mulawBuffer.shift()!
                 }
+                
+                const base64Frame = btoa(String.fromCharCode(...frame))
+                
+                const mediaMessage = {
+                  event: 'media',
+                  streamSid: this.streamSid,
+                  media: {
+                    payload: base64Frame
+                  }
+                }
+                
+                // Log first frame
+                if (this.outboundSeq === 0) {
+                  logger.info('🚀 FIRST FRAME (WINDOWED-SINC FIR + 20MS BUFFER)', {
+                    frameBytes: frame.length,
+                    bufferRemaining: this.mulawBuffer.length,
+                    streamSid: this.streamSid
+                  })
+                }
+                
+                this.twilioWs.send(JSON.stringify(mediaMessage))
+                this.outboundSeq++
+                framesSent++
               }
               
-              // Log before sending
-              if (this.outboundSeq === 0) {
-                logger.info('🚀 SENDING FIRST AUDIO PACKET (ANTI-ALIASED RESAMPLE)', {
-                  mulawBytes: mulaw.length,
-                  base64Length: base64Mulaw.length,
-                  streamSid: this.streamSid
-                })
-              }
-              
-              this.twilioWs.send(JSON.stringify(mediaMessage))
-              this.outboundSeq++
-              
-              // Log every 10th chunk to confirm it's working
-              if (this.outboundSeq % 10 === 1) {
-                logger.info('✅ AUDIO SENT TO TWILIO', {
+              // Log every 15 deltas to confirm processing
+              if (this.outboundSeq % 45 === 1) {
+                logger.info('✅ AUDIO FRAMES SENT', {
                   seq: this.outboundSeq - 1,
                   pcm24kSamples: pcm24k.length,
                   pcm8kSamples: pcm8k.length,
-                  mulawBytes: mulaw.length,
-                  base64Length: base64Mulaw.length
+                  framesSent,
+                  bufferRemaining: this.mulawBuffer.length
                 })
               }
             } catch (error) {
