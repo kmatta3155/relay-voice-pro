@@ -191,54 +191,12 @@ class TwilioOpenAIBridge {
   }
 
   private async fetchAgentConfig() {
-    try {
-      logger.info('Fetching agent config from Supabase', {
-        tenantId: this.tenantId,
-        supabaseUrl: SUPABASE_URL,
-        hasServiceKey: !!SUPABASE_SERVICE_ROLE_KEY
-      })
-
-      const url = `${SUPABASE_URL}/rest/v1/tenants?id=eq.${this.tenantId}&select=voice_settings`
-      const response = await fetch(url, {
-        headers: {
-          'apikey': SUPABASE_SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      logger.info('Supabase fetch response', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        logger.error('Supabase fetch failed', {
-          status: response.status,
-          statusText: response.statusText,
-          errorBody: errorText
-        })
-        throw new Error(`Failed to fetch tenant config: ${response.statusText} - ${errorText}`)
-      }
-
-      const data = await response.json()
-      logger.info('Agent config fetched successfully', {
-        hasData: !!data,
-        dataLength: data?.length,
-        hasVoiceSettings: !!data[0]?.voice_settings
-      })
-
-      return data[0]?.voice_settings || {}
-    } catch (error) {
-      logger.error('Error fetching agent config', {
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined,
-        tenantId: this.tenantId
-      })
-      return {}
-    }
+    // NOTE: voice_settings column doesn't exist in tenants table yet
+    // Using fallback configuration from Twilio parameters instead
+    logger.info('Using default agent config (voice_settings column not implemented)', {
+      tenantId: this.tenantId
+    })
+    return {}
   }
 
   private configureSession(config: any) {
@@ -450,8 +408,8 @@ class TwilioOpenAIBridge {
               // Step 3: Resample from 24kHz to 8kHz
               const pcm8k = resample24kTo8k(pcm24k)
               
-              // Step 3.5: Apply gain boost (3x amplification) to compensate for resampling loss
-              const GAIN = 3.0
+              // Step 3.5: Apply moderate gain boost (1.5x) without clipping/distortion
+              const GAIN = 1.5
               for (let i = 0; i < pcm8k.length; i++) {
                 // Apply gain and clamp to int16 range [-32768, 32767]
                 pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(pcm8k[i] * GAIN)))
@@ -476,7 +434,7 @@ class TwilioOpenAIBridge {
               
               // Log before sending
               if (this.outboundSeq === 0) {
-                logger.info('🚀 SENDING FIRST AUDIO PACKET (3x GAIN APPLIED)', {
+                logger.info('🚀 SENDING FIRST AUDIO PACKET (1.5x GAIN)', {
                   mulawBytes: mulaw.length,
                   base64Length: base64Mulaw.length,
                   streamSid: this.streamSid
