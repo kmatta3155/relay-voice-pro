@@ -4,11 +4,11 @@
  * This is a standalone version of the Supabase Edge Function, deployed to Render.com
  * to bypass the 6-minute WebSocket limit.
  * 
- * Architecture: Twilio Media Streams (μ-law 8kHz) ↔ OpenAI Realtime API (PCM16 24kHz)
+ * Architecture: Twilio Media Streams (g711_ulaw 8kHz) ↔ OpenAI Realtime API (g711_ulaw 8kHz)
  * 
  * Key Features:
  * - No time limits (unlike Supabase's 400s limit)
- * - Bidirectional audio streaming with codec conversion
+ * - DIRECT PASSTHROUGH - Zero audio conversion (both sides use g711_ulaw)
  * - OpenAI server_vad (no custom VAD needed)
  * - RAG tool integration for knowledge base search via Supabase
  * - Tenant-specific agent configuration
@@ -38,126 +38,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !OPENAI_API_KEY) {
   Deno.exit(1)
 }
 
-// Audio constants
-const TWILIO_SAMPLE_RATE = 8000
-const OPENAI_SAMPLE_RATE = 24000
-const FRAME_SIZE_MULAW = 160
-const FRAME_SIZE_PCM16_8K = 320
-
-// ========== AUDIO CODEC CONVERSION ==========
-
-function mulawToPcm(mulaw: number): number {
-  mulaw = (~mulaw) & 0xff
-  const sign = mulaw & 0x80
-  const exponent = (mulaw >> 4) & 0x07
-  const mantissa = mulaw & 0x0f
-  const sample = ((mantissa | 0x10) << (exponent + 3)) - 0x84
-  return sign ? -sample : sample
-}
-
-function pcmToMulaw(sample: number): number {
-  const BIAS = 0x84
-  const CLIP = 32635
-  let sign = 0
-  
-  if (sample < 0) {
-    sign = 0x80
-    sample = -sample
-  }
-  
-  if (sample > CLIP) sample = CLIP
-  sample += BIAS
-  
-  let exponent = 7
-  let mantissa = 0x4000
-  for (let i = 0; i < 7; i++) {
-    if (sample <= mantissa) {
-      exponent = i
-      break
-    }
-    mantissa >>= 1
-  }
-  
-  mantissa = (sample >> (exponent + 3)) & 0x0f
-  return ~(sign | (exponent << 4) | mantissa) & 0xff
-}
-
-function resample8kTo24k(pcm8k: Int16Array): Int16Array {
-  const ratio = 3
-  const pcm24k = new Int16Array(pcm8k.length * ratio)
-  for (let i = 0; i < pcm8k.length; i++) {
-    const value = pcm8k[i]
-    pcm24k[i * ratio] = value
-    pcm24k[i * ratio + 1] = value
-    pcm24k[i * ratio + 2] = value
-  }
-  return pcm24k
-}
-
-// FIR filter state for stateful streaming resampling
-class FIRResampler {
-  private readonly N = 48
-  private readonly ratio = 3
-  private readonly fc = 3500 / 24000
-  private readonly taps: number[]
-  private history: Int16Array
-  
-  constructor() {
-    // Generate 48-tap symmetric windowed-sinc low-pass filter (once)
-    const center = (this.N - 1) / 2
-    this.taps = []
-    
-    for (let n = 0; n < this.N; n++) {
-      const t = n - center
-      // Sinc function
-      let h = (t === 0) ? (2 * this.fc) : (Math.sin(2 * Math.PI * this.fc * t) / (Math.PI * t))
-      // Hamming window
-      const w = 0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (this.N - 1))
-      this.taps.push(h * w)
-    }
-    
-    // Normalize to unity gain (sum = 1.0)
-    const sum = this.taps.reduce((a, b) => a + b, 0)
-    for (let i = 0; i < this.taps.length; i++) {
-      this.taps[i] /= sum
-    }
-    
-    // Initialize history buffer (N-1 samples)
-    this.history = new Int16Array(this.N - 1)
-  }
-  
-  resample(pcm24k: Int16Array): Int16Array {
-    // Prepend history to new chunk for continuous filtering
-    const combined = new Int16Array(this.history.length + pcm24k.length)
-    combined.set(this.history)
-    combined.set(pcm24k, this.history.length)
-    
-    const pcm8k = new Int16Array(Math.floor(pcm24k.length / this.ratio))
-    const tapOffset = Math.floor(this.N / 2)
-    
-    for (let i = 0; i < pcm8k.length; i++) {
-      const srcIndex = this.history.length + (i * this.ratio)
-      let convSum = 0
-      
-      // Apply FIR convolution with full context
-      for (let j = 0; j < this.taps.length; j++) {
-        const sampleIndex = srcIndex + j - tapOffset
-        if (sampleIndex >= 0 && sampleIndex < combined.length) {
-          convSum += combined[sampleIndex] * this.taps[j]
-        }
-      }
-      
-      // Clamp to int16 range
-      pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(convSum)))
-    }
-    
-    // Save last N-1 samples as history for next chunk
-    const newHistoryStart = Math.max(0, pcm24k.length - (this.N - 1))
-    this.history = pcm24k.slice(newHistoryStart)
-    
-    return pcm8k
-  }
-}
+// NO AUDIO CONVERSION NEEDED - Direct g711_ulaw passthrough!
 
 // ========== WEBSOCKET BRIDGE CLASS ==========
 
@@ -169,8 +50,6 @@ class TwilioOpenAIBridge {
   private callSid = ''
   private isClosed = false
   private outboundSeq = 0
-  private mulawBuffer: number[] = [] // Rolling buffer for 160-byte frames
-  private resampler: FIRResampler // Stateful FIR resampler with history
   
   // Custom parameters from Twilio (fallback if database fails)
   private greeting = ''
@@ -186,7 +65,6 @@ class TwilioOpenAIBridge {
   constructor(twilioWs: WebSocket, tenantId: string) {
     this.twilioWs = twilioWs
     this.tenantId = tenantId
-    this.resampler = new FIRResampler() // Initialize stateful resampler
     
     this.twilioWs.onopen = () => {
       logger.info('Twilio WebSocket connected', { tenantId: this.tenantId })
@@ -395,17 +273,10 @@ class TwilioOpenAIBridge {
 
         case 'media':
           if (this.openaiWs?.readyState === WebSocket.OPEN) {
-            const mulawData = Uint8Array.from(atob(message.media.payload), c => c.charCodeAt(0))
-            const pcm8k = new Int16Array(mulawData.length)
-            for (let i = 0; i < mulawData.length; i++) {
-              pcm8k[i] = mulawToPcm(mulawData[i])
-            }
-            const pcm24k = resample8kTo24k(pcm8k)
-            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(pcm24k.buffer)))
-            
+            // DIRECT PASSTHROUGH: Twilio g711_ulaw → OpenAI g711_ulaw (NO CONVERSION!)
             this.openaiWs.send(JSON.stringify({
               type: 'input_audio_buffer.append',
-              audio: base64Audio
+              audio: message.media.payload  // Direct base64 µ-law from Twilio
             }))
           }
           break
@@ -456,88 +327,24 @@ class TwilioOpenAIBridge {
           })
           
           if (this.twilioWs?.readyState === WebSocket.OPEN && message.delta) {
-            try {
-              // CRITICAL FIX: Properly decode base64 PCM16 audio
-              // Step 1: Decode base64 to raw bytes
-              const audioBytes = Uint8Array.from(atob(message.delta), c => c.charCodeAt(0))
-              
-              // Step 2: Interpret bytes as 16-bit PCM samples (little-endian)
-              const pcm24k = new Int16Array(audioBytes.buffer)
-              
-              // Step 3: Resample from 24kHz to 8kHz (STATEFUL - preserves context across chunks)
-              const pcm8k = this.resampler.resample(pcm24k)
-              
-              // Step 4: Convert PCM16 to μ-law (no gain - prevents clipping/static)
-              const mulaw = new Uint8Array(pcm8k.length)
-              for (let i = 0; i < pcm8k.length; i++) {
-                mulaw[i] = pcmToMulaw(pcm8k[i])
+            // DIRECT PASSTHROUGH: g711_ulaw → g711_ulaw (NO CONVERSION!)
+            const mediaMessage = {
+              event: 'media',
+              streamSid: this.streamSid,
+              media: {
+                payload: message.delta  // Direct base64 µ-law from OpenAI
               }
-              
-              // Step 5: Add to rolling buffer and send only full 160-byte frames
-              // This prevents noise amplification from partial packets
-              const FRAME_SIZE = 160 // 160 samples = 20ms @ 8kHz (Twilio optimal)
-              
-              // Add new samples to buffer
-              for (let i = 0; i < mulaw.length; i++) {
-                this.mulawBuffer.push(mulaw[i])
-              }
-              
-              // Send full 160-byte frames only
-              let framesSent = 0
-              while (this.mulawBuffer.length >= FRAME_SIZE) {
-                const frame = new Uint8Array(FRAME_SIZE)
-                for (let i = 0; i < FRAME_SIZE; i++) {
-                  frame[i] = this.mulawBuffer.shift()!
-                }
-                
-                const base64Frame = btoa(String.fromCharCode(...frame))
-                
-                const mediaMessage = {
-                  event: 'media',
-                  streamSid: this.streamSid,
-                  media: {
-                    payload: base64Frame
-                  }
-                }
-                
-                // Log first frame
-                if (this.outboundSeq === 0) {
-                  logger.info('🚀 FIRST FRAME (STATEFUL FIR - NO MORE STATIC!)', {
-                    frameBytes: frame.length,
-                    bufferRemaining: this.mulawBuffer.length,
-                    streamSid: this.streamSid
-                  })
-                }
-                
-                this.twilioWs.send(JSON.stringify(mediaMessage))
-                this.outboundSeq++
-                framesSent++
-              }
-              
-              // Log every 15 deltas to confirm processing
-              if (this.outboundSeq % 45 === 1) {
-                logger.info('✅ AUDIO FRAMES SENT', {
-                  seq: this.outboundSeq - 1,
-                  pcm24kSamples: pcm24k.length,
-                  pcm8kSamples: pcm8k.length,
-                  framesSent,
-                  bufferRemaining: this.mulawBuffer.length
-                })
-              }
-            } catch (error) {
-              logger.error('❌ AUDIO PROCESSING ERROR', {
-                error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-                hasDelta: !!message.delta,
-                deltaLength: message.delta?.length
+            }
+            
+            this.twilioWs.send(JSON.stringify(mediaMessage))
+            
+            if (this.outboundSeq === 0) {
+              logger.info('🚀 DIRECT g711_ulaw PASSTHROUGH (ZERO CONVERSION!)', {
+                deltaLength: message.delta.length,
+                streamSid: this.streamSid
               })
             }
-          } else {
-            logger.warn('Cannot send audio', {
-              twilioReady: this.twilioWs?.readyState === WebSocket.OPEN,
-              hasDelta: !!message.delta,
-              streamSid: this.streamSid
-            })
+            this.outboundSeq++
           }
           break
 
