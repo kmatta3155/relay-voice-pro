@@ -267,8 +267,8 @@ class TwilioOpenAIBridge {
       type: 'session.update',
       session: {
         turn_detection: { type: 'server_vad' },
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
+        input_audio_format: 'g711_ulaw',  // Direct passthrough - no conversion needed!
+        output_audio_format: 'g711_ulaw', // Direct passthrough - no conversion needed!
         input_audio_transcription: { model: 'whisper-1' },
         voice: config?.voice || 'alloy',
         instructions,
