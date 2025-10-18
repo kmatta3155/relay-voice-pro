@@ -94,54 +94,69 @@ function resample8kTo24k(pcm8k: Int16Array): Int16Array {
   return pcm24k
 }
 
-function resample24kTo8k(pcm24k: Int16Array): Int16Array {
-  // Mathematically correct anti-aliased decimation by 3 (24kHz→8kHz)
-  // 48-tap symmetric Hamming-windowed sinc FIR, normalized to unity gain
-  const ratio = 3
-  const pcm8k = new Int16Array(Math.floor(pcm24k.length / ratio))
+// FIR filter state for stateful streaming resampling
+class FIRResampler {
+  private readonly N = 48
+  private readonly ratio = 3
+  private readonly fc = 3500 / 24000
+  private readonly taps: number[]
+  private history: Int16Array
   
-  // Generate 48-tap symmetric windowed-sinc low-pass filter
-  // Cutoff: 3.5kHz (fc/fs = 3500/24000 = 0.146)
-  const N = 48
-  const fc = 3500 / 24000  // Normalized cutoff frequency
-  const center = (N - 1) / 2
-  const taps: number[] = []
-  
-  // Generate windowed-sinc coefficients
-  for (let n = 0; n < N; n++) {
-    const t = n - center
-    // Sinc function
-    let h = (t === 0) ? (2 * fc) : (Math.sin(2 * Math.PI * fc * t) / (Math.PI * t))
-    // Hamming window
-    const w = 0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (N - 1))
-    taps.push(h * w)
-  }
-  
-  // Normalize to unity gain (sum = 1.0)
-  const sum = taps.reduce((a, b) => a + b, 0)
-  for (let i = 0; i < taps.length; i++) {
-    taps[i] /= sum
-  }
-  
-  const tapOffset = Math.floor(N / 2)
-  
-  for (let i = 0; i < pcm8k.length; i++) {
-    const srcIndex = i * ratio
-    let convSum = 0
+  constructor() {
+    // Generate 48-tap symmetric windowed-sinc low-pass filter (once)
+    const center = (this.N - 1) / 2
+    this.taps = []
     
-    // Apply FIR convolution
-    for (let j = 0; j < taps.length; j++) {
-      const sampleIndex = srcIndex + j - tapOffset
-      if (sampleIndex >= 0 && sampleIndex < pcm24k.length) {
-        convSum += pcm24k[sampleIndex] * taps[j]
-      }
+    for (let n = 0; n < this.N; n++) {
+      const t = n - center
+      // Sinc function
+      let h = (t === 0) ? (2 * this.fc) : (Math.sin(2 * Math.PI * this.fc * t) / (Math.PI * t))
+      // Hamming window
+      const w = 0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (this.N - 1))
+      this.taps.push(h * w)
     }
     
-    // Clamp to int16 range
-    pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(convSum)))
+    // Normalize to unity gain (sum = 1.0)
+    const sum = this.taps.reduce((a, b) => a + b, 0)
+    for (let i = 0; i < this.taps.length; i++) {
+      this.taps[i] /= sum
+    }
+    
+    // Initialize history buffer (N-1 samples)
+    this.history = new Int16Array(this.N - 1)
   }
   
-  return pcm8k
+  resample(pcm24k: Int16Array): Int16Array {
+    // Prepend history to new chunk for continuous filtering
+    const combined = new Int16Array(this.history.length + pcm24k.length)
+    combined.set(this.history)
+    combined.set(pcm24k, this.history.length)
+    
+    const pcm8k = new Int16Array(Math.floor(pcm24k.length / this.ratio))
+    const tapOffset = Math.floor(this.N / 2)
+    
+    for (let i = 0; i < pcm8k.length; i++) {
+      const srcIndex = this.history.length + (i * this.ratio)
+      let convSum = 0
+      
+      // Apply FIR convolution with full context
+      for (let j = 0; j < this.taps.length; j++) {
+        const sampleIndex = srcIndex + j - tapOffset
+        if (sampleIndex >= 0 && sampleIndex < combined.length) {
+          convSum += combined[sampleIndex] * this.taps[j]
+        }
+      }
+      
+      // Clamp to int16 range
+      pcm8k[i] = Math.max(-32768, Math.min(32767, Math.round(convSum)))
+    }
+    
+    // Save last N-1 samples as history for next chunk
+    const newHistoryStart = Math.max(0, pcm24k.length - (this.N - 1))
+    this.history = pcm24k.slice(newHistoryStart)
+    
+    return pcm8k
+  }
 }
 
 // ========== WEBSOCKET BRIDGE CLASS ==========
@@ -155,6 +170,7 @@ class TwilioOpenAIBridge {
   private isClosed = false
   private outboundSeq = 0
   private mulawBuffer: number[] = [] // Rolling buffer for 160-byte frames
+  private resampler: FIRResampler // Stateful FIR resampler with history
   
   // Custom parameters from Twilio (fallback if database fails)
   private greeting = ''
@@ -170,6 +186,7 @@ class TwilioOpenAIBridge {
   constructor(twilioWs: WebSocket, tenantId: string) {
     this.twilioWs = twilioWs
     this.tenantId = tenantId
+    this.resampler = new FIRResampler() // Initialize stateful resampler
     
     this.twilioWs.onopen = () => {
       logger.info('Twilio WebSocket connected', { tenantId: this.tenantId })
@@ -447,8 +464,8 @@ class TwilioOpenAIBridge {
               // Step 2: Interpret bytes as 16-bit PCM samples (little-endian)
               const pcm24k = new Int16Array(audioBytes.buffer)
               
-              // Step 3: Resample from 24kHz to 8kHz
-              const pcm8k = resample24kTo8k(pcm24k)
+              // Step 3: Resample from 24kHz to 8kHz (STATEFUL - preserves context across chunks)
+              const pcm8k = this.resampler.resample(pcm24k)
               
               // Step 4: Convert PCM16 to μ-law (no gain - prevents clipping/static)
               const mulaw = new Uint8Array(pcm8k.length)
@@ -485,7 +502,7 @@ class TwilioOpenAIBridge {
                 
                 // Log first frame
                 if (this.outboundSeq === 0) {
-                  logger.info('🚀 FIRST FRAME (WINDOWED-SINC FIR + 20MS BUFFER)', {
+                  logger.info('🚀 FIRST FRAME (STATEFUL FIR - NO MORE STATIC!)', {
                     frameBytes: frame.length,
                     bufferRemaining: this.mulawBuffer.length,
                     streamSid: this.streamSid
