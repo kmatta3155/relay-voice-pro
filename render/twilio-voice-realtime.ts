@@ -402,6 +402,12 @@ class TwilioOpenAIBridge {
 
   private async searchKnowledge(query: string) {
     try {
+      logger.info('Searching knowledge base', { 
+        query, 
+        tenantId: this.tenantId,
+        supabaseUrl: SUPABASE_URL 
+      })
+      
       const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/search_knowledge`, {
         method: 'POST',
         headers: {
@@ -417,12 +423,28 @@ class TwilioOpenAIBridge {
       })
 
       if (!response.ok) {
-        throw new Error(`Knowledge search failed: ${response.statusText}`)
+        const errorText = await response.text()
+        logger.error('Knowledge search HTTP error', { 
+          status: response.status,
+          statusText: response.statusText,
+          errorBody: errorText
+        })
+        throw new Error(`Knowledge search failed: ${response.status} ${response.statusText}`)
       }
 
-      return await response.json()
+      const results = await response.json()
+      logger.info('Knowledge search results', { 
+        resultCount: Array.isArray(results) ? results.length : 0,
+        hasResults: !!results && results.length > 0
+      })
+      
+      return results
     } catch (error) {
-      logger.error('Knowledge search error', { error })
+      logger.error('Knowledge search error', { 
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        errorType: error?.constructor?.name
+      })
       return []
     }
   }
