@@ -189,7 +189,11 @@ Be warm, professional, and helpful in all interactions.`
     logger.info('OpenAI session configured', {
       voice: sessionConfig.session.voice,
       hasCustomInstructions: !!config?.instructions,
-      instructionsLength: instructions.length
+      instructionsLength: instructions.length,
+      instructionsPreview: instructions.substring(0, 200),
+      configInstructions: config?.instructions || 'none',
+      customInstructions: this.customInstructions || 'none',
+      usingDefaultInstructions: instructions === defaultInstructions
     })
 
     // CRITICAL FIX: Send greeting to make AI speak first
