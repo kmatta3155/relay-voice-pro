@@ -138,8 +138,24 @@ class TwilioOpenAIBridge {
 
   private configureSession(config: any) {
     // Use custom instructions from parameters if database config is empty
-    const instructions = config?.instructions || this.customInstructions || 
-      `You are a helpful AI receptionist for ${this.businessName || 'this business'}. Be professional, friendly, and helpful.`
+    const defaultInstructions = `You are a professional AI receptionist for ${this.businessName || 'this business'}.
+
+CRITICAL: When customers ask questions about the business (hours, location, services, pricing, policies, etc.), you MUST use the search_knowledge function to find accurate information from the knowledge base.
+
+NEVER make up or guess information. ALWAYS search the knowledge base first using search_knowledge before answering questions about:
+- Business hours or operating times
+- Location, address, or directions  
+- Services offered or menu items
+- Pricing or costs
+- Policies or procedures
+- Staff members or team
+- Appointment availability or booking
+
+After receiving search results, provide the information naturally in your response. If the knowledge base doesn't have the answer, politely say you don't have that information and offer to take a message or have someone call them back.
+
+Be warm, professional, and helpful in all interactions.`
+    
+    const instructions = config?.instructions || this.customInstructions || defaultInstructions
     
     const sessionConfig = {
       type: 'session.update',
