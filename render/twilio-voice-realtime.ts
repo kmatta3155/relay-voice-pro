@@ -168,15 +168,16 @@ Be warm, professional, and helpful in all interactions.`
         instructions,
         temperature: config?.temperature || 0.8,
         max_response_output_tokens: 4096,
+        tool_choice: 'auto',  // CRITICAL: Enable automatic function calling
         tools: [
           {
             type: 'function',
             name: 'search_knowledge',
-            description: 'Search the knowledge base for information',
+            description: 'Search the business knowledge base for accurate information about hours, location, services, pricing, and policies. ALWAYS use this before answering business-related questions.',
             parameters: {
               type: 'object',
               properties: {
-                query: { type: 'string', description: 'The search query' }
+                query: { type: 'string', description: 'The search query about the business (e.g., "business hours", "location address", "available services")' }
               },
               required: ['query']
             }

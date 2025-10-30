@@ -1,0 +1,258 @@
+] OpenAI WebSocket closed 
+[INFO] Twilio WebSocket closed 
+[DEBUG] Keepalive stopped 
+[INFO] Cleaning up bridge {"streamSid":"MZ9a987b86ac024f582297a2294906a5cc","callSid":"CA414d6629012be50bb62361a1634ae5b4"}
+[INFO] Twilio stream stopped {"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: rate_limits.updated {"hasAudio":false,"keys":["type","event_id","rate_limits"]}
+[INFO] OpenAI event: response.done {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: response.output_item.done {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] OpenAI event: response.content_part.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","part"]}
+[INFO] OpenAI event: response.audio_transcript.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","transcript"]}
+[INFO] OpenAI event: response.audio.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":5336,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":"?"}
+[DEBUG] AI speaking {"text":" details"}
+[DEBUG] AI speaking {"text":" the"}
+[DEBUG] AI speaking {"text":" with"}
+[DEBUG] AI speaking {"text":" back"}
+[DEBUG] AI speaking {"text":" you"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" call"}
+[DEBUG] AI speaking {"text":" someone"}
+[DEBUG] AI speaking {"text":" have"}
+[DEBUG] AI speaking {"text":" or"}
+[DEBUG] AI speaking {"text":" message"}
+[DEBUG] AI speaking {"text":" a"}
+[DEBUG] AI speaking {"text":" take"}
+[DEBUG] AI speaking {"text":" to"}
+[DEBUG] AI speaking {"text":" me"}
+[DEBUG] AI speaking {"text":" like"}
+[DEBUG] AI speaking {"text":" you"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" Would"}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" moment"}
+[DEBUG] AI speaking {"text":" the"}
+[DEBUG] AI speaking {"text":" at"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" information"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" location"}
+[DEBUG] AI speaking {"text":" our"}
+[DEBUG] AI speaking {"text":" have"}
+[DEBUG] AI speaking {"text":" don't"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":1600,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":1068,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" but"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":" sorry"}
+[DEBUG] AI speaking {"text":"I'm"}
+[INFO] OpenAI event: response.content_part.added {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","part"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] OpenAI event: response.output_item.added {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] User said {"transcript":"What is your location?"}
+[INFO] OpenAI event: conversation.item.input_audio_transcription.completed {"hasAudio":false,"keys":["type","event_id","item_id","content_index","transcript","usage"]}
+[INFO] OpenAI event: conversation.item.input_audio_transcription.delta {"hasAudio":true,"keys":["type","event_id","item_id","content_index","delta","obfuscation"]}
+[INFO] OpenAI event: response.created {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] Knowledge search results {"resultCount":0,"hasResults":false}
+[INFO] OpenAI event: rate_limits.updated {"hasAudio":false,"keys":["type","event_id","rate_limits"]}
+[INFO] OpenAI event: response.done {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: response.output_item.done {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] Searching knowledge base {"query":"location","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","supabaseUrl":"https://gnqqktmslswgjtvxfvdo.supabase.co"}
+[INFO] Executing knowledge search {"query":"location"}
+[INFO] OpenAI event: response.function_call_arguments.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","call_id","name","arguments"]}
+[INFO] OpenAI event: response.function_call_arguments.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","call_id","delta","obfuscation"]}
+[INFO] OpenAI event: response.function_call_arguments.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","call_id","delta","obfuscation"]}
+[INFO] OpenAI event: response.function_call_arguments.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","call_id","delta","obfuscation"]}
+[INFO] OpenAI event: response.function_call_arguments.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","call_id","delta","obfuscation"]}
+[INFO] OpenAI event: response.function_call_arguments.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","call_id","delta","obfuscation"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] OpenAI event: response.output_item.added {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] OpenAI event: response.created {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] OpenAI event: input_audio_buffer.committed {"hasAudio":false,"keys":["type","event_id","previous_item_id","item_id"]}
+[INFO] OpenAI event: input_audio_buffer.speech_stopped {"hasAudio":false,"keys":["type","event_id","audio_end_ms","item_id"]}
+[DEBUG] User started speaking 
+[INFO] OpenAI event: rate_limits.updated {"hasAudio":false,"keys":["type","event_id","rate_limits"]}
+[INFO] OpenAI event: response.done {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: response.output_item.done {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] OpenAI event: response.content_part.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","part"]}
+[INFO] OpenAI event: response.audio_transcript.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","transcript"]}
+[INFO] OpenAI event: response.audio.done {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":6400,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":"?"}
+[DEBUG] AI speaking {"text":" today"}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" help"}
+[DEBUG] AI speaking {"text":" I"}
+[DEBUG] AI speaking {"text":" can"}
+[DEBUG] AI speaking {"text":" How"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":"."}
+[DEBUG] AI speaking {"text":" Blu"}
+[DEBUG] AI speaking {"text":" Salon"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" calling"}
+[DEBUG] AI speaking {"text":" for"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":2668,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":1600,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[INFO] 🚀 DIRECT g711_ulaw PASSTHROUGH (ZERO CONVERSION!) {"deltaLength":1068,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] 📢 AUDIO CASE MATCHED! {"hasDelta":true,"twilioOpen":true}
+[INFO] 🎵 AUDIO DELTA RECEIVED {"hasDelta":true,"deltaLength":1068,"twilioOpen":true,"streamSid":"MZ9a987b86ac024f582297a2294906a5cc"}
+[INFO] OpenAI event: response.audio.delta {"hasAudio":true,"keys":["type","event_id","response_id","item_id","output_index","content_index","delta"]}
+[DEBUG] AI speaking {"text":" you"}
+[DEBUG] AI speaking {"text":" thank"}
+[DEBUG] AI speaking {"text":","}
+[DEBUG] AI speaking {"text":"Hello"}
+[INFO] OpenAI event: response.content_part.added {"hasAudio":false,"keys":["type","event_id","response_id","item_id","output_index","content_index","part"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] OpenAI event: response.output_item.added {"hasAudio":false,"keys":["type","event_id","response_id","output_index","item"]}
+[INFO] OpenAI event: response.created {"hasAudio":false,"keys":["type","event_id","response"]}
+[INFO] OpenAI event: conversation.item.created {"hasAudio":false,"keys":["type","event_id","previous_item_id","item"]}
+[INFO] Greeting message sent to OpenAI with audio modality 
+[INFO] OpenAI session.updated 
+[INFO] OpenAI event: session.updated {"hasAudio":false,"keys":["type","event_id","session"]}
+[INFO] OpenAI session.created 
+[INFO] OpenAI event: session.created {"hasAudio":false,"keys":["type","event_id","session"]}
+[INFO] Sending initial greeting {"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] OpenAI session configured {"voice":"alloy","hasCustomInstructions":false,"instructionsLength":902,"instructionsPreview":"You are a professional AI receptionist for Salon Blu.\n\nCRITICAL: When customers ask questions about the business (hours, location, services, pricing, policies, etc.), you MUST use the search_knowledge","configInstructions":"none","customInstructions":"none","usingDefaultInstructions":true}
+[INFO] Starting keepalive monitoring 
+[INFO] OpenAI WebSocket connected successfully 
+[INFO] Initializing OpenAI connection {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasConfig":true}
+[INFO] Using default agent config (voice_settings column not implemented) {"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Twilio stream started - Final state {"streamSid":"MZ9a987b86ac024f582297a2294906a5cc","callSid":"CA414d6629012be50bb62361a1634ae5b4","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","hasTenantId":true,"hasGreeting":true,"hasBusinessName":true,"greeting":"Hello, thank you for calling Salon Blu. How can I ..."}
+[INFO] Tenant ID updated from customParameters {"source":"customParameters","tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688"}
+[INFO] Twilio start event received {"streamSid":"MZ9a987b86ac024f582297a2294906a5cc","callSid":"CA414d6629012be50bb62361a1634ae5b4","customParametersReceived":{"tenantId":"f3760fe8-4491-4ab1-83dd-4069b1a2d688","greeting":"Hello, thank you for calling Salon Blu. How can I help you today?","businessName":"Salon Blu","phoneNumber":"+19169450065","from":"+19169450065","to":"+19194203058"},"tenantIdBeforeCheck":""}
+[INFO] Twilio WebSocket connected {"tenantId":""}
+[INFO] WebSocket upgrade request {"fullUrl":"http://relay-voice-pro.onrender.com/","queryParams":{},"tenantIdFromUrl":"","note":"tenant_id will also be checked in Twilio customParameters"}
