@@ -433,8 +433,9 @@ Be warm, professional, and helpful in all interactions.`
         },
         body: JSON.stringify({
           query_text: query,
-          tenant_id_param: this.tenantId,
-          match_count: 5
+          tenant_id: this.tenantId,
+          match_count: 5,
+          match_threshold: 0.5
         })
       })
 
