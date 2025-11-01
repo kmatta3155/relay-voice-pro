@@ -50,11 +50,16 @@ class TwilioOpenAIBridge {
   private callSid = ''
   private isClosed = false
   private outboundSeq = 0
+  private callerNumber = ''
   
   // Custom parameters from Twilio (fallback if database fails)
   private greeting = ''
   private businessName = ''
   private customInstructions = ''
+  
+  // Conversation tracking for call summaries
+  private conversationHistory: Array<{role: string, content: string, timestamp: number}> = []
+  private callStartTime: number = 0
   
   // Keepalive and session management
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null
@@ -74,14 +79,24 @@ class TwilioOpenAIBridge {
       this.handleTwilioMessage(event.data)
     }
     
-    this.twilioWs.onerror = (error) => {
+    this.twilioWs.onerror = async (error) => {
       logger.error('Twilio WebSocket error', { error })
-      this.cleanup()
+      // Make sure cleanup completes before handler exits
+      try {
+        await this.cleanup()
+      } catch (err) {
+        logger.error('Cleanup error in error handler', { err })
+      }
     }
     
-    this.twilioWs.onclose = () => {
+    this.twilioWs.onclose = async () => {
       logger.info('Twilio WebSocket closed')
-      this.cleanup()
+      // Make sure cleanup completes before handler exits
+      try {
+        await this.cleanup()
+      } catch (err) {
+        logger.error('Cleanup error in close handler', { err })
+      }
     }
   }
 
@@ -112,18 +127,33 @@ class TwilioOpenAIBridge {
         this.handleOpenAIMessage(event.data)
       }
 
-      this.openaiWs.onerror = (error) => {
+      this.openaiWs.onerror = async (error) => {
         logger.error('OpenAI WebSocket error', { error })
-        this.cleanup()
+        // Make sure cleanup completes before handler exits
+        try {
+          await this.cleanup()
+        } catch (err) {
+          logger.error('Cleanup error in OpenAI error handler', { err })
+        }
       }
 
-      this.openaiWs.onclose = () => {
+      this.openaiWs.onclose = async () => {
         logger.info('OpenAI WebSocket closed')
-        this.cleanup()
+        // Make sure cleanup completes before handler exits
+        try {
+          await this.cleanup()
+        } catch (err) {
+          logger.error('Cleanup error in OpenAI close handler', { err })
+        }
       }
     } catch (error) {
       logger.error('Failed to initialize OpenAI', { error })
-      this.cleanup()
+      // Await cleanup even during initialization failures
+      try {
+        await this.cleanup()
+      } catch (cleanupError) {
+        logger.error('Cleanup error during init failure', { cleanupError })
+      }
     }
   }
 
@@ -236,7 +266,7 @@ Be warm, professional, and helpful in all interactions.`
     }
   }
 
-  private handleTwilioMessage(data: string) {
+  private async handleTwilioMessage(data: string) {
     try {
       const message = JSON.parse(data)
 
@@ -244,12 +274,15 @@ Be warm, professional, and helpful in all interactions.`
         case 'start':
           this.streamSid = message.start.streamSid
           this.callSid = message.start.callSid
+          this.callStartTime = Date.now()
+          this.callerNumber = message.start.from || ''
           const customParams = message.start.customParameters || {}
           
           // Log ALL received parameters for debugging
           logger.info('Twilio start event received', {
             streamSid: this.streamSid,
             callSid: this.callSid,
+            from: this.callerNumber,
             customParametersReceived: customParams,
             tenantIdBeforeCheck: this.tenantId
           })
@@ -304,7 +337,12 @@ Be warm, professional, and helpful in all interactions.`
 
         case 'stop':
           logger.info('Twilio stream stopped', { streamSid: this.streamSid })
-          this.cleanup()
+          // Make sure cleanup completes before handler exits
+          try {
+            await this.cleanup()
+          } catch (err) {
+            logger.error('Cleanup error in stop event', { err })
+          }
           break
       }
     } catch (error) {
@@ -371,6 +409,21 @@ Be warm, professional, and helpful in all interactions.`
 
         case 'response.audio_transcript.delta':
           logger.debug('AI speaking', { text: message.delta })
+          // Track AI responses for call summary
+          if (message.delta) {
+            const lastMsg = this.conversationHistory[this.conversationHistory.length - 1]
+            if (lastMsg && lastMsg.role === 'assistant') {
+              // Append to last AI message
+              lastMsg.content += message.delta
+            } else {
+              // New AI message
+              this.conversationHistory.push({
+                role: 'assistant',
+                content: message.delta,
+                timestamp: Date.now()
+              })
+            }
+          }
           break
 
         case 'input_audio_buffer.speech_started':
@@ -379,6 +432,14 @@ Be warm, professional, and helpful in all interactions.`
 
         case 'conversation.item.input_audio_transcription.completed':
           logger.info('User said', { transcript: message.transcript })
+          // Track user messages for call summary
+          if (message.transcript) {
+            this.conversationHistory.push({
+              role: 'user',
+              content: message.transcript,
+              timestamp: Date.now()
+            })
+          }
           break
 
         case 'response.function_call_arguments.delta':
@@ -513,16 +574,33 @@ Be warm, professional, and helpful in all interactions.`
     }
   }
 
-  private cleanup() {
+  private async cleanup() {
     if (this.isClosed) return
     this.isClosed = true
     
     logger.info('Cleaning up bridge', {
       streamSid: this.streamSid,
-      callSid: this.callSid
+      callSid: this.callSid,
+      conversationLength: this.conversationHistory.length
     })
     
     this.stopKeepalive()
+    
+    // Generate call summary if we have conversation data
+    // IMPORTANT: Generate summary even for blocked/anonymous callers
+    if (this.conversationHistory.length > 0 && this.tenantId) {
+      try {
+        await this.generateCallSummary()
+      } catch (error) {
+        logger.error('Error generating call summary - will retry once', { error })
+        // Retry once in case of transient failures
+        try {
+          await this.generateCallSummary()
+        } catch (retryError) {
+          logger.error('Failed to generate call summary after retry', { retryError })
+        }
+      }
+    }
     
     try {
       if (this.openaiWs && this.openaiWs.readyState === WebSocket.OPEN) {
@@ -538,6 +616,138 @@ Be warm, professional, and helpful in all interactions.`
       }
     } catch (error) {
       logger.error('Error closing Twilio WebSocket', { error })
+    }
+  }
+
+  private async generateCallSummary() {
+    try {
+      logger.info('Generating call summary', {
+        tenantId: this.tenantId,
+        caller: this.callerNumber,
+        messageCount: this.conversationHistory.length
+      })
+
+      // Build conversation transcript
+      const transcript = this.conversationHistory
+        .map(msg => `${msg.role === 'user' ? 'Customer' : 'Assistant'}: ${msg.content}`)
+        .join('\n')
+
+      // Use OpenAI to generate summary and extract outcome
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `You are analyzing a phone call between a customer and a business AI receptionist. 
+              
+Extract:
+1. A brief summary (2-3 sentences) of what was discussed
+2. The call outcome from these options:
+   - appointment_booked: Customer scheduled an appointment
+   - appointment_inquiry: Customer asked about appointments but didn't book
+   - pricing_inquiry: Customer asked about prices
+   - hours_inquiry: Customer asked about business hours
+   - general_inquiry: General questions about services
+   - complaint: Customer had a complaint
+   - callback_requested: Customer wants a callback
+   - wrong_number: Wrong number or spam
+   - incomplete: Call disconnected or incomplete
+
+3. If the customer provided their name, extract it
+4. If appointment was discussed, extract the service type if mentioned
+
+Respond in JSON format:
+{
+  "summary": "Brief summary here",
+  "outcome": "outcome_type",
+  "customer_name": "Name if provided, else null",
+  "service_requested": "Service type if discussed, else null",
+  "appointment_booked": true/false
+}`
+            },
+            {
+              role: 'user',
+              content: `Analyze this call transcript:\n\n${transcript}`
+            }
+          ],
+          temperature: 0.3,
+          response_format: { type: 'json_object' }
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+      const analysis = JSON.parse(data.choices[0].message.content)
+      
+      logger.info('Call analysis complete', analysis)
+
+      // Calculate call duration
+      const durationSeconds = Math.floor((Date.now() - this.callStartTime) / 1000)
+
+      // Save to Supabase
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.38.4')
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+      // Save call record - use placeholder for blocked/anonymous callers
+      const callerPhone = this.callerNumber || 'Unknown/Blocked'
+      const { data: callRecord, error: callError } = await supabase
+        .from('calls')
+        .insert({
+          tenant_id: this.tenantId,
+          from: callerPhone,
+          to: this.businessName || 'Voice Relay',
+          outcome: analysis.outcome,
+          duration: durationSeconds,
+          summary: analysis.summary,
+          at: new Date(this.callStartTime).toISOString()
+        })
+        .select()
+        .single()
+
+      if (callError) {
+        logger.error('Error saving call record', { error: callError })
+      } else {
+        logger.info('Call record saved', { callId: callRecord.id })
+      }
+
+      // Create lead if this was a meaningful inquiry
+      // Allow leads even for blocked numbers - they might provide contact info in conversation
+      if (analysis.outcome !== 'wrong_number' && analysis.outcome !== 'incomplete') {
+        const leadStatus = analysis.appointment_booked ? 'converted' : 
+                          analysis.outcome.includes('inquiry') ? 'new' : 'contacted'
+
+        const { data: leadRecord, error: leadError } = await supabase
+          .from('leads')
+          .insert({
+            tenant_id: this.tenantId,
+            name: analysis.customer_name || (this.callerNumber ? 'Phone Inquiry' : 'Anonymous Caller'),
+            phone: this.callerNumber || null,
+            source: 'phone_call',
+            status: leadStatus,
+            notes: `${analysis.summary}\n\nService interested: ${analysis.service_requested || 'Not specified'}`,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (leadError) {
+          logger.error('Error creating lead', { error: leadError })
+        } else {
+          logger.info('Lead created', { leadId: leadRecord.id })
+        }
+      }
+
+    } catch (error) {
+      logger.error('Failed to generate call summary', { error })
     }
   }
 
