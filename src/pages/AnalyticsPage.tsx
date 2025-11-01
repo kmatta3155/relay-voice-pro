@@ -25,12 +25,14 @@ export default function AnalyticsPage() {
     load();
     
     // Set up real-time subscriptions with proper cleanup
+    let isMounted = true;
     let callsSub: ReturnType<typeof supabase.channel> | null = null;
     let leadsSub: ReturnType<typeof supabase.channel> | null = null;
     let apptsSub: ReturnType<typeof supabase.channel> | null = null;
     
     (async () => {
       const tid = await tenantId();
+      if (!isMounted) return; // Don't subscribe if already unmounted
       
       callsSub = supabase
         .channel('analytics-calls')
@@ -50,6 +52,7 @@ export default function AnalyticsPage() {
     
     // Proper cleanup function
     return () => {
+      isMounted = false;
       callsSub?.unsubscribe();
       leadsSub?.unsubscribe();
       apptsSub?.unsubscribe();

@@ -42,7 +42,28 @@ export default function LeadsPage(){
     await load();
   }
 
-  useEffect(()=> { load(); },[]);
+  useEffect(() => {
+    load();
+    
+    // Real-time subscription for live updates
+    let isMounted = true;
+    let leadsSub: ReturnType<typeof supabase.channel> | null = null;
+    
+    (async () => {
+      const tid = await getTenantId();
+      if (!isMounted) return; // Don't subscribe if already unmounted
+      
+      leadsSub = supabase
+        .channel('leads-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `tenant_id=eq.${tid}` }, load)
+        .subscribe();
+    })();
+    
+    return () => {
+      isMounted = false;
+      leadsSub?.unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="space-y-4">

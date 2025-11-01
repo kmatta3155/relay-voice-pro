@@ -18,7 +18,28 @@ export default function CallsPage() {
     const { data } = await supabase.from("calls").select("*").eq("tenant_id", tid).order("at", { ascending: false });
     setRows(data || []);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    
+    // Real-time subscription for live updates
+    let isMounted = true;
+    let callsSub: ReturnType<typeof supabase.channel> | null = null;
+    
+    (async () => {
+      const tid = await tenantId();
+      if (!isMounted) return; // Don't subscribe if already unmounted
+      
+      callsSub = supabase
+        .channel('calls-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'calls', filter: `tenant_id=eq.${tid}` }, load)
+        .subscribe();
+    })();
+    
+    return () => {
+      isMounted = false;
+      callsSub?.unsubscribe();
+    };
+  }, []);
 
   return (
     <Card className="rounded-2xl shadow-sm">

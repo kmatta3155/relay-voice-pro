@@ -22,7 +22,28 @@ export default function AppointmentsPage() {
     const { data } = await supabase.from("appointments").select("*").eq("tenant_id", tid).order("start", { ascending: true });
     setRows(data || []);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    
+    // Real-time subscription for live updates
+    let isMounted = true;
+    let apptsSub: ReturnType<typeof supabase.channel> | null = null;
+    
+    (async () => {
+      const tid = await tenantId();
+      if (!isMounted) return; // Don't subscribe if already unmounted
+      
+      apptsSub = supabase
+        .channel('appointments-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `tenant_id=eq.${tid}` }, load)
+        .subscribe();
+    })();
+    
+    return () => {
+      isMounted = false;
+      apptsSub?.unsubscribe();
+    };
+  }, []);
 
   async function save(a: Partial<Appt>) {
     const tid = await tenantId();
