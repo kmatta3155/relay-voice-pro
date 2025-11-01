@@ -211,6 +211,34 @@ Be warm, professional, and helpful in all interactions.`
               },
               required: ['query']
             }
+          },
+          {
+            type: 'function',
+            name: 'check_availability',
+            description: 'Check if appointment slots are available on a specific date. Use this when customer asks about availability or wants to book an appointment.',
+            parameters: {
+              type: 'object',
+              properties: {
+                date: { type: 'string', description: 'The date to check availability in YYYY-MM-DD format (e.g., "2025-11-05")' }
+              },
+              required: ['date']
+            }
+          },
+          {
+            type: 'function',
+            name: 'book_appointment',
+            description: 'Book an appointment for a customer. Only use after confirming the customer wants to book and you have their name, desired date/time, and service.',
+            parameters: {
+              type: 'object',
+              properties: {
+                customer_name: { type: 'string', description: 'Full name of the customer' },
+                date: { type: 'string', description: 'Appointment date in YYYY-MM-DD format' },
+                time: { type: 'string', description: 'Appointment time in HH:MM format (24-hour, e.g., "14:30")' },
+                service: { type: 'string', description: 'Service name (e.g., "Ladies Haircut", "Gentleman\'s Haircut")' },
+                duration_minutes: { type: 'number', description: 'Duration in minutes (default 60)' }
+              },
+              required: ['customer_name', 'date', 'time', 'service']
+            }
           }
         ]
       }
@@ -480,6 +508,8 @@ Be warm, professional, and helpful in all interactions.`
         argsType: typeof args 
       })
       
+      let output: any
+      
       if (name === 'search_knowledge') {
         const parsedArgs = JSON.parse(args)
         const { query } = parsedArgs
@@ -490,25 +520,44 @@ Be warm, professional, and helpful in all interactions.`
           parsedArgs 
         })
         
-        // Search knowledge base via Supabase
-        const results = await this.searchKnowledge(query)
+        output = await this.searchKnowledge(query)
         
-        logger.info('📤 Sending function results to OpenAI', {
-          resultCount: results.length,
-          callId: call_id
-        })
+      } else if (name === 'check_availability') {
+        const parsedArgs = JSON.parse(args)
+        const { date } = parsedArgs
         
-        this.openaiWs?.send(JSON.stringify({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id,
-            output: JSON.stringify(results)
-          }
-        }))
+        logger.info('📅 Checking availability', { date })
         
-        this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
+        output = await this.checkAvailability(date)
+        
+      } else if (name === 'book_appointment') {
+        const parsedArgs = JSON.parse(args)
+        const { customer_name, date, time, service, duration_minutes } = parsedArgs
+        
+        logger.info('📝 Booking appointment', { customer_name, date, time, service })
+        
+        output = await this.bookAppointment(customer_name, date, time, service, duration_minutes || 60)
+        
+      } else {
+        logger.warn('Unknown function called', { name })
+        output = { error: 'Unknown function' }
       }
+      
+      logger.info('📤 Sending function results to OpenAI', {
+        functionName: name,
+        callId: call_id
+      })
+      
+      this.openaiWs?.send(JSON.stringify({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id,
+          output: JSON.stringify(output)
+        }
+      }))
+      
+      this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
     } catch (error) {
       logger.error('❌ Error handling function call', { 
         error: error instanceof Error ? error.message : 'Unknown',
@@ -571,6 +620,151 @@ Be warm, professional, and helpful in all interactions.`
         errorType: error?.constructor?.name
       })
       return []
+    }
+  }
+
+  private async checkAvailability(date: string) {
+    try {
+      logger.info('Checking availability', { date, tenantId: this.tenantId })
+      
+      // Import Supabase client dynamically
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      
+      // Parse date to get start/end of day
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+      
+      // Query existing appointments for this date
+      const { data: appointments, error } = await supabase
+        .from('appointments')
+        .select('start_at, end_at, title')
+        .eq('tenant_id', this.tenantId)
+        .gte('start_at', startOfDay.toISOString())
+        .lte('start_at', endOfDay.toISOString())
+        .order('start_at', { ascending: true })
+      
+      if (error) {
+        logger.error('Error querying appointments', { error })
+        return { available: true, message: 'Unable to check availability, but we can book your appointment' }
+      }
+      
+      // Business hours: 9 AM - 6 PM (18:00)
+      const businessStart = 9
+      const businessEnd = 18
+      const defaultDurationMinutes = 60 // Default 1-hour slots
+      
+      // Generate suggested time slots (every hour on the hour)
+      const suggestedSlots = []
+      for (let hour = businessStart; hour < businessEnd; hour++) {
+        const slotTime = `${hour.toString().padStart(2, '0')}:00`
+        const slotStart = new Date(`${date}T${slotTime}:00`)
+        const slotEnd = new Date(slotStart.getTime() + defaultDurationMinutes * 60000)
+        
+        // Check if this slot conflicts with existing appointments
+        // Two intervals overlap if: slotStart < aptEnd AND slotEnd > aptStart
+        const hasConflict = appointments?.some(apt => {
+          const aptStart = new Date(apt.start_at)
+          const aptEnd = new Date(apt.end_at)
+          return slotStart < aptEnd && slotEnd > aptStart
+        })
+        
+        if (!hasConflict) {
+          suggestedSlots.push(slotTime)
+        }
+      }
+      
+      return {
+        available: suggestedSlots.length > 0,
+        date,
+        available_slots: suggestedSlots.slice(0, 5), // Limit to 5 suggestions
+        booked_count: appointments?.length || 0,
+        message: suggestedSlots.length > 0 
+          ? `Available times: ${suggestedSlots.slice(0, 3).join(', ')}${suggestedSlots.length > 3 ? ' and more' : ''}`
+          : 'No available slots for this date'
+      }
+    } catch (error) {
+      logger.error('Availability check failed', { error })
+      return { available: true, message: 'Unable to check availability, but we can book your appointment' }
+    }
+  }
+
+  private async bookAppointment(customerName: string, date: string, time: string, service: string, durationMinutes: number) {
+    try {
+      logger.info('Booking appointment', { 
+        customerName, 
+        date, 
+        time, 
+        service, 
+        durationMinutes,
+        tenantId: this.tenantId 
+      })
+      
+      // Import Supabase client dynamically
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      
+      // Parse datetime
+      const startAt = new Date(`${date}T${time}:00`)
+      const endAt = new Date(startAt.getTime() + durationMinutes * 60000)
+      
+      // Check for conflicts
+      const { data: conflicts } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('tenant_id', this.tenantId)
+        .or(`and(start_at.lte.${endAt.toISOString()},end_at.gte.${startAt.toISOString()})`)
+      
+      if (conflicts && conflicts.length > 0) {
+        logger.warn('Appointment conflict detected', { conflicts })
+        return {
+          success: false,
+          message: 'This time slot is no longer available. Please choose another time.'
+        }
+      }
+      
+      // Create appointment
+      const { data: appointment, error } = await supabase
+        .from('appointments')
+        .insert({
+          tenant_id: this.tenantId,
+          title: service,
+          customer: customerName,
+          start_at: startAt.toISOString(),
+          end_at: endAt.toISOString(),
+          staff: null
+        })
+        .select()
+        .single()
+      
+      if (error) {
+        logger.error('Error creating appointment', { error })
+        return {
+          success: false,
+          message: 'Unable to book appointment at this time. Please try again or call back.'
+        }
+      }
+      
+      logger.info('Appointment booked successfully', { appointmentId: appointment.id })
+      
+      return {
+        success: true,
+        appointment_id: appointment.id,
+        customer_name: customerName,
+        service,
+        date,
+        time,
+        duration: durationMinutes,
+        message: `Appointment confirmed for ${customerName} on ${date} at ${time} for ${service}.`
+      }
+    } catch (error) {
+      logger.error('Appointment booking failed', { error })
+      return {
+        success: false,
+        message: 'Unable to book appointment at this time. Please try again or call back.'
+      }
     }
   }
 
