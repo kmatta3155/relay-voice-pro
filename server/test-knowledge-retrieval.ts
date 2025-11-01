@@ -166,12 +166,12 @@ async function testEndToEndKnowledgeFlow() {
     // Step 2: OpenAI triggers function call
     console.log('🤖 Step 2: OpenAI decides to call search_knowledge')
     const functionCall = {
-      type: 'response.function_call.arguments.done',
+      type: 'response.function_call_arguments.done',
       call_id: 'call_e2e_test',
       name: 'search_knowledge',
       arguments: JSON.stringify({ query })
     }
-    console.log(`   Event: ${functionCall.type} (FIXED from response.function_call_arguments.done)`)
+    console.log(`   Event: ${functionCall.type} (no dot between "call" and "arguments"!)`)
     console.log(`   Function: ${functionCall.name}`)
     console.log(`   Arguments: ${functionCall.arguments}\n`)
     
