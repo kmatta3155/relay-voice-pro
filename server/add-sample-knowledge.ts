@@ -13,32 +13,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL || ''
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const TENANT_ID = 'f3760fe8-4491-4ab1-83dd-4069b1a2d688'
 
-// Sample business information for Salon Blu
-// CUSTOMIZE THIS WITH YOUR ACTUAL BUSINESS INFORMATION!
+// REAL business information - Updated with actual pricing from your services menu!
 const businessInfo = [
   {
-    title: "Business Location and Contact",
-    content: `Salon Blu is located at 123 Main Street, Durham, NC 27701. You can reach us at (919) 420-3058. We're conveniently located in downtown Durham with plenty of parking available. Our salon is easily accessible by public transportation.`
-  },
-  {
-    title: "Business Hours",
-    content: `Salon Blu is open Monday through Saturday from 9:00 AM to 7:00 PM. We are closed on Sundays. Last appointments are accepted at 6:00 PM. We recommend booking in advance for weekend appointments as they fill up quickly.`
-  },
-  {
-    title: "Services and Pricing",
-    content: `Our pricing and costs for hair services: Women's Haircuts cost $45, Men's Haircuts are $30, Hair Coloring starts at $85, Highlights cost $95 and up, Balayage is $120 and up, Deep Conditioning Treatment costs $35, Blowout and Styling is $35, Updo Styling starts at $65, and Keratin Treatment costs $200 and up. If you're wondering how much a service costs or what our rates are, these are our standard fees. Prices may vary based on hair length and complexity.`
-  },
-  {
-    title: "Booking and Cancellation Policy",
-    content: `Appointments can be booked by calling (919) 420-3058 or through our online booking system. We require 24 hours notice for cancellations. Late cancellations or no-shows may be charged 50% of the service fee. We recommend booking 1-2 weeks in advance for popular time slots. Walk-ins are welcome based on availability.`
-  },
-  {
-    title: "Stylists and Specialties",
-    content: `Our team includes experienced stylists specializing in various techniques. Maria specializes in color and balayage. James focuses on precision cuts and men's grooming. Lisa is our expert in curly hair and natural textures. Sarah specializes in formal styling and updos. All stylists have at least 5 years of professional experience.`
-  },
-  {
-    title: "Products and Retail",
-    content: `We carry professional-grade hair care products including Redken, Olaplex, and Moroccan Oil. All products used in our salon are sulfate-free and color-safe. We offer a 10% discount on retail products for first-time clients. Ask your stylist for personalized product recommendations.`
+    title: "Services and Pricing - Complete Price List",
+    content: `Our pricing and costs for hair services: Ladies Haircut costs $53 for 30 minutes. Gentlemen Haircut is $37 for 30 minutes. Blowout (shampoo and blowout styling) costs $50 for 30 minutes. Brazilian Blowout (texture treatment for hair) is $351 for 30 minutes. Root Color treatment costs $53 for 30 minutes. Single Process Color (single process hair color) is $85 for 30 minutes. Partial Highlights (partial highlight for hair) cost $68 for 30 minutes. Balayage Full Head (full head balayage treatment) costs $151 for 30 minutes. If you're wondering how much any service costs or what our rates and fees are, these are our exact prices. All services are 30 minutes.`
   }
 ]
 
