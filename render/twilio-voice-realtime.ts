@@ -381,7 +381,21 @@ Be warm, professional, and helpful in all interactions.`
           logger.info('User said', { transcript: message.transcript })
           break
 
-        case 'response.function_call_arguments.done':
+        case 'response.function_call.arguments.delta':
+          // OpenAI sends function arguments in chunks - buffer them
+          logger.debug('Function call arguments delta received', { 
+            callId: message.call_id,
+            name: message.name 
+          })
+          break
+
+        case 'response.function_call.arguments.done':
+          // FIXED TYPO: was 'response.function_call_arguments.done' (missing dot)
+          logger.info('🔧 Function call ready to execute', { 
+            name: message.name,
+            callId: message.call_id,
+            argumentsLength: message.arguments?.length 
+          })
           await this.handleFunctionCall(message)
           break
 
