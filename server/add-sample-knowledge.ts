@@ -26,7 +26,7 @@ const businessInfo = [
   },
   {
     title: "Services and Pricing",
-    content: `We offer a full range of hair services including: Women's Haircuts ($45), Men's Haircuts ($30), Hair Coloring ($85+), Highlights ($95+), Balayage ($120+), Deep Conditioning Treatment ($35), Blowout and Styling ($35), Updo Styling ($65+), and Keratin Treatment ($200+). Prices may vary based on hair length and complexity.`
+    content: `Our pricing and costs for hair services: Women's Haircuts cost $45, Men's Haircuts are $30, Hair Coloring starts at $85, Highlights cost $95 and up, Balayage is $120 and up, Deep Conditioning Treatment costs $35, Blowout and Styling is $35, Updo Styling starts at $65, and Keratin Treatment costs $200 and up. If you're wondering how much a service costs or what our rates are, these are our standard fees. Prices may vary based on hair length and complexity.`
   },
   {
     title: "Booking and Cancellation Policy",
