@@ -412,12 +412,30 @@ Be warm, professional, and helpful in all interactions.`
     try {
       const { name, arguments: args, call_id } = message
       
+      logger.info('🔧 handleFunctionCall called', { 
+        name, 
+        callId: call_id,
+        argsRaw: args,
+        argsType: typeof args 
+      })
+      
       if (name === 'search_knowledge') {
-        const { query } = JSON.parse(args)
-        logger.info('Executing knowledge search', { query })
+        const parsedArgs = JSON.parse(args)
+        const { query } = parsedArgs
+        
+        logger.info('📞 Executing knowledge search', { 
+          query,
+          queryLength: query?.length,
+          parsedArgs 
+        })
         
         // Search knowledge base via Supabase
         const results = await this.searchKnowledge(query)
+        
+        logger.info('📤 Sending function results to OpenAI', {
+          resultCount: results.length,
+          callId: call_id
+        })
         
         this.openaiWs?.send(JSON.stringify({
           type: 'conversation.item.create',
@@ -431,7 +449,10 @@ Be warm, professional, and helpful in all interactions.`
         this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
       }
     } catch (error) {
-      logger.error('Error handling function call', { error })
+      logger.error('❌ Error handling function call', { 
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      })
     }
   }
 
