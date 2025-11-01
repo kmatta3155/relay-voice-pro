@@ -443,7 +443,8 @@ Be warm, professional, and helpful in all interactions.`
         supabaseUrl: SUPABASE_URL 
       })
       
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/search_knowledge`, {
+      // FIXED: Call the Edge Function, not RPC endpoint
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/search`, {
         method: 'POST',
         headers: {
           'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -451,10 +452,10 @@ Be warm, professional, and helpful in all interactions.`
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          query_text: query,
           tenant_id: this.tenantId,
-          match_count: 5,
-          match_threshold: 0.5
+          query: query,
+          k: 5,
+          min_score: 0.3
         })
       })
 
@@ -468,10 +469,16 @@ Be warm, professional, and helpful in all interactions.`
         throw new Error(`Knowledge search failed: ${response.status} ${response.statusText}`)
       }
 
-      const results = await response.json()
+      const responseData = await response.json()
+      
+      // FIXED: Search Edge Function returns {ok, results, search_type}, not a simple array
+      const results = responseData.results || []
+      
       logger.info('Knowledge search results', { 
-        resultCount: Array.isArray(results) ? results.length : 0,
-        hasResults: !!results && results.length > 0
+        resultCount: results.length,
+        hasResults: results.length > 0,
+        searchType: responseData.search_type,
+        queryIntent: responseData.query_intent
       })
       
       return results

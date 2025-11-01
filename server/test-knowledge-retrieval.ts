@@ -56,7 +56,7 @@ async function testEnvironment() {
 // Test 2: Supabase RPC Function Exists
 async function testRPCExists() {
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/search_knowledge`, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/search`, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -64,28 +64,27 @@ async function testRPCExists() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        query_text: 'test',
         tenant_id: TEST_TENANT_ID,
-        match_count: 1,
-        match_threshold: 0.5
+        query: 'test',
+        k: 1,
+        min_score: 0.3
       })
     })
     
-    // 200 or 404 both mean RPC endpoint is accessible
-    const passed = response.status === 200 || response.status === 404
+    const passed = response.status === 200
     const body = await response.text()
     
     logTest(
-      'Supabase RPC Endpoint',
+      'Supabase Search Endpoint',
       passed,
-      `HTTP ${response.status}: search_knowledge RPC ${passed ? 'accessible' : 'not found'}`,
+      `HTTP ${response.status}: search Edge Function ${passed ? 'accessible' : 'not found'}`,
       { status: response.status, responsePreview: body.substring(0, 200) }
     )
     
     return passed
   } catch (error: any) {
     logTest(
-      'Supabase RPC Endpoint',
+      'Supabase Search Endpoint',
       false,
       `Connection error: ${error?.message || 'Unknown'}`,
       { error: error?.message }
@@ -108,7 +107,7 @@ async function testKnowledgeBaseData() {
     const queryResults: any[] = []
     
     for (const query of testQueries) {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/search_knowledge`, {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/search`, {
         method: 'POST',
         headers: {
           'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -116,16 +115,17 @@ async function testKnowledgeBaseData() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          query_text: query,
           tenant_id: TEST_TENANT_ID,
-          match_count: 5,
-          match_threshold: 0.5
+          query: query,
+          k: 5,
+          min_score: 0.3
         })
       })
       
       if (response.ok) {
-        const results = await response.json()
-        const count = Array.isArray(results) ? results.length : 0
+        const responseData = await response.json()
+        const results = responseData.results || []
+        const count = results.length
         queryResults.push({ query, count, hasResults: count > 0 })
         if (count > 0) hasAnyData = true
       }
@@ -178,7 +178,7 @@ async function testEndToEndKnowledgeFlow() {
     // Step 3: Handler executes search
     console.log('🔍 Step 3: Voice service executes search_knowledge()')
     const args = JSON.parse(functionCall.arguments)
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/search_knowledge`, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/search`, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -186,10 +186,10 @@ async function testEndToEndKnowledgeFlow() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        query_text: args.query,
         tenant_id: TEST_TENANT_ID,
-        match_count: 5,
-        match_threshold: 0.5
+        query: args.query,
+        k: 5,
+        min_score: 0.3
       })
     })
     
@@ -197,8 +197,9 @@ async function testEndToEndKnowledgeFlow() {
       throw new Error(`HTTP ${response.status}: ${await response.text()}`)
     }
     
-    const results = await response.json()
-    const resultCount = Array.isArray(results) ? results.length : 0
+    const responseData = await response.json()
+    const results = responseData.results || []
+    const resultCount = results.length
     console.log(`   Query: "${args.query}"`)
     console.log(`   Tenant: ${TEST_TENANT_ID}`)
     console.log(`   Results: ${resultCount} knowledge chunks found\n`)
