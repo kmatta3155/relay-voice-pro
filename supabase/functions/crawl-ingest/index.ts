@@ -38,6 +38,12 @@ interface ExtractionResult {
   services: ExtractedService[];
   hours: ExtractedHours[];
   business_info?: any;
+  policies?: {
+    timezone?: string;
+    cancellation_policy?: string;
+    booking_policy?: string;
+    deposit_policy?: string;
+  };
   pages_fetched: number;
   used_firecrawl: boolean;
   extraction_method: string;
@@ -363,7 +369,48 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
   return services;
 }
 
-async function extractWithAI(content: string): Promise<{ services: ExtractedService[]; hours: ExtractedHours[]; business_info?: any }> {
+// Helper: Retry logic for OpenAI API calls with exponential backoff
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  initialDelay = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Check if it's a rate limit error (429)
+      if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        console.log(`Rate limit hit, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      // For other errors, throw immediately
+      throw error;
+    }
+  }
+  
+  throw lastError || new Error('Retry failed');
+}
+
+async function extractWithAI(content: string): Promise<{ 
+  services: ExtractedService[]; 
+  hours: ExtractedHours[]; 
+  business_info?: any;
+  policies?: {
+    timezone?: string;
+    cancellation_policy?: string;
+    booking_policy?: string;
+    deposit_policy?: string;
+  }
+}> {
   if (!OPENAI_API_KEY) {
     console.log('No OpenAI API key available, skipping AI extraction');
     return { services: [], hours: [] };
@@ -418,7 +465,7 @@ async function extractWithAI(content: string): Promise<{ services: ExtractedServ
     const chunk = chunks[i];
     console.log(`Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
     
-  const prompt = `You are a business data extraction expert. Extract ALL services, treatments, packages, business hours, and business information from this salon/spa website content. Be comprehensive but filter out junk data.
+  const prompt = `You are a business data extraction expert. Extract ALL services, treatments, packages, business hours, policies, and business information from this salon/spa website content. Be comprehensive but filter out junk data.
 
 CRITICAL INSTRUCTIONS:
 1. Extract ONLY legitimate services, treatments, packages - NOT navigation text, headers, or contact info
@@ -426,7 +473,9 @@ CRITICAL INSTRUCTIONS:
 3. Look for actual service names like "Haircut", "Color Treatment", "Facial", "Massage"
 4. Extract business addresses, phone numbers, and contact information
 5. Find business hours from any mention of opening/closing times
-6. If no explicit prices exist, do NOT make up prices - omit price field entirely
+6. Extract policies: cancellation, booking, deposit requirements
+7. Detect timezone from address/location (e.g., New York = America/New_York, Los Angeles = America/Los_Angeles)
+8. If no explicit prices exist, do NOT make up prices - omit price field entirely
 
 Return ONLY valid JSON:
 {
@@ -451,6 +500,12 @@ Return ONLY valid JSON:
     "addresses": ["Full address 1", "Full address 2"],
     "phone": "Phone number",
     "email": "Email address"
+  },
+  "policies": {
+    "timezone": "America/New_York",
+    "cancellation_policy": "24-hour cancellation notice required" (if found),
+    "booking_policy": "Book online or call to schedule" (if found),
+    "deposit_policy": "50% deposit required for appointments over $200" (if found)
   }
 }
 
@@ -481,27 +536,31 @@ Website Content Chunk ${i + 1}:
 ${chunk}`;
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 4000, // Increased for comprehensive extraction
-          temperature: 0.1,
-        }),
-        signal: AbortSignal.timeout(15000) // 15 second timeout per request
+      // Wrap OpenAI call with retry logic for rate limiting
+      const data = await retryWithBackoff(async () => {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 4000, // Increased for comprehensive extraction
+            temperature: 0.1,
+          }),
+          signal: AbortSignal.timeout(15000) // 15 second timeout per request
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`OpenAI API error ${response.status}: ${errorText}`);
+        }
+
+        return await response.json();
       });
 
-      if (!response.ok) {
-        console.error(`OpenAI API error for chunk ${i + 1}: ${response.status}`);
-        continue;
-      }
-
-      const data = await response.json();
       let aiResponse = data.choices[0].message.content.trim();
       
       // Remove code fences if present
@@ -520,6 +579,12 @@ ${chunk}`;
       // Store business info from first chunk that has it
       if (parsed.business_info && !businessInfo) {
         businessInfo = parsed.business_info;
+      }
+      
+      // Store policies from first chunk that has them
+      if (parsed.policies && !businessInfo?.policies) {
+        businessInfo = businessInfo || {};
+        businessInfo.policies = parsed.policies;
       }
       
       console.log(`Chunk ${i + 1} extracted: ${parsed.services?.length || 0} services, ${parsed.hours?.length || 0} hours`);
@@ -550,7 +615,8 @@ ${chunk}`;
   return {
     services: uniqueServices,
     hours: uniqueHours,
-    business_info: businessInfo
+    business_info: businessInfo,
+    policies: businessInfo?.policies
   };
 }
 
@@ -578,7 +644,17 @@ function normalizeTime(timeStr: string): string {
   return timeStr;
 }
 
-async function saveToDatabase(tenantId: string, services: ExtractedService[], hours: ExtractedHours[]) {
+async function saveToDatabase(
+  tenantId: string, 
+  services: ExtractedService[], 
+  hours: ExtractedHours[],
+  policies?: {
+    timezone?: string;
+    cancellation_policy?: string;
+    booking_policy?: string;
+    deposit_policy?: string;
+  }
+) {
   console.log(`Saving ${services.length} services and ${hours.length} hours entries to database`);
   
   // Save services
@@ -621,6 +697,30 @@ async function saveToDatabase(tenantId: string, services: ExtractedService[], ho
     
     if (error) {
       console.error('Failed to save business hours:', hour.day, error);
+    }
+  }
+  
+  // Save tenant settings (timezone and policies)
+  if (policies) {
+    console.log('Saving tenant settings with auto-extracted policies');
+    const { error } = await supabase
+      .from('tenant_settings')
+      .upsert({
+        tenant_id: tenantId,
+        timezone: policies.timezone || 'America/New_York',
+        cancellation_policy: policies.cancellation_policy,
+        booking_policy: policies.booking_policy,
+        deposit_policy: policies.deposit_policy,
+        auto_extracted: true,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'tenant_id'
+      });
+    
+    if (error) {
+      console.error('Failed to save tenant settings:', error);
+    } else {
+      console.log('Tenant settings saved successfully');
     }
   }
 }
@@ -703,13 +803,14 @@ serve(async (req) => {
     console.log(`Final results: ${uniqueServices.length} services, ${uniqueHours.length} hours entries`);
 
     // Save to database
-    await saveToDatabase(finalTenantId, uniqueServices, uniqueHours);
+    await saveToDatabase(finalTenantId, uniqueServices, uniqueHours, aiData.policies);
 
 
     const result: ExtractionResult = {
       services: uniqueServices,
       hours: uniqueHours,
       business_info: aiData.business_info,
+      policies: aiData.policies,
       pages_fetched,
       used_firecrawl,
       extraction_method
