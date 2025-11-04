@@ -20,6 +20,7 @@ import AdminOnboarding from "@/pages/AdminOnboarding";
 import AcceptInvite from "@/pages/AcceptInvite";
 import KnowledgePage from "@/pages/KnowledgePage";
 import KnowledgeShowcase from "@/components/demo/KnowledgeShowcase";
+import SettingsPage from "@/pages/SettingsPage";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLink from "@/components/admin/AdminLink";
 import AdminNavBar from "@/components/admin/AdminNavBar";
@@ -259,7 +260,7 @@ function DashboardShell(){
             <Route path="/messages" element={<Dashboard />} />
             <Route path="/calls" element={<Dashboard />} />
             <Route path="/analytics" element={<Dashboard />} />
-            <Route path="/settings" element={<Dashboard />} />
+            <Route path="/settings" element={<SettingsPage />} />
             
             {/* Admin Routes */}
             <Route 

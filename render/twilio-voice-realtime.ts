@@ -253,6 +253,35 @@ Be warm, professional, and helpful in all interactions.`
               },
               required: ['customer_name', 'date', 'time', 'service']
             }
+          },
+          {
+            type: 'function',
+            name: 'reschedule_appointment',
+            description: 'Reschedule an existing appointment to a new date/time. Ask customer for their name and current appointment details to find it, then the new desired date/time.',
+            parameters: {
+              type: 'object',
+              properties: {
+                customer_name: { type: 'string', description: 'Name of the customer whose appointment to reschedule' },
+                current_date: { type: 'string', description: 'Current appointment date in YYYY-MM-DD format' },
+                new_date: { type: 'string', description: 'New appointment date in YYYY-MM-DD format' },
+                new_time: { type: 'string', description: 'New appointment time in HH:MM format (24-hour)' }
+              },
+              required: ['customer_name', 'current_date', 'new_date', 'new_time']
+            }
+          },
+          {
+            type: 'function',
+            name: 'cancel_appointment',
+            description: 'Cancel an existing appointment. Ask customer for their name and appointment date to find and cancel it. Always confirm before canceling.',
+            parameters: {
+              type: 'object',
+              properties: {
+                customer_name: { type: 'string', description: 'Name of the customer whose appointment to cancel' },
+                date: { type: 'string', description: 'Appointment date in YYYY-MM-DD format' },
+                reason: { type: 'string', description: 'Reason for cancellation (optional)' }
+              },
+              required: ['customer_name', 'date']
+            }
           }
         ]
       }
@@ -552,6 +581,22 @@ Be warm, professional, and helpful in all interactions.`
         
         output = await this.bookAppointment(customer_name, date, time, service, duration_minutes || 60)
         
+      } else if (name === 'reschedule_appointment') {
+        const parsedArgs = JSON.parse(args)
+        const { customer_name, current_date, new_date, new_time } = parsedArgs
+        
+        logger.info('🔄 Rescheduling appointment', { customer_name, current_date, new_date, new_time })
+        
+        output = await this.rescheduleAppointment(customer_name, current_date, new_date, new_time)
+        
+      } else if (name === 'cancel_appointment') {
+        const parsedArgs = JSON.parse(args)
+        const { customer_name, date, reason } = parsedArgs
+        
+        logger.info('❌ Canceling appointment', { customer_name, date, reason })
+        
+        output = await this.cancelAppointment(customer_name, date, reason)
+        
       } else {
         logger.warn('Unknown function called', { name })
         output = { error: 'Unknown function' }
@@ -844,6 +889,217 @@ Be warm, professional, and helpful in all interactions.`
       return {
         success: false,
         message: 'Unable to book appointment at this time. Please try again or call back.'
+      }
+    }
+  }
+
+  private async rescheduleAppointment(customerName: string, currentDate: string, newDate: string, newTime: string) {
+    try {
+      logger.info('Rescheduling appointment', { 
+        customerName, 
+        currentDate, 
+        newDate, 
+        newTime,
+        tenantId: this.tenantId 
+      })
+      
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      
+      // Find existing appointment
+      const currentDateStart = this.parseESTDateTime(currentDate, '00:00')
+      const currentDateEnd = this.parseESTDateTime(currentDate, '23:59')
+      
+      const { data: existingAppointments, error: findError } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('tenant_id', this.tenantId)
+        .ilike('customer', `%${customerName}%`)
+        .gte('start_at', currentDateStart.toISOString())
+        .lte('start_at', currentDateEnd.toISOString())
+        .neq('status', 'cancelled')
+      
+      if (findError || !existingAppointments || existingAppointments.length === 0) {
+        logger.warn('Appointment not found for rescheduling', { customerName, currentDate })
+        return {
+          success: false,
+          message: `I couldn't find an appointment for ${customerName} on ${currentDate}. Could you verify the name and date?`
+        }
+      }
+      
+      const appointmentToReschedule = existingAppointments[0]
+      const durationMs = new Date(appointmentToReschedule.end_at).getTime() - new Date(appointmentToReschedule.start_at).getTime()
+      const durationMinutes = durationMs / 60000
+      
+      // Parse new datetime
+      const newStartAt = this.parseESTDateTime(newDate, newTime)
+      const newEndAt = new Date(newStartAt.getTime() + durationMs)
+      
+      // Check tenant business hours for the new time
+      const newDateObj = new Date(newDate)
+      const dayOfWeek = newDateObj.getUTCDay()
+      
+      const { data: businessHours } = await supabase
+        .from('business_hours')
+        .select('*')
+        .eq('tenant_id', this.tenantId)
+        .eq('dow', dayOfWeek)
+        .single()
+      
+      if (businessHours && businessHours.is_closed) {
+        return {
+          success: false,
+          message: `We are closed on that day. Please choose a different date.`
+        }
+      }
+      
+      // Check for conflicts at new time (excluding current appointment)
+      const { data: conflicts } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('tenant_id', this.tenantId)
+        .neq('id', appointmentToReschedule.id)
+        .neq('status', 'cancelled')
+        .or(`and(start_at.lte.${newEndAt.toISOString()},end_at.gte.${newStartAt.toISOString()})`)
+      
+      if (conflicts && conflicts.length > 0) {
+        logger.warn('Conflict detected for new time slot', { conflicts })
+        return {
+          success: false,
+          message: `The new time slot on ${newDate} at ${newTime} is not available. Would you like to try a different time?`
+        }
+      }
+      
+      // Update appointment
+      const { data: updated, error: updateError } = await supabase
+        .from('appointments')
+        .update({
+          start_at: newStartAt.toISOString(),
+          end_at: newEndAt.toISOString(),
+          status: 'scheduled'
+        })
+        .eq('id', appointmentToReschedule.id)
+        .select()
+        .single()
+      
+      if (updateError) {
+        logger.error('Error rescheduling appointment', { error: updateError })
+        return {
+          success: false,
+          message: 'Unable to reschedule the appointment at this time. Please try again.'
+        }
+      }
+      
+      logger.info('Appointment rescheduled successfully', { appointmentId: updated.id })
+      
+      return {
+        success: true,
+        appointment_id: updated.id,
+        customer_name: customerName,
+        old_date: currentDate,
+        new_date: newDate,
+        new_time: newTime,
+        message: `Your appointment has been rescheduled to ${newDate} at ${newTime}.`
+      }
+    } catch (error) {
+      logger.error('Appointment rescheduling failed', { error })
+      return {
+        success: false,
+        message: 'Unable to reschedule the appointment at this time. Please try again or call back.'
+      }
+    }
+  }
+
+  private async cancelAppointment(customerName: string, date: string, reason?: string) {
+    try {
+      logger.info('Canceling appointment', { 
+        customerName, 
+        date, 
+        reason,
+        tenantId: this.tenantId 
+      })
+      
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      
+      // Load tenant cancellation policy
+      const { data: tenantSettings } = await supabase
+        .from('tenant_settings')
+        .select('cancellation_policy')
+        .eq('tenant_id', this.tenantId)
+        .single()
+      
+      // Find existing appointment
+      const dateStart = this.parseESTDateTime(date, '00:00')
+      const dateEnd = this.parseESTDateTime(date, '23:59')
+      
+      const { data: existingAppointments, error: findError } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('tenant_id', this.tenantId)
+        .ilike('customer', `%${customerName}%`)
+        .gte('start_at', dateStart.toISOString())
+        .lte('start_at', dateEnd.toISOString())
+        .neq('status', 'cancelled')
+      
+      if (findError || !existingAppointments || existingAppointments.length === 0) {
+        logger.warn('Appointment not found for cancellation', { customerName, date })
+        return {
+          success: false,
+          message: `I couldn't find an appointment for ${customerName} on ${date}. Could you verify the name and date?`
+        }
+      }
+      
+      const appointmentToCancel = existingAppointments[0]
+      
+      // Check if cancellation is within policy window (if policy exists)
+      if (tenantSettings?.cancellation_policy && tenantSettings.cancellation_policy.includes('24')) {
+        const appointmentTime = new Date(appointmentToCancel.start_at).getTime()
+        const now = Date.now()
+        const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60)
+        
+        if (hoursUntilAppointment < 24) {
+          logger.warn('Cancellation within 24-hour window', { hoursUntilAppointment })
+          return {
+            success: false,
+            message: `According to our cancellation policy, appointments must be cancelled at least 24 hours in advance. Your appointment is in ${Math.round(hoursUntilAppointment)} hours. Please call us directly for assistance.`
+          }
+        }
+      }
+      
+      // Cancel appointment
+      const { data: cancelled, error: cancelError } = await supabase
+        .from('appointments')
+        .update({
+          status: 'cancelled'
+        })
+        .eq('id', appointmentToCancel.id)
+        .select()
+        .single()
+      
+      if (cancelError) {
+        logger.error('Error canceling appointment', { error: cancelError })
+        return {
+          success: false,
+          message: 'Unable to cancel the appointment at this time. Please try again.'
+        }
+      }
+      
+      logger.info('Appointment cancelled successfully', { appointmentId: cancelled.id, reason })
+      
+      return {
+        success: true,
+        appointment_id: cancelled.id,
+        customer_name: customerName,
+        date,
+        reason: reason || 'Not specified',
+        message: `Your appointment on ${date} has been cancelled.${reason ? ` Reason: ${reason}` : ''}`
+      }
+    } catch (error) {
+      logger.error('Appointment cancellation failed', { error })
+      return {
+        success: false,
+        message: 'Unable to cancel the appointment at this time. Please try again or call back.'
       }
     }
   }

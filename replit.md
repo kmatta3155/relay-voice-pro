@@ -74,6 +74,47 @@ Preferred communication style: Simple, everyday language.
   
 - **Status**: ✅ Implementation complete, documentation verified, ready for production deployment
 
+### Feature Enhancements (November 2025)
+**AI Receptionist Improvements - IN PROGRESS**
+
+Five major improvements to enhance Voice Relay Pro's functionality:
+
+1. **✅ Knowledge Base Auto-Extraction** (COMPLETE)
+   - Enhanced `supabase/functions/crawl-ingest/index.ts` to extract structured business data
+   - AI now extracts: timezone, cancellation policy, booking policy, deposit policy from websites
+   - Implemented exponential backoff retry logic for OpenAI rate limiting (429 errors)
+   - Auto-populates `tenant_settings` table with `auto_extracted` flag
+   
+2. **⚠️ Appointment Management** (PARTIAL - Needs Business Hours Validation)
+   - Added `reschedule_appointment` and `cancel_appointment` AI functions
+   - Reschedule: Finds existing appointment, checks conflicts, updates to new time
+   - Cancel: Sets appointment status to 'cancelled', enforces basic policy checks
+   - **TODO**: Add full business hours time range validation for reschedule
+   - **TODO**: Implement structured cancellation policy enforcement (hours-based, not text search)
+
+3. **✅ Business Hours Configuration** (COMPLETE)
+   - Built comprehensive Settings page (`src/pages/SettingsPage.tsx`)
+   - Features: Business hours editor (7 days), timezone selector, policy text areas
+   - Shows auto-extraction indicator when data comes from website crawl
+   - Saves to `business_hours` and `tenant_settings` tables
+   
+4. **❌ SMS Notifications** (NOT STARTED)
+   - Planned: Send confirmations after booking, rescheduling, canceling
+   - Planned: Use tenant's Twilio number as sender
+   - Planned: Include appointment details and add-to-calendar links
+   
+5. **❌ Lead Scoring & Pipeline** (NOT STARTED)
+   - Planned: Add `pipeline_stage` column to leads (schema updated)
+   - Planned: Auto-score based on call outcome (appointment_booked=100pts, inquiry=30pts, etc.)
+   - Planned: Visual pipeline in Leads dashboard with drag-and-drop
+
+- **Database Schema Updates**:
+  - Added `tenant_settings` table with timezone and policy fields
+  - Added `pipeline_stage` column to `leads` table
+  - Added `status` and `customer_phone` columns to `appointments` table
+  
+- **Status**: 2/5 complete, 1 partial, 2 pending
+
 ## System Architecture
 
 ### Frontend Architecture
