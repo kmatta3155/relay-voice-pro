@@ -92,6 +92,17 @@ export const tenant_branding = pgTable('tenant_branding', {
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
 });
 
+// Tenant Settings
+export const tenant_settings = pgTable('tenant_settings', {
+  tenant_id: uuid('tenant_id').primaryKey(),
+  timezone: text('timezone').default('America/New_York').notNull(),
+  cancellation_policy: text('cancellation_policy'),
+  booking_policy: text('booking_policy'),
+  deposit_policy: text('deposit_policy'),
+  auto_extracted: boolean('auto_extracted').default(false), // Set to true if extracted from knowledge base
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow()
+});
+
 // ========== COMMUNICATION TABLES ==========
 
 // Leads
@@ -105,8 +116,9 @@ export const leads = pgTable('leads', {
   status: text('status'),
   value: integer('value'),
   notes: text('notes'),
-  score: integer('score'),
+  score: integer('score').default(0),
   score_tier: text('score_tier'),
+  pipeline_stage: text('pipeline_stage').default('new'), // new | contacted | qualified | converted | lost
   intent: text('intent'),
   owner_id: uuid('owner_id'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
@@ -257,9 +269,11 @@ export const appointments = pgTable('appointments', {
   tenant_id: uuid('tenant_id').notNull(),
   title: text('title').notNull(),
   customer: text('customer').notNull(),
+  customer_phone: text('customer_phone'), // Store phone for SMS notifications
   start_at: timestamp('start_at', { withTimezone: true }).notNull(),
   end_at: timestamp('end_at', { withTimezone: true }).notNull(),
   staff: text('staff'),
+  status: text('status').default('scheduled').notNull(), // scheduled | confirmed | cancelled | completed | no_show
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow()
 });
 
