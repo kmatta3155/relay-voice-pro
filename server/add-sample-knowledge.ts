@@ -17,7 +17,25 @@ const TENANT_ID = 'f3760fe8-4491-4ab1-83dd-4069b1a2d688'
 const businessInfo = [
   {
     title: "Services and Pricing - Complete Price List",
-    content: `Our pricing and costs for hair services: Ladies Haircut costs $53 for 30 minutes. Gentlemen Haircut is $37 for 30 minutes. Blowout (shampoo and blowout styling) costs $50 for 30 minutes. Brazilian Blowout (texture treatment for hair) is $351 for 30 minutes. Root Color treatment costs $53 for 30 minutes. Single Process Color (single process hair color) is $85 for 30 minutes. Partial Highlights (partial highlight for hair) cost $68 for 30 minutes. Balayage Full Head (full head balayage treatment) costs $151 for 30 minutes. If you're wondering how much any service costs or what our rates and fees are, these are our exact prices. All services are 30 minutes.`
+    content: `Our pricing and costs for hair services:
+
+Ladies Haircut (women's haircut, female haircut) costs $53 for 30 minutes.
+
+Men's Haircut (gentlemen haircut, gentleman's haircut, male haircut, guys haircut, men haircut) is $37 for 30 minutes.
+
+Blowout (shampoo and blowout styling, blow dry) costs $50 for 30 minutes.
+
+Brazilian Blowout (texture treatment for hair, smoothing treatment) is $351 for 30 minutes.
+
+Root Color treatment costs $53 for 30 minutes.
+
+Single Process Color (single process hair color, all over color) is $85 for 30 minutes.
+
+Partial Highlights (partial highlight for hair, partial foils) cost $68 for 30 minutes.
+
+Balayage Full Head (full head balayage treatment, balayage highlights) costs $151 for 30 minutes.
+
+If you're wondering how much any service costs, what our rates are, what our fees are, or what our prices are, these are our exact prices. All services are 30 minutes long.`
   }
 ]
 

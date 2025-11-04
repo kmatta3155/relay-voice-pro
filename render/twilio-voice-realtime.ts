@@ -170,18 +170,32 @@ class TwilioOpenAIBridge {
     // Use custom instructions from parameters if database config is empty
     const defaultInstructions = `You are a professional AI receptionist for ${this.businessName || 'this business'}.
 
+PRICING INFORMATION (use this if search_knowledge fails):
+- Ladies Haircut / Women's Haircut: $53
+- Men's Haircut / Gentleman's Haircut: $37
+- Blowout / Blow Dry: $50
+- Brazilian Blowout: $351
+- Root Color: $53
+- Single Process Color: $85
+- Partial Highlights: $68
+- Balayage Full Head: $151
+
 CRITICAL: When customers ask questions about the business (hours, location, services, pricing, policies, etc.), you MUST use the search_knowledge function to find accurate information from the knowledge base.
+
+If search_knowledge returns no results for pricing questions, use the pricing information above.
 
 NEVER make up or guess information. ALWAYS search the knowledge base first using search_knowledge before answering questions about:
 - Business hours or operating times
 - Location, address, or directions  
 - Services offered or menu items
-- Pricing or costs
+- Pricing or costs (use fallback pricing if search fails)
 - Policies or procedures
 - Staff members or team
 - Appointment availability or booking
 
 After receiving search results, provide the information naturally in your response. If the knowledge base doesn't have the answer, politely say you don't have that information and offer to take a message or have someone call them back.
+
+CALLBACK REQUESTS: If a customer asks for someone to call them back, make sure to get their phone number and note their request clearly.
 
 Be warm, professional, and helpful in all interactions.`
     
@@ -651,7 +665,7 @@ Be warm, professional, and helpful in all interactions.`
         return { available: true, message: 'Unable to check availability, but we can book your appointment' }
       }
       
-      // Business hours: 9 AM - 6 PM (18:00)
+      // Business hours: 9 AM - 6 PM (18:00) EST
       const businessStart = 9
       const businessEnd = 18
       const defaultDurationMinutes = 60 // Default 1-hour slots
@@ -660,7 +674,8 @@ Be warm, professional, and helpful in all interactions.`
       const suggestedSlots = []
       for (let hour = businessStart; hour < businessEnd; hour++) {
         const slotTime = `${hour.toString().padStart(2, '0')}:00`
-        const slotStart = new Date(`${date}T${slotTime}:00`)
+        // Parse time in EST timezone
+        const slotStart = this.parseESTDateTime(date, slotTime)
         const slotEnd = new Date(slotStart.getTime() + defaultDurationMinutes * 60000)
         
         // Check if this slot conflicts with existing appointments
@@ -691,6 +706,64 @@ Be warm, professional, and helpful in all interactions.`
     }
   }
 
+  // Helper: Determine if DST is in effect for US Eastern timezone on a given date
+  private isDST(date: Date): boolean {
+    // DST in US Eastern: Second Sunday in March to first Sunday in November
+    const year = date.getUTCFullYear()
+    const month = date.getUTCMonth() // 0-indexed
+    const day = date.getUTCDate()
+    
+    // DST months: March (2) through October (9), plus parts of November (10)
+    // Not DST: December (11), January (0), February (1)
+    if (month < 2 || month > 10) return false // Dec, Jan, Feb
+    if (month > 2 && month < 10) return true // Apr-Oct
+    
+    // March: DST starts second Sunday
+    if (month === 2) {
+      // Find second Sunday of March
+      const firstDay = new Date(Date.UTC(year, 2, 1))
+      const firstSunday = firstDay.getUTCDay() === 0 ? 1 : (7 - firstDay.getUTCDay() + 1)
+      const secondSunday = firstSunday + 7
+      return day >= secondSunday
+    }
+    
+    // November: DST ends first Sunday
+    if (month === 10) {
+      // Find first Sunday of November
+      const firstDay = new Date(Date.UTC(year, 10, 1))
+      const firstSunday = firstDay.getUTCDay() === 0 ? 1 : (7 - firstDay.getUTCDay() + 1)
+      return day < firstSunday
+    }
+    
+    return false
+  }
+
+  // Helper: Convert EST/EDT date/time to UTC (handles daylight saving automatically)
+  private parseESTDateTime(date: string, time: string): Date {
+    // Parse as if in US Eastern timezone
+    // Create date in UTC first to determine DST status
+    const dateStr = `${date}T${time}:00`
+    const tempDate = new Date(dateStr + 'Z') // Parse as UTC temporarily
+    
+    // Check if DST is in effect for this date
+    const dstActive = this.isDST(tempDate)
+    
+    // EST offset is UTC-5 (300 minutes), EDT offset is UTC-4 (240 minutes)
+    // We ADD the offset to convert local Eastern time to UTC
+    const offsetMinutes = dstActive ? 240 : 300
+    const utcTime = new Date(tempDate.getTime() + offsetMinutes * 60000)
+    
+    logger.info('Timezone conversion', {
+      inputDate: date,
+      inputTime: time,
+      dstActive,
+      offset: dstActive ? 'EDT (UTC-4)' : 'EST (UTC-5)',
+      utcResult: utcTime.toISOString()
+    })
+    
+    return utcTime
+  }
+
   private async bookAppointment(customerName: string, date: string, time: string, service: string, durationMinutes: number) {
     try {
       logger.info('Booking appointment', { 
@@ -706,9 +779,16 @@ Be warm, professional, and helpful in all interactions.`
       const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
       
-      // Parse datetime
-      const startAt = new Date(`${date}T${time}:00`)
+      // Parse datetime in EST timezone and convert to UTC for database storage
+      const startAt = this.parseESTDateTime(date, time)
       const endAt = new Date(startAt.getTime() + durationMinutes * 60000)
+      
+      logger.info('Timezone conversion', {
+        inputTime: time,
+        inputDate: date,
+        utcStartAt: startAt.toISOString(),
+        utcEndAt: endAt.toISOString()
+      })
       
       // Check for conflicts
       const { data: conflicts } = await supabase
@@ -855,6 +935,8 @@ Extract:
 
 3. If the customer provided their name, extract it
 4. If appointment was discussed, extract the service type if mentioned
+5. If customer requested a callback, extract their callback phone number if provided
+6. If customer requested a callback, extract the reason for the callback
 
 Respond in JSON format:
 {
@@ -862,7 +944,9 @@ Respond in JSON format:
   "outcome": "outcome_type",
   "customer_name": "Name if provided, else null",
   "service_requested": "Service type if discussed, else null",
-  "appointment_booked": true/false
+  "appointment_booked": true/false,
+  "callback_phone": "Phone number for callback if provided, else null",
+  "callback_reason": "Reason for callback if requested, else null"
 }`
             },
             {
@@ -919,15 +1003,24 @@ Respond in JSON format:
         const leadStatus = analysis.appointment_booked ? 'converted' : 
                           analysis.outcome.includes('inquiry') ? 'new' : 'contacted'
 
+        // Use callback phone if provided, otherwise use caller ID
+        const leadPhone = analysis.callback_phone || this.callerNumber || null
+        
+        // Build comprehensive notes
+        let leadNotes = `${analysis.summary}\n\nService interested: ${analysis.service_requested || 'Not specified'}`
+        if (analysis.callback_phone && analysis.callback_reason) {
+          leadNotes += `\n\nCALLBACK REQUESTED:\nPhone: ${analysis.callback_phone}\nReason: ${analysis.callback_reason}`
+        }
+
         const { data: leadRecord, error: leadError } = await supabase
           .from('leads')
           .insert({
             tenant_id: this.tenantId,
             name: analysis.customer_name || (this.callerNumber ? 'Phone Inquiry' : 'Anonymous Caller'),
-            phone: this.callerNumber || null,
+            phone: leadPhone,
             source: 'phone_call',
             status: leadStatus,
-            notes: `${analysis.summary}\n\nService interested: ${analysis.service_requested || 'Not specified'}`,
+            notes: leadNotes,
             created_at: new Date().toISOString()
           })
           .select()
