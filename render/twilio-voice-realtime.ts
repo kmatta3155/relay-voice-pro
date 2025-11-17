@@ -783,6 +783,12 @@ Be warm, professional, and helpful in all interactions.`
     return false
   }
 
+  // Helper: Convert time string (HH:MM) to minutes since midnight
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number)
+    return hours * 60 + minutes
+  }
+
   // Helper: Convert EST/EDT date/time to UTC (handles daylight saving automatically)
   private parseESTDateTime(date: string, time: string): Date {
     // Parse as if in US Eastern timezone
@@ -953,6 +959,31 @@ Be warm, professional, and helpful in all interactions.`
         }
       }
       
+      // Validate time falls within business hours
+      if (businessHours && businessHours.open_time && businessHours.close_time) {
+        const requestedTime = newTime
+        const openTime = businessHours.open_time.substring(0, 5)
+        const closeTime = businessHours.close_time.substring(0, 5)
+        
+        const requestedMinutes = this.timeToMinutes(requestedTime)
+        const openMinutes = this.timeToMinutes(openTime)
+        const closeMinutes = this.timeToMinutes(closeTime)
+        const endMinutes = requestedMinutes + durationMinutes
+        
+        if (requestedMinutes < openMinutes || endMinutes > closeMinutes) {
+          logger.warn('Requested time outside business hours', { 
+            requestedTime, 
+            openTime, 
+            closeTime,
+            duration: durationMinutes
+          })
+          return {
+            success: false,
+            message: `The requested time ${newTime} is outside our business hours (${openTime} - ${closeTime}). Please choose a time within our operating hours.`
+          }
+        }
+      }
+      
       // Check for conflicts at new time (excluding current appointment)
       const { data: conflicts } = await supabase
         .from('appointments')
@@ -1053,16 +1084,26 @@ Be warm, professional, and helpful in all interactions.`
       const appointmentToCancel = existingAppointments[0]
       
       // Check if cancellation is within policy window (if policy exists)
-      if (tenantSettings?.cancellation_policy && tenantSettings.cancellation_policy.includes('24')) {
-        const appointmentTime = new Date(appointmentToCancel.start_at).getTime()
-        const now = Date.now()
-        const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60)
+      if (tenantSettings?.cancellation_policy) {
+        // Extract minimum hours from policy text (e.g., "24 hours", "48 hours notice")
+        const hoursMatch = tenantSettings.cancellation_policy.match(/(\d+)\s*(hour|hr)/i)
+        const minimumHours = hoursMatch ? parseInt(hoursMatch[1], 10) : null
         
-        if (hoursUntilAppointment < 24) {
-          logger.warn('Cancellation within 24-hour window', { hoursUntilAppointment })
-          return {
-            success: false,
-            message: `According to our cancellation policy, appointments must be cancelled at least 24 hours in advance. Your appointment is in ${Math.round(hoursUntilAppointment)} hours. Please call us directly for assistance.`
+        if (minimumHours && minimumHours > 0) {
+          const appointmentTime = new Date(appointmentToCancel.start_at).getTime()
+          const now = Date.now()
+          const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60)
+          
+          if (hoursUntilAppointment < minimumHours) {
+            logger.warn('Cancellation within policy window', { 
+              hoursUntilAppointment, 
+              minimumHours,
+              policy: tenantSettings.cancellation_policy
+            })
+            return {
+              success: false,
+              message: `According to our cancellation policy, appointments must be cancelled at least ${minimumHours} hours in advance. Your appointment is in ${Math.round(hoursUntilAppointment)} hours. Please call us directly for assistance.`
+            }
           }
         }
       }
