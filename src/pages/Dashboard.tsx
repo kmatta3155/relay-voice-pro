@@ -58,6 +58,11 @@ import {
   Bar,
 } from "recharts";
 
+import LeadsPage from "@/pages/Leads";
+import AppointmentsPage from "@/pages/Appointments";
+import CallsPage from "@/pages/Calls";
+import MessagesPage from "@/pages/Messages";
+
 /**
  * RelayAI Dashboard — upgraded UI/UX
  * - Matches marketing mock: gradients, rich charts, colorful KPIs, automation banners
@@ -186,10 +191,10 @@ export default function Dashboard() {
       {tab === "overview" && (
         <Overview appts={appts} leads={leads} calls={calls} demoMode={demoMode} />
       )}
-      {tab === "leads" && <LeadsTab leads={leads} setLeads={setLeads} setThreads={setThreads} />}
-      {tab === "appointments" && <ApptsTab appts={appts} setAppts={setAppts} />}
-      {tab === "messages" && <MessagesTab threads={threads} setThreads={setThreads} />} 
-      {tab === "calls" && <CallsTab calls={calls} />} 
+      {tab === "leads" && <LeadsPage />}
+      {tab === "appointments" && <AppointmentsPage />}
+      {tab === "messages" && <MessagesPage />} 
+      {tab === "calls" && <CallsPage />} 
       {tab === "analytics" && <AnalyticsTab leads={leads} calls={calls} />} 
       {tab === "knowledge" && <KnowledgeTab />} 
       {tab === "onboarding" && <OnboardingTab />} 
