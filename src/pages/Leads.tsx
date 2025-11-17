@@ -20,7 +20,7 @@ type Lead = {
   status: string | null; 
   notes: string | null;
   intent: string | null;
-  lead_score: number | null;
+  score: number | null;
   created_at: string 
 };
 
@@ -90,7 +90,7 @@ export default function LeadsPage() {
       `${l.phone || ""} ${l.email || ""}`.trim(),
       l.source || "",
       l.status || "",
-      l.lead_score?.toString() || "",
+      l.score?.toString() || "",
       l.intent || "",
       new Date(l.created_at).toLocaleDateString()
     ]);
@@ -141,7 +141,7 @@ export default function LeadsPage() {
   const getScoreBadge = (score: number | null) => {
     if (!score) return null;
     if (score >= 80) return <Badge variant="destructive" className="ml-1 text-xs">Hot</Badge>;
-    if (score >= 60) return <Badge variant="default" className="ml-1 text-xs bg-orange-500">Warm</Badge>;
+    if (score >= 60) return <Badge variant="default" className="ml-1 text-xs bg-orange-500 hover:bg-orange-600">Warm</Badge>;
     return <Badge variant="secondary" className="ml-1 text-xs">Cold</Badge>;
   };
 
@@ -224,7 +224,7 @@ export default function LeadsPage() {
               status: "New", 
               notes: "", 
               intent: "",
-              lead_score: null,
+              score: null,
               created_at: new Date().toISOString() 
             } as any)}
             data-testid="button-new-lead"
@@ -287,9 +287,9 @@ export default function LeadsPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
                           <span className="text-sm font-medium text-slate-900">
-                            {l.lead_score || "—"}
+                            {l.score || "—"}
                           </span>
-                          {getScoreBadge(l.lead_score)}
+                          {getScoreBadge(l.score)}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -447,8 +447,8 @@ function LeadModal({ lead, onClose, onSave }: { lead: Lead; onClose: () => void;
                 min="0" 
                 max="100"
                 placeholder="0-100" 
-                value={f.lead_score ?? ""} 
-                onChange={e => setF({ ...f, lead_score: e.target.value ? parseInt(e.target.value) : null })}
+                value={f.score ?? ""} 
+                onChange={e => setF({ ...f, score: e.target.value ? parseInt(e.target.value) : null })}
                 data-testid="input-lead-score"
               />
             </div>
