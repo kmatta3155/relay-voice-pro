@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import VoiceRelayLogo from "@/components/VoiceRelayLogo";
 import {
   Bot,
@@ -71,6 +72,21 @@ import MessagesPage from "@/pages/Messages";
  */
 
 export default function Dashboard() {
+  const location = useLocation();
+  
+  // Determine initial tab from URL path
+  const getInitialTab = () => {
+    const path = location.pathname.toLowerCase();
+    if (path.includes('/leads')) return 'leads';
+    if (path.includes('/appointments')) return 'appointments';
+    if (path.includes('/messages')) return 'messages';
+    if (path.includes('/calls')) return 'calls';
+    if (path.includes('/analytics')) return 'analytics';
+    if (path.includes('/knowledge')) return 'knowledge';
+    if (path.includes('/onboarding')) return 'onboarding';
+    return 'overview';
+  };
+  
   const [tab, setTab] = useState<
     | "overview"
     | "leads"
@@ -80,7 +96,7 @@ export default function Dashboard() {
     | "analytics"
     | "knowledge"
     | "onboarding"
-  >("overview");
+  >(getInitialTab());
 
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,6 +106,11 @@ export default function Dashboard() {
   const [appts, setAppts] = useState<any[]>([]);
   const [threads, setThreads] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
+  
+  // Update tab when URL changes
+  useEffect(() => {
+    setTab(getInitialTab());
+  }, [location.pathname]);
 
   useEffect(() => {
     (async () => {
