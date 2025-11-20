@@ -74,9 +74,9 @@ import MessagesPage from "@/pages/Messages";
 export default function Dashboard() {
   const location = useLocation();
   
-  // Determine initial tab from URL path
-  const getInitialTab = () => {
-    const path = location.pathname.toLowerCase();
+  // Determine tab from URL path
+  const getTabFromPath = (pathname: string) => {
+    const path = pathname.toLowerCase();
     if (path.includes('/leads')) return 'leads';
     if (path.includes('/appointments')) return 'appointments';
     if (path.includes('/messages')) return 'messages';
@@ -96,7 +96,7 @@ export default function Dashboard() {
     | "analytics"
     | "knowledge"
     | "onboarding"
-  >(getInitialTab());
+  >(() => getTabFromPath(location.pathname));
 
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,7 +109,10 @@ export default function Dashboard() {
   
   // Update tab when URL changes
   useEffect(() => {
-    setTab(getInitialTab());
+    console.log('URL changed to:', location.pathname);
+    const newTab = getTabFromPath(location.pathname);
+    console.log('Setting tab to:', newTab);
+    setTab(newTab);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -280,6 +283,8 @@ function NavBarApp() {
 }
 
 function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (t: any) => void; demoMode: boolean; toggleDemo: () => void }) {
+  const navigate = useNavigate();
+  
   const items = [
     { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" />, path: "/overview" },
     { id: "leads", label: "Leads", icon: <Users className="w-4 h-4" />, path: "/leads" },
@@ -290,6 +295,13 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
     { id: "knowledge", label: "Knowledge", icon: <Brain className="w-4 h-4" />, path: "/knowledge" },
     { id: "onboarding", label: "Onboarding", icon: <BookOpen className="w-4 h-4" />, path: "/onboarding" },
   ];
+  
+  const handleClick = (path: string, id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    console.log('Navigating to:', path);
+    navigate(path);
+    setTab(id);
+  };
   
   return (
     <Card className="rounded-2xl shadow-sm sticky top-20 overflow-hidden">
@@ -302,15 +314,16 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
         </div>
         <nav className="grid p-2">
           {items.map((i) => (
-            <Link
+            <a
               key={i.id}
-              to={i.path}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-muted transition ${
+              href={i.path}
+              onClick={(e) => handleClick(i.path, i.id, e)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-muted transition cursor-pointer ${
                 tab === i.id ? "bg-[image:var(--gradient-primary)] text-white hover:bg-transparent shadow" : ""
               }`}
             >
               {i.icon} <span className="text-sm">{i.label}</span>
-            </Link>
+            </a>
           ))}
         </nav>
         <div className="p-4 pt-0">
