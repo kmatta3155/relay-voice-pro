@@ -219,7 +219,7 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
 
       // Navigate to path-based routes which have React Router
       // This ensures proper routing context for navigation
-      window.location.pathname = '/overview';
+      window.location.href = '/overview';
       
       toast({
         title: "Viewing as Customer",

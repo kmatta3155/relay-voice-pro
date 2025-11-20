@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Navigation Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+    .log { border: 1px solid #ccc; padding: 10px; margin-top: 20px; background: #f5f5f5; }
+    .current { font-weight: bold; color: green; }
+  </style>
+</head>
+<body>
+  <h1>Voice Relay Pro Navigation Test</h1>
+  
+  <h2>Test Different Navigation Methods:</h2>
+  
+  <div>
+    <button onclick="goToSignin()">Go to #signin</button>
+    <button onclick="goToApp()">Go to #app</button>
+    <button onclick="goToOverview()">Go to /overview</button>
+    <button onclick="goToAdmin()">Go to /admin</button>
+    <button onclick="goToAppointments()">Go to /appointments</button>
+  </div>
+  
+  <div>
+    <h3>Direct Links:</h3>
+    <a href="/#signin">/#signin</a> | 
+    <a href="/#app">/#app</a> | 
+    <a href="/overview">/overview</a> | 
+    <a href="/appointments">/appointments</a> | 
+    <a href="/admin">/admin</a>
+  </div>
+  
+  <div class="log">
+    <h3>Current Location:</h3>
+    <p>Pathname: <span id="pathname" class="current"></span></p>
+    <p>Hash: <span id="hash" class="current"></span></p>
+    <p>Full URL: <span id="url" class="current"></span></p>
+  </div>
+  
+  <script>
+    function updateDisplay() {
+      document.getElementById('pathname').textContent = window.location.pathname;
+      document.getElementById('hash').textContent = window.location.hash;
+      document.getElementById('url').textContent = window.location.href;
+    }
+    
+    function goToSignin() {
+      window.location.hash = '#signin';
+      updateDisplay();
+    }
+    
+    function goToApp() {
+      window.location.hash = '#app';
+      updateDisplay();
+    }
+    
+    function goToOverview() {
+      window.location.href = '/overview';
+    }
+    
+    function goToAdmin() {
+      window.location.href = '/admin';
+    }
+    
+    function goToAppointments() {
+      window.location.href = '/appointments';
+    }
+    
+    // Update display on load and hash changes
+    updateDisplay();
+    window.addEventListener('hashchange', updateDisplay);
+    window.addEventListener('popstate', updateDisplay);
+  </script>
+</body>
+</html>
