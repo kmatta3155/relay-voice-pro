@@ -300,7 +300,8 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
     e.preventDefault();
     console.log('Navigating to:', path);
     navigate(path);
-    setTab(id);
+    // Don't manually set tab - let the URL be the single source of truth
+    // The useEffect will update the tab when location.pathname changes
   };
   
   return (

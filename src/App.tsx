@@ -21,6 +21,7 @@ import AcceptInvite from "@/pages/AcceptInvite";
 import KnowledgePage from "@/pages/KnowledgePage";
 import KnowledgeShowcase from "@/components/demo/KnowledgeShowcase";
 import SettingsPage from "@/pages/SettingsPage";
+import TestDashboard from "@/pages/TestDashboard";
 import AdminRoute from "@/components/admin/AdminRoute";
 import AdminLink from "@/components/admin/AdminLink";
 import AdminNavBar from "@/components/admin/AdminNavBar";
@@ -261,6 +262,7 @@ function DashboardShell(){
             <Route path="/calls" element={<Dashboard />} />
             <Route path="/analytics" element={<Dashboard />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/test-dashboard" element={<TestDashboard />} />
             
             {/* Admin Routes */}
             <Route 
@@ -457,7 +459,7 @@ export default function VoiceRelayProApp() {
     if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite' || 
         pathname.startsWith('/overview') || pathname.startsWith('/leads') || pathname.startsWith('/appointments') ||
         pathname.startsWith('/messages') || pathname.startsWith('/calls') || pathname.startsWith('/analytics') ||
-        pathname.startsWith('/settings') || pathname.startsWith('/knowledge')) return 'routes';
+        pathname.startsWith('/settings') || pathname.startsWith('/knowledge') || pathname === '/test-dashboard') return 'routes';
     
     // Force auth mode if tokens are in the hash anywhere (double-hash safe)
     if (raw.includes("access_token") || raw.includes("refresh_token") || raw.includes("type=recovery")) return "auth";
@@ -473,7 +475,7 @@ export default function VoiceRelayProApp() {
       if (pathname.startsWith('/admin') || pathname === '/demo' || pathname === '/accept-invite' ||
           pathname.startsWith('/overview') || pathname.startsWith('/leads') || pathname.startsWith('/appointments') ||
           pathname.startsWith('/messages') || pathname.startsWith('/calls') || pathname.startsWith('/analytics') ||
-          pathname.startsWith('/settings') || pathname.startsWith('/knowledge')) {
+          pathname.startsWith('/settings') || pathname.startsWith('/knowledge') || pathname === '/test-dashboard') {
         setMode('routes'); return;
       }
       
