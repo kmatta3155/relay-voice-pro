@@ -173,7 +173,6 @@ export default function Dashboard() {
     return shell(
       <div className="p-6 text-sm text-slate-600">Loading your workspace…</div>,
       tab,
-      setTab,
       demoMode,
       toggleDemo
     );
@@ -189,7 +188,6 @@ export default function Dashboard() {
         </CardContent>
       </Card>,
       tab,
-      setTab,
       demoMode,
       toggleDemo
     );
@@ -208,7 +206,6 @@ export default function Dashboard() {
       {tab === "onboarding" && <OnboardingTab />} 
     </>,
     tab,
-    setTab,
     demoMode,
     toggleDemo
   );
@@ -218,7 +215,6 @@ export default function Dashboard() {
 function shell(
   children: React.ReactNode,
   tab: any,
-  setTab: (t: any) => void,
   demoMode: boolean,
   toggleDemo: () => void
 ) {
