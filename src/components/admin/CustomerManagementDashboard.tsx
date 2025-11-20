@@ -217,8 +217,9 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
         .update({ active_tenant_id: tenantId })
         .eq('id', user.user.id);
 
-      // Use window.location to navigate instead of useNavigate
-      window.location.href = '/overview';
+      // Navigate to path-based routes which have React Router
+      // This ensures proper routing context for navigation
+      window.location.pathname = '/overview';
       
       toast({
         title: "Viewing as Customer",
