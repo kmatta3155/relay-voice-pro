@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import VoiceRelayLogo from "@/components/VoiceRelayLogo";
 import {
   Bot,
@@ -280,16 +280,24 @@ function NavBarApp() {
 }
 
 function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (t: any) => void; demoMode: boolean; toggleDemo: () => void }) {
+  const navigate = useNavigate();
+  
   const items = [
-    { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: "leads", label: "Leads", icon: <Users className="w-4 h-4" /> },
-    { id: "appointments", label: "Appointments", icon: <CalendarIcon className="w-4 h-4" /> },
-    { id: "messages", label: "Messages", icon: <MessageCircle className="w-4 h-4" /> },
-    { id: "calls", label: "Calls", icon: <PhoneCall className="w-4 h-4" /> },
-    { id: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
-    { id: "knowledge", label: "Knowledge", icon: <Brain className="w-4 h-4" /> },
-    { id: "onboarding", label: "Onboarding", icon: <BookOpen className="w-4 h-4" /> },
+    { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" />, path: "/overview" },
+    { id: "leads", label: "Leads", icon: <Users className="w-4 h-4" />, path: "/leads" },
+    { id: "appointments", label: "Appointments", icon: <CalendarIcon className="w-4 h-4" />, path: "/appointments" },
+    { id: "messages", label: "Messages", icon: <MessageCircle className="w-4 h-4" />, path: "/messages" },
+    { id: "calls", label: "Calls", icon: <PhoneCall className="w-4 h-4" />, path: "/calls" },
+    { id: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" />, path: "/analytics" },
+    { id: "knowledge", label: "Knowledge", icon: <Brain className="w-4 h-4" />, path: "/knowledge" },
+    { id: "onboarding", label: "Onboarding", icon: <BookOpen className="w-4 h-4" />, path: "/onboarding" },
   ];
+  
+  const handleNavigation = (path: string, id: string) => {
+    navigate(path);
+    setTab(id);
+  };
+  
   return (
     <Card className="rounded-2xl shadow-sm sticky top-20 overflow-hidden">
       <CardContent className="p-0">
@@ -303,7 +311,7 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
           {items.map((i) => (
             <button
               key={i.id}
-              onClick={() => setTab(i.id)}
+              onClick={() => handleNavigation(i.path, i.id)}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-muted transition ${
                 tab === i.id ? "bg-[image:var(--gradient-primary)] text-white hover:bg-transparent shadow" : ""
               }`}
