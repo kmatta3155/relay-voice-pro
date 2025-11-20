@@ -8,6 +8,7 @@ export default function TestDashboard() {
   const [loading, setLoading] = useState(true);
   const [testResults, setTestResults] = useState<string[]>([]);
   const [currentUrl, setCurrentUrl] = useState(window.location.href);
+  const [isTestingNav, setIsTestingNav] = useState(false);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -71,7 +72,8 @@ export default function TestDashboard() {
     }
   };
 
-  const testNavigation = () => {
+  const testNavigation = async () => {
+    setIsTestingNav(true);
     setTestResults(prev => [...prev, "Testing navigation..."]);
     
     const routes = [
@@ -87,11 +89,33 @@ export default function TestDashboard() {
       if (index < routes.length) {
         const route = routes[index];
         setTestResults(prev => [...prev, `Navigating to ${route.name}...`]);
+        
+        // Check if sidebar active tab is highlighted correctly
+        const checkSidebar = () => {
+          const sidebarItems = document.querySelectorAll('nav a[href^="/"]');
+          let foundActive = false;
+          sidebarItems.forEach((item: any) => {
+            if (item.href.includes(route.path)) {
+              const isHighlighted = item.className.includes('text-white') || 
+                                  item.className.includes('bg-[image:var(--gradient-primary)]');
+              if (isHighlighted) {
+                setTestResults(prev => [...prev, `✅ ${route.name} sidebar item is highlighted`]);
+                foundActive = true;
+              }
+            }
+          });
+          if (!foundActive) {
+            setTestResults(prev => [...prev, `❌ ${route.name} sidebar item NOT highlighted`]);
+          }
+        };
+        
         window.location.href = route.path;
+        setTimeout(checkSidebar, 500); // Give time for page to load
         index++;
       } else {
         clearInterval(interval);
         setTestResults(prev => [...prev, "✅ Navigation test complete"]);
+        setIsTestingNav(false);
       }
     }, 3000);
   };
@@ -119,8 +143,8 @@ export default function TestDashboard() {
                 {session ? "Already Logged In" : "Create Demo Session"}
               </Button>
               
-              <Button onClick={testNavigation} disabled={!session}>
-                Test Navigation
+              <Button onClick={testNavigation} disabled={!session || isTestingNav}>
+                {isTestingNav ? "Testing..." : "Test Navigation"}
               </Button>
               
               <Button onClick={() => window.location.href = '/overview'} disabled={!session}>
