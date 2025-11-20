@@ -74,7 +74,7 @@ import MessagesPage from "@/pages/Messages";
 export default function Dashboard() {
   const location = useLocation();
   
-  // Determine tab from URL path
+  // Determine tab from URL path - derived directly, no state needed
   const getTabFromPath = (pathname: string) => {
     const path = pathname.toLowerCase();
     if (path.includes('/leads')) return 'leads';
@@ -87,16 +87,8 @@ export default function Dashboard() {
     return 'overview';
   };
   
-  const [tab, setTab] = useState<
-    | "overview"
-    | "leads"
-    | "appointments"
-    | "messages"
-    | "calls"
-    | "analytics"
-    | "knowledge"
-    | "onboarding"
-  >(() => getTabFromPath(location.pathname));
+  // Derive tab directly from location - no useState needed
+  const tab = getTabFromPath(location.pathname);
 
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,14 +98,6 @@ export default function Dashboard() {
   const [appts, setAppts] = useState<any[]>([]);
   const [threads, setThreads] = useState<any[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
-  
-  // Update tab when URL changes
-  useEffect(() => {
-    console.log('URL changed to:', location.pathname);
-    const newTab = getTabFromPath(location.pathname);
-    console.log('Setting tab to:', newTab);
-    setTab(newTab);
-  }, [location.pathname]);
 
   useEffect(() => {
     (async () => {
@@ -243,7 +227,7 @@ function shell(
       <NavBarApp />
       <div className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-12 gap-6">
         <aside className="col-span-12 md:col-span-3 lg:col-span-2">
-          <Sidebar tab={tab} setTab={setTab} demoMode={demoMode} toggleDemo={toggleDemo} />
+          <Sidebar tab={tab} demoMode={demoMode} toggleDemo={toggleDemo} />
         </aside>
         <main className="col-span-12 md:col-span-9 lg:col-span-10">{children}</main>
       </div>
@@ -282,7 +266,7 @@ function NavBarApp() {
   );
 }
 
-function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (t: any) => void; demoMode: boolean; toggleDemo: () => void }) {
+function Sidebar({ tab, demoMode, toggleDemo }: { tab: string; demoMode: boolean; toggleDemo: () => void }) {
   const navigate = useNavigate();
   
   const items = [
@@ -296,12 +280,9 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
     { id: "onboarding", label: "Onboarding", icon: <BookOpen className="w-4 h-4" />, path: "/onboarding" },
   ];
   
-  const handleClick = (path: string, id: string, e: React.MouseEvent) => {
+  const handleClick = (path: string, e: React.MouseEvent) => {
     e.preventDefault();
-    console.log('Navigating to:', path);
     navigate(path);
-    // Don't manually set tab - let the URL be the single source of truth
-    // The useEffect will update the tab when location.pathname changes
   };
   
   return (
@@ -318,7 +299,7 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
             <a
               key={i.id}
               href={i.path}
-              onClick={(e) => handleClick(i.path, i.id, e)}
+              onClick={(e) => handleClick(i.path, e)}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-muted transition cursor-pointer ${
                 tab === i.id ? "bg-[image:var(--gradient-primary)] text-white hover:bg-transparent shadow" : ""
               }`}
