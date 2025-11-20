@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import VoiceRelayLogo from "@/components/VoiceRelayLogo";
 import {
   Bot,
@@ -280,8 +280,6 @@ function NavBarApp() {
 }
 
 function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (t: any) => void; demoMode: boolean; toggleDemo: () => void }) {
-  const navigate = useNavigate();
-  
   const items = [
     { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" />, path: "/overview" },
     { id: "leads", label: "Leads", icon: <Users className="w-4 h-4" />, path: "/leads" },
@@ -292,11 +290,6 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
     { id: "knowledge", label: "Knowledge", icon: <Brain className="w-4 h-4" />, path: "/knowledge" },
     { id: "onboarding", label: "Onboarding", icon: <BookOpen className="w-4 h-4" />, path: "/onboarding" },
   ];
-  
-  const handleNavigation = (path: string, id: string) => {
-    navigate(path);
-    setTab(id);
-  };
   
   return (
     <Card className="rounded-2xl shadow-sm sticky top-20 overflow-hidden">
@@ -309,15 +302,15 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
         </div>
         <nav className="grid p-2">
           {items.map((i) => (
-            <button
+            <Link
               key={i.id}
-              onClick={() => handleNavigation(i.path, i.id)}
+              to={i.path}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-muted transition ${
                 tab === i.id ? "bg-[image:var(--gradient-primary)] text-white hover:bg-transparent shadow" : ""
               }`}
             >
               {i.icon} <span className="text-sm">{i.label}</span>
-            </button>
+            </Link>
           ))}
         </nav>
         <div className="p-4 pt-0">
