@@ -4,7 +4,7 @@ import App from './App.tsx'
 import './index.css'
 
 Sentry.init({
-  dsn: "https://YOUR_SENTRY_DSN", // leave empty string "" to disable
+  dsn: "", // Sentry disabled in development - set a valid DSN in production
   tracesSampleRate: 0.2,
   replaysSessionSampleRate: 0.1,
 });
