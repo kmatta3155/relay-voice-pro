@@ -137,6 +137,47 @@ export default function SignInScreen() {
               <Button onClick={handleLogin} disabled={loading} className="w-full">
                 {loading ? "Signing in…" : "Sign in"}
               </Button>
+              {/* Demo Login Button for Testing */}
+              <Button 
+                onClick={async () => {
+                  setLoading(true);
+                  setError("");
+                  // Try to sign in with demo credentials
+                  const { data, error } = await supabase.auth.signInWithPassword({ 
+                    email: "demo@voicerelaypro.com", 
+                    password: "demo123456" 
+                  });
+                  setLoading(false);
+                  if (error) {
+                    // If demo user doesn't exist, create it
+                    const { error: signupError } = await supabase.auth.signUp({
+                      email: "demo@voicerelaypro.com",
+                      password: "demo123456"
+                    });
+                    if (!signupError) {
+                      // Try to sign in again
+                      const { error: signinError } = await supabase.auth.signInWithPassword({
+                        email: "demo@voicerelaypro.com",
+                        password: "demo123456"
+                      });
+                      if (!signinError) {
+                        window.location.href = '/overview';
+                      } else {
+                        setError("Could not create demo account");
+                      }
+                    } else {
+                      setError("Demo login not available");
+                    }
+                  } else {
+                    window.location.href = '/overview';
+                  }
+                }} 
+                disabled={loading} 
+                variant="outline" 
+                className="w-full"
+              >
+                {loading ? "Setting up demo…" : "Demo Login (Testing)"}
+              </Button>
               <div className="flex items-center justify-between text-sm">
                 <button className="underline" onClick={() => { setStage("signup"); setError(""); setOk(""); }}>Create account</button>
                 <button className="underline" onClick={() => { setStage("forgot"); setError(""); setOk(""); }}>Forgot password?</button>

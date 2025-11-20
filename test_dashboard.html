@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard Navigation Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .info { background: #f0f0f0; padding: 15px; margin: 20px 0; }
+    .link { display: inline-block; padding: 10px 20px; background: #7c3aed; color: white; text-decoration: none; margin: 5px; }
+    .note { color: #666; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Dashboard Navigation Test</h1>
+  
+  <div class="info">
+    <h2>Problem Identified:</h2>
+    <p>The navigation issue occurs because:</p>
+    <ol>
+      <li>The app uses different routing modes (#app vs /overview)</li>
+      <li>Without authentication, all routes redirect to sign-in</li>
+      <li>The sidebar navigation expects React Router context</li>
+    </ol>
+  </div>
+  
+  <div class="info">
+    <h2>Testing Process:</h2>
+    <p>To properly test the dashboard navigation:</p>
+    <ol>
+      <li>Click "Demo Login (Testing)" on the sign-in page</li>
+      <li>This creates/signs in a demo user</li>
+      <li>You'll be redirected to /overview</li>
+      <li>Click sidebar items to test navigation</li>
+    </ol>
+  </div>
+  
+  <div>
+    <h2>Quick Links for Testing:</h2>
+    <a href="/#signin" class="link">Go to Sign In</a>
+    <a href="/overview" class="link">Try Overview (requires auth)</a>
+    <a href="/appointments" class="link">Try Appointments (requires auth)</a>
+  </div>
+  
+  <div class="note">
+    <p><strong>Note:</strong> All dashboard routes require authentication. Use the Demo Login button to test.</p>
+  </div>
+</body>
+</html>
