@@ -494,7 +494,7 @@ export default function VoiceRelayProApp() {
   }, []);
 
   const content = mode === 'app'
-    ? <AuthGate><Dashboard /></AuthGate>
+    ? <BrowserRouter><AuthGate><Dashboard /></AuthGate></BrowserRouter>
     : mode === 'signin'
       ? <SignInScreen />
       : mode === 'admin'
