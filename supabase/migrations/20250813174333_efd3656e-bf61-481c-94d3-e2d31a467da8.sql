@@ -6,7 +6,7 @@ create extension if not exists pg_cron;
 create materialized view if not exists public.mv_kpis_7d as
 select
   (select count(*) from public.calls where at >= now() - interval '7 days') as calls_7d,
-  (select count(*) from public.appointments where start >= now() - interval '7 days') as bookings_7d,
+  (select count(*) from public.appointments where start_at >= now() - interval '7 days') as bookings_7d,
   (select count(*) from public.leads where created_at >= now() - interval '7 days') as leads_7d;
 
 create or replace function public.refresh_kpis()
@@ -15,8 +15,10 @@ returns void language sql as $$
 $$;
 
 -- Schedule KPI refresh every 15 minutes (if pg_cron available)
-select cron.schedule('refresh_kpis_15m', '*/15 * * * *', $$select public.refresh_kpis();$$)
-  on conflict do nothing;
+do $$ begin
+  perform cron.schedule('refresh_kpis_15m', '*/15 * * * *', 'select public.refresh_kpis();');
+exception when others then null;
+end $$;
 
 -- Tenant invites
 create table if not exists public.tenant_invites (
@@ -32,11 +34,11 @@ alter table public.tenant_invites enable row level security;
 -- Invites RLS: only members of tenant can read/insert invites
 drop policy if exists "invites ro" on public.tenant_invites;
 create policy "invites ro" on public.tenant_invites
-  for select using (public.is_member_of(tenant_id));
+  for select using (public.is_member(auth.uid(), tenant_id));
 
 drop policy if exists "invites wr" on public.tenant_invites;
 create policy "invites wr" on public.tenant_invites
-  for insert with check (public.is_member_of(tenant_id));
+  for insert with check (public.is_member(auth.uid(), tenant_id));
 
 -- Data retention helpers (purge old calls/transcripts)
 create or replace function public.purge_old()
@@ -45,7 +47,10 @@ begin
   delete from public.calls where at < now() - interval '90 days';
 end$$;
 
-select cron.schedule('purge_old_daily', '15 3 * * *', $$select public.purge_old();$$) on conflict do nothing;
+do $$ begin
+  perform cron.schedule('purge_old_daily', '15 3 * * *', 'select public.purge_old();');
+exception when others then null;
+end $$;
 
 -- Ensure appointments has required columns
 alter table public.appointments add column if not exists start timestamptz;

@@ -15,10 +15,17 @@ returns void language sql as $$
 $$;
 
 -- Schedule KPI refresh every 15 minutes (if pg_cron available)
-select cron.schedule('refresh_kpis_15m', '*/15 * * * *', $$select public.refresh_kpis();$$)
-  on conflict do nothing;
+do $$ begin
+  perform cron.schedule('refresh_kpis_15m', '*/15 * * * *', 'select public.refresh_kpis();');
+exception when others then null;
+end $$;
 
 -- Tenant invites table
+do $$ begin
+  create type public.role_kind as enum ('owner', 'manager', 'agent', 'viewer');
+exception when duplicate_object then null;
+end $$;
+
 create table if not exists public.tenant_invites (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid references public.tenants(id) on delete cascade,
@@ -33,10 +40,10 @@ alter table public.tenant_invites enable row level security;
 
 -- Invites RLS: only members of tenant can read/insert invites
 create policy "invites_select" on public.tenant_invites
-  for select using (public.is_member_of(tenant_id));
+  for select using (public.is_member(auth.uid(), tenant_id));
 
 create policy "invites_insert" on public.tenant_invites
-  for insert with check (public.is_member_of(tenant_id));
+  for insert with check (public.is_member(auth.uid(), tenant_id));
 
 -- Add missing columns to messages for compatibility
 alter table public.messages add column if not exists direction text check (direction in ('in', 'out'));
@@ -52,5 +59,7 @@ begin
   delete from public.calls where at < now() - interval '90 days';
 end$$;
 
-select cron.schedule('purge_old_daily', '15 3 * * *', $$select public.purge_old();$$) 
-  on conflict do nothing;
+do $$ begin
+  perform cron.schedule('purge_old_daily', '15 3 * * *', 'select public.purge_old();');
+exception when others then null;
+end $$;

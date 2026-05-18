@@ -3,9 +3,7 @@
  * Returns TwiML to start WebSocket streaming to AI voice receptionist
  */
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createHmac } from 'https://deno.land/std@0.168.0/crypto/hmac.ts'
-import { encode } from 'https://deno.land/std@0.168.0/encoding/hex.ts'
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,18 +23,14 @@ function escapeXml(str: string): string {
 }
 
 // Verify Twilio webhook signature
-function verifyTwilioSignature(authToken: string, signature: string, url: string, params: Record<string, string>): boolean {
-  // Create the signature data string
+async function verifyTwilioSignature(authToken: string, signature: string, url: string, params: Record<string, string>): Promise<boolean> {
   const data = url + Object.keys(params).sort().map(key => key + params[key]).join('')
-  
-  // Create HMAC-SHA1
-  const hmac = createHmac('sha1', new TextEncoder().encode(authToken))
-  hmac.update(new TextEncoder().encode(data))
-  const hash = hmac.digest()
-  
-  // Convert to base64
-  const expectedSignature = btoa(String.fromCharCode(...new Uint8Array(hash)))
-  
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(authToken),
+    { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
+  )
+  const hashBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data))
+  const expectedSignature = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)))
   return expectedSignature === signature
 }
 
@@ -84,7 +78,7 @@ serve(async (req) => {
     }
     
     const signature = req.headers.get('X-Twilio-Signature')
-    if (!signature || !verifyTwilioSignature(authToken, signature, req.url, params)) {
+    if (!signature || !await verifyTwilioSignature(authToken, signature, req.url, params)) {
       console.error('[WEBHOOK] Invalid Twilio signature')
       return new Response('Forbidden', { status: 403, headers: corsHeaders })
     }

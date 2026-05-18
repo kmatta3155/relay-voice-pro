@@ -45,15 +45,6 @@ AS $function$
   );
 $function$;
 
-CREATE OR REPLACE FUNCTION public.is_member_of(tid uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE
- SET search_path TO 'public'
-AS $function$
-  select exists(select 1 from public.tenant_members m where m.tenant_id = tid and m.user_id = auth.uid());
-$function$;
-
 -- 2. Strengthen RLS policies for sensitive data access
 -- Ensure leads table has the most restrictive policies
 DROP POLICY IF EXISTS "leads_select_active_member" ON public.leads;

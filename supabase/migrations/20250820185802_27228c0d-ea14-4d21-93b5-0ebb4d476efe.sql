@@ -60,35 +60,47 @@ alter table if exists public.agent_settings
 
 -- RLS (minimal)
 alter table tenant_branding enable row level security;
-create policy if not exists t_brand_read on tenant_branding
+drop policy if exists t_brand_read on tenant_branding;
+create policy t_brand_read on tenant_branding
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_branding.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists t_brand_write on tenant_branding
+drop policy if exists t_brand_write on tenant_branding;
+create policy t_brand_write on tenant_branding
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_branding.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists t_brand_update on tenant_branding
+drop policy if exists t_brand_update on tenant_branding;
+create policy t_brand_update on tenant_branding
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_branding.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 alter table services enable row level security;
-create policy if not exists svc_read on services
+drop policy if exists svc_read on services;
+create policy svc_read on services
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = services.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists svc_write on services
+drop policy if exists svc_write on services;
+create policy svc_write on services
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = services.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists svc_update on services
+drop policy if exists svc_update on services;
+create policy svc_update on services
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = services.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 alter table business_hours enable row level security;
-create policy if not exists bh_read on business_hours
+drop policy if exists bh_read on business_hours;
+create policy bh_read on business_hours
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = business_hours.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists bh_write on business_hours
+drop policy if exists bh_write on business_hours;
+create policy bh_write on business_hours
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = business_hours.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists bh_update on business_hours
+drop policy if exists bh_update on business_hours;
+create policy bh_update on business_hours
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = business_hours.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 alter table holidays enable row level security;
-create policy if not exists hd_read on holidays
+drop policy if exists hd_read on holidays;
+create policy hd_read on holidays
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = holidays.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists hd_write on holidays
+drop policy if exists hd_write on holidays;
+create policy hd_write on holidays
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = holidays.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists hd_update on holidays
+drop policy if exists hd_update on holidays;
+create policy hd_update on holidays
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = holidays.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 -- Invites acceptance upgrades

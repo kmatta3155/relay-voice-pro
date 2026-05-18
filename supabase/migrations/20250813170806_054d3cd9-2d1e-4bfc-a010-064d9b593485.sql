@@ -22,11 +22,13 @@ create table if not exists public.tenant_invites (
 alter table public.tenant_invites enable row level security;
 
 -- Invites RLS: only members of tenant can read/insert invites
+drop policy if exists "invites_select" on public.tenant_invites;
 create policy "invites_select" on public.tenant_invites
-  for select using (public.is_member_of(tenant_id));
+  for select using (public.is_member(auth.uid(), tenant_id));
 
+drop policy if exists "invites_insert" on public.tenant_invites;
 create policy "invites_insert" on public.tenant_invites
-  for insert with check (public.is_member_of(tenant_id));
+  for insert with check (public.is_member(auth.uid(), tenant_id));
 
 -- Add missing columns to messages for compatibility
 alter table public.messages add column if not exists direction text check (direction in ('in', 'out'));

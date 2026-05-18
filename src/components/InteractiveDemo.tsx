@@ -122,8 +122,8 @@ export function InteractiveDemo({ className }: DemoProps) {
         'Liam': 'TX3LPaxmHKxFdv7VOQHJ'
       };
 
-      const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, voice_id: voiceMap[voiceId] || voiceMap['Sarah'] }
+      const { data, error } = await supabase.functions.invoke('tts-voice', {
+        body: { text, voiceId: voiceMap[voiceId] || voiceMap['Sarah'] }
       });
 
       console.log('TTS Response:', { data, error });
@@ -133,14 +133,14 @@ export function InteractiveDemo({ className }: DemoProps) {
         return;
       }
 
-      if (!data?.audioContent) {
+      if (!data?.audioBase64) {
         console.error('No audio content received');
         return;
       }
 
-      console.log(`✅ Audio content received: ${data.audioContent.length} characters`);
+      console.log(`✅ Audio content received: ${data.audioBase64.length} characters`);
 
-      const audioDataUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+      const audioDataUrl = `data:audio/mpeg;base64,${data.audioBase64}`;
       console.log(`🔊 Creating audio element with data URL: ${audioDataUrl.slice(0, 100)}...`);
       
       const audio = new Audio(audioDataUrl);

@@ -14,6 +14,9 @@ alter table if exists public.calls add column if not exists csat numeric;
 alter table if exists public.calls add column if not exists outcome text;
 alter table if exists public.calls add column if not exists booking_id uuid;
 alter table if exists public.calls add column if not exists estimated_value numeric;
+alter table if exists public.calls add column if not exists status text;
+alter table if exists public.calls add column if not exists start_at timestamptz;
+alter table if exists public.calls add column if not exists end_at timestamptz;
 
 create table if not exists public.call_transcripts(
   call_id uuid primary key,
@@ -140,9 +143,12 @@ $$;
 
 -- RLS (assumes tenants table + tenant_id columns exist)
 alter table business_overrides enable row level security;
-create policy if not exists "tenant_read_overrides" on business_overrides for select using (tenant_id = auth.uid()::uuid or true);
-create policy if not exists "tenant_write_overrides" on business_overrides for insert with check (true);
-create policy if not exists "tenant_update_overrides" on business_overrides for update using (true) with check (true);
+drop policy if exists "tenant_read_overrides" on business_overrides;
+create policy "tenant_read_overrides" on business_overrides for select using (tenant_id = auth.uid()::uuid or true);
+drop policy if exists "tenant_write_overrides" on business_overrides;
+create policy "tenant_write_overrides" on business_overrides for insert with check (true);
+drop policy if exists "tenant_update_overrides" on business_overrides;
+create policy "tenant_update_overrides" on business_overrides for update using (true) with check (true);
 
 -- minimal grants
 grant select on vw_calls_by_day, vw_bookings_by_source, vw_dashboard_kpis to anon, authenticated;

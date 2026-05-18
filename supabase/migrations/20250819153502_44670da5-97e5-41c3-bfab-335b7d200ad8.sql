@@ -1,6 +1,15 @@
 -- Tighten RLS on public.leads to prevent customer contact data leakage
 -- Ensure only members of the tenant AND with that tenant active can access rows
 
+-- Ensure helper function exists (also defined in later migration)
+CREATE OR REPLACE FUNCTION public._is_active_tenant(tid uuid)
+ RETURNS boolean LANGUAGE sql STABLE SET search_path TO 'public' AS $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and p.active_tenant_id = tid
+  );
+$$;
+
 -- Drop existing policies to avoid permissive OR combinations
 DROP POLICY IF EXISTS "leads_select" ON public.leads;
 DROP POLICY IF EXISTS "leads_insert" ON public.leads;

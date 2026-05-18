@@ -47,47 +47,50 @@ create table if not exists public.unresolved_questions (
 create index if not exists idx_kc_tenant on public.knowledge_chunks(tenant_id);
 create index if not exists idx_ks_tenant on public.knowledge_sources(tenant_id);
 create index if not exists idx_uq_tenant on public.unresolved_questions(tenant_id);
-create index if not exists idx_kc_embedding on public.knowledge_chunks using ivfflat (embedding vector_cosine_ops);
+do $$ begin
+  create index if not exists idx_kc_embedding on public.knowledge_chunks using ivfflat (embedding vector_cosine_ops);
+exception when others then null; -- ivfflat max 2000 dims; skip if vector dim > 2000
+end $$;
 
 -- Simple tenant RLS: users can access rows where profiles.active_tenant_id = row.tenant_id
 alter table public.knowledge_sources enable row level security;
 alter table public.knowledge_chunks  enable row level security;
 alter table public.unresolved_questions enable row level security;
 
-create policy if not exists "ks-tenant-read"
-on public.knowledge_sources for select
+drop policy if exists "ks-tenant-read" on public.knowledge_sources;
+create policy "ks-tenant-read" on public.knowledge_sources for select
 using (exists (
   select 1 from public.profiles p
   where p.id = auth.uid() and p.active_tenant_id = knowledge_sources.tenant_id
 ));
 
-create policy if not exists "kc-tenant-read"
-on public.knowledge_chunks for select
+drop policy if exists "kc-tenant-read" on public.knowledge_chunks;
+create policy "kc-tenant-read" on public.knowledge_chunks for select
 using (exists (
   select 1 from public.profiles p
   where p.id = auth.uid() and p.active_tenant_id = knowledge_chunks.tenant_id
 ));
 
-create policy if not exists "uq-tenant-read"
-on public.unresolved_questions for select
+drop policy if exists "uq-tenant-read" on public.unresolved_questions;
+create policy "uq-tenant-read" on public.unresolved_questions for select
 using (exists (
   select 1 from public.profiles p
   where p.id = auth.uid() and p.active_tenant_id = unresolved_questions.tenant_id
 ));
 
 -- Allow insert/update/delete by same active tenant (for admins/editors; tighten as needed)
-create policy if not exists "ks-tenant-write"
-on public.knowledge_sources for all
+drop policy if exists "ks-tenant-write" on public.knowledge_sources;
+create policy "ks-tenant-write" on public.knowledge_sources for all
 using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.active_tenant_id = knowledge_sources.tenant_id))
 with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.active_tenant_id = knowledge_sources.tenant_id));
 
-create policy if not exists "kc-tenant-write"
-on public.knowledge_chunks for all
+drop policy if exists "kc-tenant-write" on public.knowledge_chunks;
+create policy "kc-tenant-write" on public.knowledge_chunks for all
 using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.active_tenant_id = knowledge_chunks.tenant_id))
 with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.active_tenant_id = knowledge_chunks.tenant_id));
 
-create policy if not exists "uq-tenant-write"
-on public.unresolved_questions for all
+drop policy if exists "uq-tenant-write" on public.unresolved_questions;
+create policy "uq-tenant-write" on public.unresolved_questions for all
 using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.active_tenant_id = unresolved_questions.tenant_id))
 with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.active_tenant_id = unresolved_questions.tenant_id));
 

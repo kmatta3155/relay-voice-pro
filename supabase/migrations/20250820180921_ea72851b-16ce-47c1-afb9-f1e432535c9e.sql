@@ -73,51 +73,72 @@ ALTER TABLE invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_settings ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies
+DROP POLICY IF EXISTS t_brand_read ON tenant_branding;
 CREATE POLICY t_brand_read ON tenant_branding
   FOR SELECT USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = tenant_branding.tenant_id AND tu.user_id = auth.uid()));
+DROP POLICY IF EXISTS t_brand_write ON tenant_branding;
 CREATE POLICY t_brand_write ON tenant_branding
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = tenant_branding.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
+DROP POLICY IF EXISTS t_brand_update ON tenant_branding;
 CREATE POLICY t_brand_update ON tenant_branding
   FOR UPDATE USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = tenant_branding.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
 
+DROP POLICY IF EXISTS svc_read ON services;
 CREATE POLICY svc_read ON services
   FOR SELECT USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = services.tenant_id AND tu.user_id = auth.uid()));
+DROP POLICY IF EXISTS svc_write ON services;
 CREATE POLICY svc_write ON services
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = services.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
+DROP POLICY IF EXISTS svc_update ON services;
 CREATE POLICY svc_update ON services
   FOR UPDATE USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = services.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
 
+DROP POLICY IF EXISTS bh_read ON business_hours;
 CREATE POLICY bh_read ON business_hours
   FOR SELECT USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = business_hours.tenant_id AND tu.user_id = auth.uid()));
+DROP POLICY IF EXISTS bh_write ON business_hours;
 CREATE POLICY bh_write ON business_hours
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = business_hours.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
+DROP POLICY IF EXISTS bh_update ON business_hours;
 CREATE POLICY bh_update ON business_hours
   FOR UPDATE USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = business_hours.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
 
+DROP POLICY IF EXISTS hd_read ON holidays;
 CREATE POLICY hd_read ON holidays
   FOR SELECT USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = holidays.tenant_id AND tu.user_id = auth.uid()));
+DROP POLICY IF EXISTS hd_write ON holidays;
 CREATE POLICY hd_write ON holidays
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = holidays.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
+DROP POLICY IF EXISTS hd_update ON holidays;
 CREATE POLICY hd_update ON holidays
   FOR UPDATE USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = holidays.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
 
+DROP POLICY IF EXISTS tu_read ON tenant_users;
 CREATE POLICY tu_read ON tenant_users 
   FOR SELECT USING (tenant_id IN (SELECT tenant_id FROM tenant_users WHERE user_id = auth.uid()));
+DROP POLICY IF EXISTS tu_write ON tenant_users;
 CREATE POLICY tu_write ON tenant_users 
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = tenant_users.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin')));
+DROP POLICY IF EXISTS tu_update ON tenant_users;
 CREATE POLICY tu_update ON tenant_users 
   FOR UPDATE USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = tenant_users.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin')));
 
+DROP POLICY IF EXISTS inv_read ON invites;
 CREATE POLICY inv_read ON invites 
   FOR SELECT USING (tenant_id IN (SELECT tenant_id FROM tenant_users WHERE user_id = auth.uid()));
+DROP POLICY IF EXISTS inv_write ON invites;
 CREATE POLICY inv_write ON invites 
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = invites.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin')));
+DROP POLICY IF EXISTS inv_update ON invites;
 CREATE POLICY inv_update ON invites 
   FOR UPDATE USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = invites.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin')));
 
+DROP POLICY IF EXISTS agent_read ON agent_settings;
 CREATE POLICY agent_read ON agent_settings
   FOR SELECT USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = agent_settings.tenant_id AND tu.user_id = auth.uid()));
+DROP POLICY IF EXISTS agent_write ON agent_settings;
 CREATE POLICY agent_write ON agent_settings
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = agent_settings.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));
+DROP POLICY IF EXISTS agent_update ON agent_settings;
 CREATE POLICY agent_update ON agent_settings
   FOR UPDATE USING (EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = agent_settings.tenant_id AND tu.user_id = auth.uid() AND tu.role IN ('owner','admin','manager')));

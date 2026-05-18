@@ -39,7 +39,10 @@ create table if not exists public.unresolved_questions (
 create index if not exists idx_kc_tenant on public.knowledge_chunks(tenant_id);
 create index if not exists idx_ks_tenant on public.knowledge_sources(tenant_id);
 create index if not exists idx_uq_tenant on public.unresolved_questions(tenant_id);
-create index if not exists idx_kc_embedding on public.knowledge_chunks using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+do $$ begin
+  create index if not exists idx_kc_embedding on public.knowledge_chunks using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+exception when others then null;
+end $$;
 
 -- Enable RLS
 alter table public.knowledge_sources enable row level security;

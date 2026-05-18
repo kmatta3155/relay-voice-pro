@@ -49,6 +49,20 @@ create table if not exists public.invites (
   created_at timestamptz default now()
 );
 
+-- Create agent_settings if not yet created
+CREATE TABLE IF NOT EXISTS public.agent_settings (
+  tenant_id uuid PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+  twilio_number text,
+  forward_number text,
+  after_hours_voicemail boolean DEFAULT true,
+  greeting text,
+  website_url text,
+  ai_sms_autoreplies boolean DEFAULT false,
+  agent_ws_url text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
 -- Add columns to agent_settings if they don't exist
 DO $$ 
 BEGIN
@@ -77,49 +91,67 @@ END $$;
 
 -- RLS (minimal; align with your patterns)
 alter table tenant_branding enable row level security;
-create policy if not exists t_brand_read on tenant_branding
+drop policy if exists t_brand_read on tenant_branding;
+create policy t_brand_read on tenant_branding
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_branding.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists t_brand_write on tenant_branding
+drop policy if exists t_brand_write on tenant_branding;
+create policy t_brand_write on tenant_branding
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_branding.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists t_brand_update on tenant_branding
+drop policy if exists t_brand_update on tenant_branding;
+create policy t_brand_update on tenant_branding
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_branding.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 alter table services enable row level security;
-create policy if not exists svc_read on services
+drop policy if exists svc_read on services;
+create policy svc_read on services
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = services.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists svc_write on services
+drop policy if exists svc_write on services;
+create policy svc_write on services
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = services.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists svc_update on services
+drop policy if exists svc_update on services;
+create policy svc_update on services
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = services.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 alter table business_hours enable row level security;
-create policy if not exists bh_read on business_hours
+drop policy if exists bh_read on business_hours;
+create policy bh_read on business_hours
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = business_hours.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists bh_write on business_hours
+drop policy if exists bh_write on business_hours;
+create policy bh_write on business_hours
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = business_hours.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists bh_update on business_hours
+drop policy if exists bh_update on business_hours;
+create policy bh_update on business_hours
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = business_hours.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 alter table holidays enable row level security;
-create policy if not exists hd_read on holidays
+drop policy if exists hd_read on holidays;
+create policy hd_read on holidays
   for select using (exists (select 1 from tenant_users tu where tu.tenant_id = holidays.tenant_id and tu.user_id = auth.uid()));
-create policy if not exists hd_write on holidays
+drop policy if exists hd_write on holidays;
+create policy hd_write on holidays
   for insert with check (exists (select 1 from tenant_users tu where tu.tenant_id = holidays.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
-create policy if not exists hd_update on holidays
+drop policy if exists hd_update on holidays;
+create policy hd_update on holidays
   for update using (exists (select 1 from tenant_users tu where tu.tenant_id = holidays.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin','manager')));
 
 alter table tenant_users enable row level security;
-create policy if not exists tu_read on tenant_users for select
+drop policy if exists tu_read on tenant_users;
+create policy tu_read on tenant_users for select
   using (tenant_id in (select tenant_id from tenant_users where user_id = auth.uid()));
-create policy if not exists tu_write on tenant_users for insert
+drop policy if exists tu_write on tenant_users;
+create policy tu_write on tenant_users for insert
   with check (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_users.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin')));
-create policy if not exists tu_update on tenant_users for update
+drop policy if exists tu_update on tenant_users;
+create policy tu_update on tenant_users for update
   using (exists (select 1 from tenant_users tu where tu.tenant_id = tenant_users.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin')));
 
 alter table invites enable row level security;
-create policy if not exists inv_read on invites for select
+drop policy if exists inv_read on invites;
+create policy inv_read on invites for select
   using (tenant_id in (select tenant_id from tenant_users where user_id = auth.uid()));
-create policy if not exists inv_write on invites for insert
+drop policy if exists inv_write on invites;
+create policy inv_write on invites for insert
   with check (exists (select 1 from tenant_users tu where tu.tenant_id = invites.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin')));
-create policy if not exists inv_update on invites for update
+drop policy if exists inv_update on invites;
+create policy inv_update on invites for update
   using (exists (select 1 from tenant_users tu where tu.tenant_id = invites.tenant_id and tu.user_id = auth.uid() and tu.role in ('owner','admin')));

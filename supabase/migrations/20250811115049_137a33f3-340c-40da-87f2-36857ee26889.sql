@@ -172,20 +172,21 @@ $$;
 
 create or replace function public.has_role(u uuid, t uuid, min_role public.role)
 returns boolean
-language plpgsql
+language sql
 stable
 security definer
 as $func$
-declare r public.role;
-begin
-  select role into r from public.memberships where user_id=u and tenant_id=t limit 1;
-  if r is null then return false; end if;
-  if (r='OWNER') then return true;
-  if (r='MANAGER' and min_role in ('MANAGER','AGENT','VIEWER')) then return true;
-  if (r='AGENT'   and min_role in ('AGENT','VIEWER')) then return true;
-  if (r='VIEWER'  and min_role in ('VIEWER')) then return true;
-  return false;
-end;
+  with r as (
+    select role from public.memberships where user_id = u and tenant_id = t limit 1
+  )
+  select case
+    when (select role from r) is null then false
+    when (select role from r) = 'OWNER'::public.role then true
+    when (select role from r) = 'MANAGER'::public.role and min_role in ('MANAGER','AGENT','VIEWER') then true
+    when (select role from r) = 'AGENT'::public.role and min_role in ('AGENT','VIEWER') then true
+    when (select role from r) = 'VIEWER'::public.role and min_role in ('VIEWER') then true
+    else false
+  end;
 $func$;
 
 /* Policies */

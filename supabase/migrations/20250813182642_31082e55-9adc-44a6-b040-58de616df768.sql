@@ -6,7 +6,7 @@ create extension if not exists pg_cron;
 create materialized view if not exists public.mv_kpis_7d as
 select
   (select count(*) from public.calls where at >= now() - interval '7 days') as calls_7d,
-  (select count(*) from public.appointments where start >= now() - interval '7 days') as bookings_7d,
+  (select count(*) from public.appointments where start_at >= now() - interval '7 days') as bookings_7d,
   (select count(*) from public.leads where created_at >= now() - interval '7 days') as leads_7d;
 
 create or replace function public.refresh_kpis()

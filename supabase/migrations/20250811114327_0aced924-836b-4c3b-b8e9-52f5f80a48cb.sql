@@ -167,31 +167,40 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 create or replace function public.has_role(u uuid, t uuid, min_role public.role)
-returns boolean language plpgsql stable security definer set search_path = public as $$
-declare r public.role;
-begin
-  select role into r from public.memberships where user_id=u and tenant_id=t limit 1;
-  if r is null then return false; end if;
-  if (r='OWNER') then return true;
-  if (r='MANAGER' and min_role in ('MANAGER','AGENT','VIEWER')) then return true;
-  if (r='AGENT'   and min_role in ('AGENT','VIEWER')) then return true;
-  if (r='VIEWER'  and min_role in ('VIEWER')) then return true;
-  return false;
-end; $$;
+returns boolean language sql stable security definer set search_path = public as $$
+  with r as (
+    select role from public.memberships where user_id = u and tenant_id = t limit 1
+  )
+  select case
+    when (select role from r) is null then false
+    when (select role from r) = 'OWNER'::public.role then true
+    when (select role from r) = 'MANAGER'::public.role and min_role in ('MANAGER','AGENT','VIEWER') then true
+    when (select role from r) = 'AGENT'::public.role and min_role in ('AGENT','VIEWER') then true
+    when (select role from r) = 'VIEWER'::public.role and min_role in ('VIEWER') then true
+    else false
+  end;
+$$;
 
 /* Policies */
 -- profiles: only the user can read/update their profile
-create policy if not exists "profiles self read"  on public.profiles for select using (auth.uid() = id);
-create policy if not exists "profiles self write" on public.profiles for update using (auth.uid() = id);
+drop policy if exists "profiles self read" on public.profiles;
+create policy "profiles self read" on public.profiles for select using (auth.uid() = id);
+drop policy if exists "profiles self write" on public.profiles;
+create policy "profiles self write" on public.profiles for update using (auth.uid() = id);
 
 -- tenants: members can read; owners/managers can update
-create policy if not exists "tenants read for members" on public.tenants for select using (public.is_member(auth.uid(), id));
-create policy if not exists "tenants update for managers" on public.tenants for update using (public.has_role(auth.uid(), id, 'MANAGER'));
+drop policy if exists "tenants read for members" on public.tenants;
+create policy "tenants read for members" on public.tenants for select using (public.is_member(auth.uid(), id));
+drop policy if exists "tenants update for managers" on public.tenants;
+create policy "tenants update for managers" on public.tenants for update using (public.has_role(auth.uid(), id, 'MANAGER'));
 
 -- memberships: user can see their memberships; managers can manage within tenant
-create policy if not exists "memberships read self" on public.memberships for select using (user_id = auth.uid());
-create policy if not exists "memberships read by tenant" on public.memberships for select using (public.is_member(auth.uid(), tenant_id));
-create policy if not exists "memberships manage by managers" on public.memberships for all using (public.has_role(auth.uid(), tenant_id, 'MANAGER')) with check (public.has_role(auth.uid(), tenant_id, 'MANAGER'));
+drop policy if exists "memberships read self" on public.memberships;
+create policy "memberships read self" on public.memberships for select using (user_id = auth.uid());
+drop policy if exists "memberships read by tenant" on public.memberships;
+create policy "memberships read by tenant" on public.memberships for select using (public.is_member(auth.uid(), tenant_id));
+drop policy if exists "memberships manage by managers" on public.memberships;
+create policy "memberships manage by managers" on public.memberships for all using (public.has_role(auth.uid(), tenant_id, 'MANAGER')) with check (public.has_role(auth.uid(), tenant_id, 'MANAGER'));
 
 -- tenant-scoped tables: readable/updatable only if member; inserts require membership + correct tenant_id
 do $$
@@ -199,10 +208,10 @@ declare t text;
 begin
   for t in select unnest(array['leads','threads','messages','calls','appointments','automations','subscriptions'])
   loop
-    execute format('create policy if not exists %I on public.%I for select using (public.is_member(auth.uid(), tenant_id));', t||'_select', t);
-    execute format('create policy if not exists %I on public.%I for insert with check (public.is_member(auth.uid(), tenant_id));', t||'_insert', t);
-    execute format('create policy if not exists %I on public.%I for update using (public.is_member(auth.uid(), tenant_id));', t||'_update', t);
-    execute format('create policy if not exists %I on public.%I for delete using (public.has_role(auth.uid(), tenant_id, ''MANAGER''));', t||'_delete', t);
+    execute format('drop policy if exists %I on public.%I; create policy %I on public.%I for select using (public.is_member(auth.uid(), tenant_id));', t||'_select', t, t||'_select', t);
+    execute format('drop policy if exists %I on public.%I; create policy %I on public.%I for insert with check (public.is_member(auth.uid(), tenant_id));', t||'_insert', t, t||'_insert', t);
+    execute format('drop policy if exists %I on public.%I; create policy %I on public.%I for update using (public.is_member(auth.uid(), tenant_id));', t||'_update', t, t||'_update', t);
+    execute format('drop policy if exists %I on public.%I; create policy %I on public.%I for delete using (public.has_role(auth.uid(), tenant_id, ''MANAGER''));', t||'_delete', t, t||'_delete', t);
   end loop;
 end$$;
 
