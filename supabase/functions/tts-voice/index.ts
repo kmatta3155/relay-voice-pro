@@ -36,77 +36,20 @@ serve(async (req) => {
   }
 
   try {
-    // Step 1: Environment Variable Analysis
-    const allEnvVars = Object.keys(Deno.env.toObject());
+    // Step 1: API Key Check
     const XI_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-    
-    console.log(`[${requestId}] NEW FUNCTION Environment Analysis:`);
-    console.log(`[${requestId}] - Total env vars: ${allEnvVars.length}`);
-    console.log(`[${requestId}] - All env vars:`, allEnvVars);
-    console.log(`[${requestId}] - ELEVENLABS_API_KEY exists: ${!!XI_KEY}`);
-    console.log(`[${requestId}] - ELEVENLABS_API_KEY length: ${XI_KEY ? XI_KEY.length : 0}`);
-    
-    if (XI_KEY) {
-      console.log(`[${requestId}] - API Key first 8 chars: ${XI_KEY.slice(0, 8)}`);
-      console.log(`[${requestId}] - API Key last 8 chars: ${XI_KEY.slice(-8)}`);
-    }
-    
+    console.log(`[${requestId}] ELEVENLABS_API_KEY present: ${!!XI_KEY}`);
+
     // Step 2: Critical Check - API Key Validation
     if (!XI_KEY || XI_KEY.trim() === '') {
-      console.error(`[${requestId}] CRITICAL: ELEVENLABS_API_KEY is missing or empty in NEW FUNCTION`);
-      
+      console.error(`[${requestId}] ELEVENLABS_API_KEY is missing`);
       return new Response(
-        JSON.stringify({ 
-          error: "ELEVENLABS_API_KEY secret is missing or empty in new function",
-          debug: {
-            requestId,
-            functionName: "tts-voice",
-            hasKey: !!XI_KEY,
-            keyLength: XI_KEY ? XI_KEY.length : 0,
-            envVarsCount: allEnvVars.length,
-            allEnvVars: allEnvVars,
-            timestamp: new Date().toISOString()
-          }
-        }),
+        JSON.stringify({ error: "ELEVENLABS_API_KEY secret is not set" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[${requestId}] NEW FUNCTION: API Key found successfully!`);
-
-    // Step 3: Test ElevenLabs API Key
-    console.log(`[${requestId}] Testing ElevenLabs API key...`);
-    const testResponse = await fetch('https://api.elevenlabs.io/v1/voices', {
-      method: 'GET',
-      headers: {
-        'xi-api-key': XI_KEY,
-      },
-    });
-    
-    console.log(`[${requestId}] ElevenLabs API test response status: ${testResponse.status}`);
-    
-    if (!testResponse.ok) {
-      const testError = await testResponse.text();
-      console.error(`[${requestId}] ElevenLabs API key test failed:`, testError);
-      
-      return new Response(
-        JSON.stringify({ 
-          error: "ElevenLabs API key validation failed",
-          debug: {
-            requestId,
-            functionName: "tts-voice",
-            apiTestStatus: testResponse.status,
-            apiTestError: testError,
-            timestamp: new Date().toISOString()
-          }
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    console.log(`[${requestId}] NEW FUNCTION: ElevenLabs API key validation successful!`);
-    
-    // Step 4: Process TTS Request
+    // Step 3: Process TTS Request
     const bodyIn = await req.json();
     console.log(`[${requestId}] Request body:`, JSON.stringify(bodyIn, null, 2));
     
