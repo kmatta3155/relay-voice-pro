@@ -13,10 +13,12 @@ export function InteractiveDemo({ className }: DemoProps) {
   const [currentScenario, setCurrentScenario] = React.useState(0);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [transcript, setTranscript] = React.useState<{speaker: string, text: string, timestamp: string, isGreeting?: boolean}[]>([]);
-  const [currentMessage, setCurrentMessage] = React.useState(-2); // Start at -2 for phone ring
+  const [currentMessage, setCurrentMessage] = React.useState(-2);
   const [audioEnabled, setAudioEnabled] = React.useState(true);
-  const [currentAudio, setCurrentAudio] = React.useState<HTMLAudioElement | null>(null);
+  const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [callPhase, setCallPhase] = React.useState<'dialing' | 'ringing' | 'greeting' | 'conversation' | 'ended'>('dialing');
+  const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const activeSourceRef = React.useRef<AudioBufferSourceNode | null>(null);
 
   const scenarios = [
     {
@@ -106,70 +108,49 @@ export function InteractiveDemo({ className }: DemoProps) {
     }
   ];
 
-  const playTTS = async (text: string, voiceId: string): Promise<void> => {
-    if (!audioEnabled) {
-      console.log('Audio disabled, skipping TTS');
-      return;
-    }
-    
-    console.log(`🎵 Playing TTS for: "${text.slice(0, 50)}..." with voice: ${voiceId}`);
-    
-    try {
-      const voiceMap: { [key: string]: string } = {
-        'Sarah': 'EXAVITQu4vr4xnSDxMaL',
-        'George': 'JBFqnCBsd6RMkjVDRZzb',
-        'Charlotte': 'XB0fDUnXU5powFXDhCwa',
-        'Liam': 'TX3LPaxmHKxFdv7VOQHJ'
-      };
+  const voiceMap: { [key: string]: string } = {
+    'Sarah': 'EXAVITQu4vr4xnSDxMaL',
+    'George': 'JBFqnCBsd6RMkjVDRZzb',
+    'Charlotte': 'XB0fDUnXU5powFXDhCwa',
+    'Liam': 'TX3LPaxmHKxFdv7VOQHJ',
+  };
 
+  const playTTS = async (text: string, voiceId: string): Promise<void> => {
+    if (!audioEnabled) return;
+
+    try {
       const { data, error } = await supabase.functions.invoke('tts-voice', {
         body: { text, voiceId: voiceMap[voiceId] || voiceMap['Sarah'] }
       });
 
-      console.log('TTS Response:', { data, error });
-
-      if (error) {
-        console.error('TTS Error:', error);
+      if (error || !data?.audioBase64) {
+        console.error('TTS failed:', error?.message || 'no audio returned');
         return;
       }
 
-      if (!data?.audioBase64) {
-        console.error('No audio content received');
-        return;
-      }
+      // Decode base64 → ArrayBuffer
+      const binary = atob(data.audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-      console.log(`✅ Audio content received: ${data.audioBase64.length} characters`);
+      // Play via Web Audio API — no autoplay restrictions once context is unlocked
+      const ctx = audioCtxRef.current!;
+      if (ctx.state === 'suspended') await ctx.resume();
 
-      const audioDataUrl = `data:audio/mpeg;base64,${data.audioBase64}`;
-      console.log(`🔊 Creating audio element with data URL: ${audioDataUrl.slice(0, 100)}...`);
-      
-      const audio = new Audio(audioDataUrl);
-      audio.volume = 0.8;
-      
-      audio.onloadstart = () => console.log('Audio loading started');
-      audio.onloadeddata = () => console.log('Audio data loaded');
-      audio.oncanplay = () => console.log('Audio can play');
-      audio.onplay = () => console.log('Audio play started');
-      audio.onended = () => {
-        console.log('Audio ended');
-        setCurrentAudio(null);
-      };
-      audio.onerror = (e) => {
-        console.error('Audio error:', e);
-        setCurrentAudio(null);
-      };
-      
-      setCurrentAudio(audio);
-      
-      try {
-        await audio.play();
-        console.log('✅ Audio playing successfully');
-      } catch (playError) {
-        console.error('❌ Audio play failed:', playError);
-        throw playError;
-      }
-    } catch (error) {
-      console.error('❌ TTS playback failed:', error);
+      const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+
+      await new Promise<void>((resolve) => {
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        source.onended = () => { activeSourceRef.current = null; setIsSpeaking(false); resolve(); };
+        activeSourceRef.current = source;
+        setIsSpeaking(true);
+        source.start(0);
+      });
+    } catch (err) {
+      console.error('TTS playback failed:', err);
+      setIsSpeaking(false);
     }
   };
 
@@ -281,6 +262,14 @@ export function InteractiveDemo({ className }: DemoProps) {
   }, [isPlaying, currentMessage, currentScenario, audioEnabled]);
 
   const startDemo = () => {
+    // Unlock AudioContext synchronously inside the click handler — required for Safari
+    const Ctx = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new Ctx();
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
     setTranscript([]);
     setCurrentMessage(-2);
     setCallPhase('dialing');
@@ -292,10 +281,10 @@ export function InteractiveDemo({ className }: DemoProps) {
     setTranscript([]);
     setCurrentMessage(-2);
     setCallPhase('dialing');
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
-      setCurrentAudio(null);
+    setIsSpeaking(false);
+    if (activeSourceRef.current) {
+      try { activeSourceRef.current.stop(); } catch (_) {}
+      activeSourceRef.current = null;
     }
   };
 
@@ -431,7 +420,7 @@ export function InteractiveDemo({ className }: DemoProps) {
                 Live Call Experience
               </h3>
               <div className="flex items-center gap-4">
-                {currentAudio && audioEnabled && (
+                {isSpeaking && audioEnabled && (
                   <div className="flex items-center gap-2 text-sm text-green-600">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                     Speaking
