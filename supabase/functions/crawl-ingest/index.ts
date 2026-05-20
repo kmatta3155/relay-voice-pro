@@ -167,6 +167,78 @@ async function scrapeBookingPlatformWithFirecrawl(detected: DetectedPlatform[]):
   return combined;
 }
 
+// ── Zenoti direct API scraper ────────────────────────────────────────────────
+// Zenoti's webstore is a React SPA, so the HTML returns empty. Instead, call
+// their internal catalog API which the SPA itself uses — no auth required for
+// public-facing webstore endpoints.
+
+async function scrapeZenotiApi(url: string): Promise<string> {
+  try {
+    const parsed = new URL(url);
+    const base = parsed.origin; // e.g. https://tinavora.zenoti.com
+
+    // Try several known Zenoti webstore API patterns
+    const candidates = [
+      `${base}/webstoreNew/api/v1/catalog/services?pageSize=200`,
+      `${base}/webstoreNew/api/v1/services?pageSize=200`,
+      `${base}/webstoreNew/api/v2/catalog/services?pageSize=200`,
+      `${base}/api/v1/catalog/services?pageSize=200`,
+    ];
+
+    for (const apiUrl of candidates) {
+      try {
+        console.log(`Trying Zenoti API: ${apiUrl}`);
+        const resp = await fetch(apiUrl, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)',
+          },
+          signal: AbortSignal.timeout(8000),
+        });
+
+        if (!resp.ok) continue;
+        const ct = resp.headers.get('content-type') || '';
+        if (!ct.includes('json')) continue;
+
+        const data = await resp.json();
+
+        // Try common response shapes
+        const items: any[] =
+          data?.services ??
+          data?.items ??
+          data?.data?.services ??
+          data?.catalog?.services ??
+          (Array.isArray(data) ? data : []);
+
+        if (items.length === 0) continue;
+
+        console.log(`Zenoti API returned ${items.length} services from ${apiUrl}`);
+
+        const lines = items.map((svc: any) => {
+          const name = svc.name || svc.service_name || svc.title || 'Service';
+          const price = svc.price?.sales_price ?? svc.price ?? svc.sales_price ?? svc.starting_price ?? '';
+          const desc = svc.description?.replace(/<[^>]+>/g, ' ').trim() || '';
+          const dur = svc.duration || svc.duration_minutes || '';
+          return [
+            `**${name}**`,
+            price ? `Starting $${price}` : '',
+            dur ? `${dur} min` : '',
+            desc ? `- ${desc.slice(0, 120)}` : '',
+          ].filter(Boolean).join(' ');
+        });
+
+        return `\n\n=== BOOKING PLATFORM [Zenoti API]: ${apiUrl} ===\n${lines.join('\n')}`;
+      } catch { /* try next endpoint */ }
+    }
+
+    console.log('All Zenoti API endpoints failed, will fall back to HTML scrape');
+    return '';
+  } catch (err) {
+    console.error('Zenoti API scrape error:', err);
+    return '';
+  }
+}
+
 // ── Fallback: basic fetch for booking platform (may miss JS-rendered content)
 
 async function scrapeBookingPlatformBasic(detected: DetectedPlatform[]): Promise<string> {
@@ -174,6 +246,16 @@ async function scrapeBookingPlatformBasic(detected: DetectedPlatform[]): Promise
   let combined = '';
 
   for (const { platform, url } of detected) {
+    // Platform-specific API scrapers (avoid blank SPA responses)
+    if (platform === 'Zenoti') {
+      const zenotiData = await scrapeZenotiApi(url);
+      if (zenotiData) {
+        combined += zenotiData;
+        console.log(`Zenoti API scrape succeeded (${zenotiData.length} chars)`);
+        continue;
+      }
+    }
+
     try {
       const resp = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)' },

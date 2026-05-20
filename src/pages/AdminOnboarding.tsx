@@ -106,6 +106,8 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps = {}) {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [createdTenantId, setCreatedTenantId] = useState<string | null>(null);
+  const [detectedPlatforms, setDetectedPlatforms] = useState<Array<{platform: string; url: string}>>([]);
+  const [crawlStats, setCrawlStats] = useState<{pages: number; chars: number} | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -211,7 +213,15 @@ const analyzeWebsite = async (deepCrawl = false) => {
       }
 
       console.log('Website analysis result:', result.data);
-      
+
+      // Extract and display detected booking platforms
+      const platforms: Array<{platform: string; url: string}> = result.data?.detected_platforms || [];
+      setDetectedPlatforms(platforms);
+
+      const pagesFetched = result.data?.pages_fetched || 0;
+      const contentLength = JSON.stringify(result.data).length;
+      setCrawlStats({ pages: pagesFetched, chars: contentLength });
+
       // Add website data as a source
       const websiteSource: DataSource = {
         type: 'website',
@@ -219,8 +229,11 @@ const analyzeWebsite = async (deepCrawl = false) => {
         metadata: { url: websiteUrl, crawlOptions }
       };
       setDataSources(prev => [...prev.filter(s => s.type !== 'website'), websiteSource]);
-      
-      toast({ title: "Success", description: "Website data added! Click 'Consolidate All Data' to process." });
+
+      const platformMsg = platforms.length > 0
+        ? ` Detected: ${platforms.map(p => p.platform).join(', ')}.`
+        : '';
+      toast({ title: "Website Crawled", description: `${pagesFetched} pages fetched.${platformMsg} Click 'Consolidate All Data with AI' to extract services.` });
     } catch (error) {
       console.error('Website analysis error:', error);
       toast({
@@ -452,7 +465,7 @@ const analyzeWebsite = async (deepCrawl = false) => {
                     id="websiteUrl"
                     type="url"
                     value={websiteUrl}
-                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                    onChange={(e) => { setWebsiteUrl(e.target.value); setDetectedPlatforms([]); setCrawlStats(null); }}
                     placeholder="https://example.com"
                     disabled={isLoading}
                   />
@@ -515,16 +528,16 @@ const analyzeWebsite = async (deepCrawl = false) => {
               </Collapsible>
 
               <div className="flex gap-3">
-                <Button 
-                  onClick={() => analyzeWebsite(false)} 
+                <Button
+                  onClick={() => analyzeWebsite(false)}
                   disabled={isLoading || !websiteUrl.trim()}
                   className="flex-1"
                 >
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Globe className="mr-2 h-4 w-4" />}
                   Add Website Data
                 </Button>
-                <Button 
-                  onClick={() => analyzeWebsite(true)} 
+                <Button
+                  onClick={() => analyzeWebsite(true)}
                   disabled={isLoading || !websiteUrl.trim()}
                   variant="outline"
                   className="flex-1"
@@ -533,6 +546,28 @@ const analyzeWebsite = async (deepCrawl = false) => {
                   Deep Analysis
                 </Button>
               </div>
+
+              {crawlStats && (
+                <div className="text-sm text-muted-foreground flex gap-4">
+                  <span>{crawlStats.pages} pages crawled</span>
+                  <span>{crawlStats.chars.toLocaleString()} characters extracted</span>
+                </div>
+              )}
+
+              {detectedPlatforms.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800 rounded-lg p-3">
+                  <p className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">
+                    Booking Systems Detected — services will be extracted automatically
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {detectedPlatforms.map((p) => (
+                      <Badge key={p.platform} variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        {p.platform}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-4 border-t pt-4">
                 <div className="text-center">
