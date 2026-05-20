@@ -79,29 +79,28 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
       const result = await supabase.functions.invoke('crawl-ingest', {
         body: {
           url: websiteUrl,
-          tenant_id: 'demo', // Use demo tenant for analysis during admin onboarding
-          crawlOptions: crawlOptions
+          tenant_id: 'demo',
+          options: {
+            maxPages: deepCrawl ? crawlOptions.maxPages * 2 : crawlOptions.maxPages,
+            maxDepth: crawlOptions.maxDepth,
+            includePatterns: crawlOptions.includePatterns,
+            excludePatterns: crawlOptions.excludePatterns,
+          }
         }
       });
 
-      console.log('Edge function result:', result);
+      if (result.error) throw new Error('Edge Function returned a non-2xx status code');
+      if (!result.data) throw new Error('No data returned from analysis');
 
-      if (result.error) {
-        console.error('Website analysis error:', result.error);
-        throw new Error('Edge Function returned a non-2xx status code');
-      }
-
-      if (!result.data) {
-        throw new Error('No data returned from analysis');
-      }
-
-      console.log('Website analysis result:', result.data);
       setExtractionResult(result.data);
       setCurrentStep(2);
 
+      const platforms: string[] = (result.data.detected_platforms ?? []).map((p: any) => p.platform);
+      const platformMsg = platforms.length ? ` Booking platforms detected: ${platforms.join(', ')}.` : '';
+
       toast({
         title: "Analysis Complete",
-        description: `Found ${result.data.services?.length || 0} services and business information`,
+        description: `Found ${result.data.services?.length || 0} services and business information.${platformMsg}`,
       });
 
     } catch (error) {
@@ -387,6 +386,31 @@ export default function AdminOnboarding({ onBack }: AdminOnboardingProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Detected booking platforms banner */}
+            {(extractionResult as any).detected_platforms?.length > 0 && (
+              <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300 mr-1">
+                  🔗 Booking platforms detected:
+                </span>
+                {(extractionResult as any).detected_platforms.map((p: any, i: number) => (
+                  <span key={i} className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
+                    {p.platform}
+                  </span>
+                ))}
+                <span className="text-xs text-blue-600 dark:text-blue-400 ml-1 self-center">
+                  Services extracted from their catalog
+                </span>
+              </div>
+            )}
+
+            {/* Extraction method badge */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Method:</span>
+              <span className="bg-muted px-2 py-0.5 rounded font-mono">{extractionResult.extraction_method}</span>
+              <span>·</span>
+              <span>{extractionResult.pages_fetched} pages crawled</span>
+            </div>
+
             {/* Services */}
             <div>
               <h3 className="text-lg font-semibold mb-3">Services ({extractionResult.services?.length || 0})</h3>

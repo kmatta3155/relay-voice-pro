@@ -126,34 +126,46 @@ export default function CustomerManagementDashboard({ tenantId, onBack }: Custom
 
     setExtracting(true);
     try {
-      // First, run crawl-ingest to extract data
-      const { error: crawlError } = await supabase.functions.invoke('crawl-ingest', {
+      // Step 1: Crawl the website (detects third-party booking platforms automatically)
+      const { data: crawlData, error: crawlError } = await supabase.functions.invoke('crawl-ingest', {
         body: {
           tenant_id: tenantId,
-          url: websiteUrl
+          url: websiteUrl,
+          options: { maxPages: 30 }
         }
       });
 
       if (crawlError) throw crawlError;
 
-      // Then consolidate the business data
+      const detectedPlatforms: string[] = (crawlData?.detected_platforms ?? []).map((p: any) => p.platform);
+      const serviceCount = crawlData?.services?.length ?? 0;
+
+      // Step 2: Consolidate with AI, passing crawl results as a data source
       const { error: consolidateError } = await supabase.functions.invoke('consolidate-business-data', {
         body: {
-          tenant_id: tenantId
+          tenantId,
+          dataSources: [{
+            type: 'website' as const,
+            content: JSON.stringify(crawlData),
+            metadata: { url: websiteUrl, detected_platforms: detectedPlatforms }
+          }]
         }
       });
 
       if (consolidateError) throw consolidateError;
 
-      // Finally, retrain the agent
+      // Step 3: Retrain the agent with updated knowledge
       await handleTrainAgent();
+
+      const platformMsg = detectedPlatforms.length
+        ? ` Detected booking systems: ${detectedPlatforms.join(', ')}.`
+        : '';
 
       toast({
         title: "Success",
-        description: "Business data extracted and agent retrained successfully"
+        description: `Extracted ${serviceCount} services and retrained agent.${platformMsg}`
       });
 
-      // Refresh the data
       await loadCustomerData();
     } catch (error) {
       console.error('Error extracting business data:', error);

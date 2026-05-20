@@ -48,17 +48,55 @@ serve(async (req) => {
   }
 
   try {
-    const { dataSources, tenantId } = await req.json();
+    const body = await req.json();
+    // Accept both snake_case and camelCase tenant ID
+    const tenantId = body.tenantId || body.tenant_id;
+    let dataSources: DataSource[] = body.dataSources || [];
 
-    if (!dataSources || !Array.isArray(dataSources) || dataSources.length === 0) {
-      return new Response(JSON.stringify({ error: 'No data sources provided' }), {
+    if (!tenantId) {
+      return new Response(JSON.stringify({ error: 'Tenant ID is required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    if (!tenantId) {
-      return new Response(JSON.stringify({ error: 'Tenant ID is required' }), {
+    // If no dataSources provided, load from the database (services + hours already extracted)
+    if (!dataSources || dataSources.length === 0) {
+      console.log(`No dataSources passed — loading from DB for tenant ${tenantId}`);
+      try {
+        const [servicesRes, hoursRes, sourcesRes] = await Promise.all([
+          supabase.from('services').select('*').eq('tenant_id', tenantId).eq('active', true),
+          supabase.from('business_hours').select('*').eq('tenant_id', tenantId),
+          supabase.from('knowledge_sources').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(5),
+        ]);
+
+        const dbContent: any = {
+          services: servicesRes.data ?? [],
+          hours: hoursRes.data ?? [],
+          sources: sourcesRes.data ?? [],
+        };
+
+        // Include raw crawl metadata from knowledge_sources
+        for (const src of (sourcesRes.data ?? [])) {
+          if (src.meta?.business_info) {
+            dbContent.business_info = src.meta.business_info;
+            break;
+          }
+        }
+
+        dataSources = [{
+          type: 'website',
+          content: JSON.stringify(dbContent),
+          metadata: { source: 'database', tenant_id: tenantId }
+        }];
+        console.log(`Loaded from DB: ${dbContent.services.length} services, ${dbContent.hours.length} hours, ${dbContent.sources.length} sources`);
+      } catch (dbErr) {
+        console.error('Failed to load from DB:', dbErr);
+      }
+    }
+
+    if (!dataSources || dataSources.length === 0) {
+      return new Response(JSON.stringify({ error: 'No data sources available — crawl the website first' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
