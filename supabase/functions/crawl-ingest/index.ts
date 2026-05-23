@@ -267,7 +267,46 @@ async function scrapeZenotiApi(url: string): Promise<string> {
       } catch (e) { console.log(`Zenoti API error at ${apiUrl}:`, (e as Error).message); }
     }
 
-    console.log('All Zenoti API endpoints failed — Firecrawl will be used instead');
+    // All JSON API endpoints failed — fall back to extracting globalJson from the HTML page.
+    // Zenoti embeds a `globalJson` variable server-side that contains promotions / deals
+    // with prices (e.g. "BAMBOO ANTI-AGING FACIAL - $99"). This is the only publicly
+    // accessible price data without going through the per-stylist booking flow.
+    console.log('JSON API endpoints failed — trying globalJson extraction from HTML page');
+    try {
+      const pageResp = await fetch(url, {
+        headers: { ...headers, 'Accept': 'text/html' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (pageResp.ok) {
+        const html = await pageResp.text();
+
+        // Extract globalJson (server-rendered, contains promo text with prices)
+        const gjMatch = html.match(/var globalJson\s*=\s*(\{[\s\S]*?\});\s*\n/);
+        if (gjMatch) {
+          try {
+            const gj = JSON.parse(gjMatch[1]);
+            const details: any[] = gj?.templateSettings?.details ?? [];
+            const priceLines: string[] = [];
+            for (const d of details) {
+              const raw = d.value ?? '';
+              if (raw.includes('$') && raw.length < 500) {
+                const decoded = raw
+                  .replace(/</g, '<').replace(/>/g, '>')
+                  .replace(/&/g, '&').replace(/&nbsp;/g, ' ')
+                  .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                if (decoded && /\$\d/.test(decoded)) priceLines.push(decoded);
+              }
+            }
+            if (priceLines.length > 0) {
+              console.log(`Extracted ${priceLines.length} price lines from Zenoti globalJson`);
+              return `\n\n=== BOOKING PLATFORM [Zenoti Promotions/Pricing]: ${url} ===\nNOTE: Zenoti pricing is per-stylist; the following promotional prices give approximate ranges:\n${priceLines.join('\n')}`;
+            }
+          } catch { /* ignore JSON parse errors */ }
+        }
+      }
+    } catch { /* ignore */ }
+
+    console.log('All Zenoti extraction methods failed — service names will be extracted by Firecrawl but prices require booking-flow selection');
     return '';
   } catch (err) {
     console.error('Zenoti API scrape error:', err);

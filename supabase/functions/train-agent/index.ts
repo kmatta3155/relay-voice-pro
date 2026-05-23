@@ -411,15 +411,26 @@ ${template.conversationalGuidelines}
   
   // Services
   if (services.length > 0) {
+    const servicesWithPrice = services.filter((s: any) => s.price);
+    const servicesWithoutPrice = services.filter((s: any) => !s.price);
+
     prompt += "SERVICES OFFERED:\n";
     services.forEach((s: any) => {
       prompt += `- ${s.name}`;
       if (s.description) prompt += `: ${s.description}`;
-      if (s.price) prompt += ` (Price: $${s.price})`;
-      if (s.duration_minutes) prompt += ` (Duration: ${s.duration_minutes} minutes)`;
+      if (s.price) prompt += ` (Starting from $${s.price})`;
+      if (s.duration_minutes) prompt += ` (${s.duration_minutes} min)`;
       prompt += "\n";
     });
     prompt += "\n";
+
+    // When prices are missing (common for booking platforms like Zenoti that use per-stylist pricing)
+    if (servicesWithoutPrice.length > servicesWithPrice.length) {
+      prompt += "PRICING NOTE: Exact prices vary by stylist and service details. When asked about pricing:\n";
+      prompt += "- Say 'Pricing varies by stylist and starts from different rates'\n";
+      prompt += "- Direct customers to book online or call for a specific quote\n";
+      prompt += "- Never make up specific prices if you don't have them\n\n";
+    }
   }
   
   // Quick answers
