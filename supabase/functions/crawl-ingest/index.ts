@@ -558,15 +558,28 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
 async function extractWithAI(content: string): Promise<{ services: ExtractedService[]; hours: ExtractedHours[]; business_info?: any }> {
   if (!OPENAI_API_KEY) return { services: [], hours: [] };
 
+  // Strip HTML tags to compress raw crawl HTML before sending to AI.
+  // Preserves section markers (=== PAGE / === BOOKING PLATFORM) so the
+  // prioritization below still works. Reduces 2MB+ to ~200-400KB.
+  const cleanContent = content
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#\d+;/g, ' ')
+    .replace(/\s{3,}/g, '\n')
+    .slice(0, 400000); // hard cap at 400KB after stripping
+
+  console.log(`AI input: ${content.length} chars raw → ${cleanContent.length} chars stripped`);
+
   const serviceKeywords = ['service', 'treatment', 'pricing', 'price', 'package', 'facial', 'massage', 'hair', 'nail', 'spa', 'salon', 'menu', 'booking', 'platform'];
   const hoursKeywords = ['hours', 'open', 'close', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
-  const maxChunkSize = 50000;
-  const maxChunks = 8;
+  const maxChunkSize = 25000;
+  const maxChunks = 5;
   const chunks: string[] = [];
 
   // Prioritize sections with service/platform keywords
-  const contentSections = content.split(/=== (?:PAGE \d+|BOOKING PLATFORM)/);
+  const contentSections = cleanContent.split(/=== (?:PAGE \d+|BOOKING PLATFORM)/);
   const prioritized = contentSections.sort((a, b) => {
     const score = (s: string) =>
       serviceKeywords.reduce((n, k) => n + (s.toLowerCase().includes(k) ? 10 : 0), 0) +
@@ -745,14 +758,28 @@ serve(async (req) => {
     console.log(`Detected ${detected.length} booking platform(s):`, detected.map(d => d.platform).join(', ') || 'none');
 
     // ── Step 3: Scrape booking platforms (JS-rendered content) ───────────────
+    let platformContent = '';
     if (detected.length > 0) {
-      const platformContent = FIRECRAWL_API_KEY
+      platformContent = FIRECRAWL_API_KEY
         ? await scrapeBookingPlatformWithFirecrawl(detected)
         : await scrapeBookingPlatformBasic(detected);
 
       if (platformContent) {
         content += platformContent;
         console.log(`Added ${platformContent.length} chars from booking platforms`);
+      }
+    }
+
+    // ── Step 3b: Trim main-site content when booking platform data is rich ───
+    // 2.4MB of raw HTML overwhelms the AI extraction CPU budget. When we already
+    // have authoritative service data from a booking platform, cap the main-site
+    // portion to 200KB so the AI can reach the booking platform section.
+    if (platformContent.length > 500 && content.length > 300000) {
+      const mainEnd = content.indexOf('\n\n=== BOOKING PLATFORM');
+      if (mainEnd > 0) {
+        const mainTrimmed = content.slice(0, Math.min(mainEnd, 200000));
+        content = mainTrimmed + content.slice(mainEnd);
+        console.log(`Trimmed main-site content to ${content.length} chars (booking platform data takes priority)`);
       }
     }
 
