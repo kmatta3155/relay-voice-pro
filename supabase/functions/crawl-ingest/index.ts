@@ -176,62 +176,98 @@ async function scrapeZenotiApi(url: string): Promise<string> {
   try {
     const parsed = new URL(url);
     const base = parsed.origin; // e.g. https://tinavora.zenoti.com
+    const headers = {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)',
+      'Origin': base,
+      'Referer': `${base}/webstoreNew/services`,
+    };
 
-    // Try several known Zenoti webstore API patterns
+    // Step 1: Get center config to find the center_id UUID
+    let centerId = '';
+    for (const configUrl of [
+      `${base}/webstoreNew/api/v1/centers/current`,
+      `${base}/webstoreNew/api/v2/centers/current`,
+    ]) {
+      try {
+        const r = await fetch(configUrl, { headers, signal: AbortSignal.timeout(6000) });
+        if (!r.ok) continue;
+        const j = await r.json();
+        centerId = j?.center_id ?? j?.id ?? j?.data?.center_id ?? j?.center?.center_id ?? '';
+        if (centerId) { console.log(`Zenoti center ID: ${centerId}`); break; }
+      } catch { /* try next */ }
+    }
+
+    // Step 2: Try catalog endpoints (ordered by likelihood of having prices)
     const candidates = [
-      `${base}/webstoreNew/api/v1/catalog/services?pageSize=200`,
+      centerId && `${base}/webstoreNew/api/v1/catalog?center_id=${centerId}`,
+      `${base}/webstoreNew/api/v1/catalog`,
+      `${base}/webstoreNew/api/v2/catalog`,
+      centerId && `${base}/webstoreNew/api/v1/services?center_id=${centerId}&pageSize=200`,
       `${base}/webstoreNew/api/v1/services?pageSize=200`,
-      `${base}/webstoreNew/api/v2/catalog/services?pageSize=200`,
-      `${base}/api/v1/catalog/services?pageSize=200`,
-    ];
+      `${base}/webstoreNew/api/v2/services?pageSize=200`,
+    ].filter(Boolean) as string[];
 
     for (const apiUrl of candidates) {
       try {
         console.log(`Trying Zenoti API: ${apiUrl}`);
-        const resp = await fetch(apiUrl, {
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)',
-          },
-          signal: AbortSignal.timeout(8000),
-        });
-
-        if (!resp.ok) continue;
+        const resp = await fetch(apiUrl, { headers, signal: AbortSignal.timeout(8000) });
+        if (!resp.ok) { console.log(`Zenoti API ${resp.status}: ${apiUrl}`); continue; }
         const ct = resp.headers.get('content-type') || '';
         if (!ct.includes('json')) continue;
 
         const data = await resp.json();
 
-        // Try common response shapes
-        const items: any[] =
-          data?.services ??
-          data?.items ??
-          data?.data?.services ??
-          data?.catalog?.services ??
-          (Array.isArray(data) ? data : []);
+        // Flatten services from various response shapes
+        let items: any[] = [];
+        if (Array.isArray(data)) {
+          items = data;
+        } else {
+          items = data?.services ?? data?.items ?? data?.data?.services ?? [];
+          // Catalog may nest services under categories
+          if (items.length === 0 && data?.categories) {
+            for (const cat of (data.categories as any[])) {
+              if (cat.services) items.push(...cat.services);
+            }
+          }
+          if (items.length === 0 && data?.catalog) {
+            items = data.catalog?.services ?? [];
+            if (items.length === 0 && data.catalog?.categories) {
+              for (const cat of (data.catalog.categories as any[])) {
+                if (cat.services) items.push(...cat.services);
+              }
+            }
+          }
+        }
 
-        if (items.length === 0) continue;
+        if (items.length === 0) { console.log(`Zenoti API: no services in response from ${apiUrl}`); continue; }
 
         console.log(`Zenoti API returned ${items.length} services from ${apiUrl}`);
 
         const lines = items.map((svc: any) => {
-          const name = svc.name || svc.service_name || svc.title || 'Service';
-          const price = svc.price?.sales_price ?? svc.price ?? svc.sales_price ?? svc.starting_price ?? '';
-          const desc = svc.description?.replace(/<[^>]+>/g, ' ').trim() || '';
-          const dur = svc.duration || svc.duration_minutes || '';
+          const name = svc.name || svc.service_name || svc.display_name || svc.title || 'Service';
+          // Zenoti price field variants
+          const rawPrice =
+            svc.price?.sales_price ?? svc.price?.price ??
+            svc.sales_price ?? svc.starting_price ?? svc.min_price ??
+            svc.price ?? '';
+          const price = rawPrice && rawPrice !== 0 ? `$${rawPrice}` : '';
+          const desc = (svc.description || svc.short_description || '')
+            .replace(/<[^>]+>/g, ' ').trim().slice(0, 120);
+          const dur = svc.duration || svc.duration_minutes || svc.service_duration || '';
           return [
             `**${name}**`,
-            price ? `Starting $${price}` : '',
+            price ? `Starting ${price}` : '',
             dur ? `${dur} min` : '',
-            desc ? `- ${desc.slice(0, 120)}` : '',
+            desc ? `- ${desc}` : '',
           ].filter(Boolean).join(' ');
         });
 
         return `\n\n=== BOOKING PLATFORM [Zenoti API]: ${apiUrl} ===\n${lines.join('\n')}`;
-      } catch { /* try next endpoint */ }
+      } catch (e) { console.log(`Zenoti API error at ${apiUrl}:`, (e as Error).message); }
     }
 
-    console.log('All Zenoti API endpoints failed, will fall back to HTML scrape');
+    console.log('All Zenoti API endpoints failed — Firecrawl will be used instead');
     return '';
   } catch (err) {
     console.error('Zenoti API scrape error:', err);
@@ -757,16 +793,32 @@ serve(async (req) => {
     const detected = detectBookingPlatforms(content);
     console.log(`Detected ${detected.length} booking platform(s):`, detected.map(d => d.platform).join(', ') || 'none');
 
-    // ── Step 3: Scrape booking platforms (JS-rendered content) ───────────────
+    // ── Step 3: Scrape booking platforms ────────────────────────────────────
+    // Strategy: always try direct API first (structured JSON with prices),
+    // then supplement with Firecrawl (JS-rendered HTML) regardless.
+    // Zenoti's webstore SPA does not show prices in the HTML rendering,
+    // but the underlying catalog API returns price fields.
     let platformContent = '';
     if (detected.length > 0) {
-      platformContent = FIRECRAWL_API_KEY
-        ? await scrapeBookingPlatformWithFirecrawl(detected)
-        : await scrapeBookingPlatformBasic(detected);
+      // Direct API scraping (has price data from JSON responses)
+      const apiContent = await scrapeBookingPlatformBasic(detected);
+      if (apiContent) {
+        platformContent += apiContent;
+        console.log(`Direct API: ${apiContent.length} chars from booking platform`);
+      }
+
+      // Supplement with Firecrawl (catches any content not in the API)
+      if (FIRECRAWL_API_KEY) {
+        const fcContent = await scrapeBookingPlatformWithFirecrawl(detected);
+        if (fcContent) {
+          platformContent += fcContent;
+          console.log(`Firecrawl supplement: ${fcContent.length} chars from booking platform`);
+        }
+      }
 
       if (platformContent) {
         content += platformContent;
-        console.log(`Added ${platformContent.length} chars from booking platforms`);
+        console.log(`Total booking platform content: ${platformContent.length} chars`);
       }
     }
 
