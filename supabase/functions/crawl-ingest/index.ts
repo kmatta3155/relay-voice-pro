@@ -918,11 +918,24 @@ async function saveToDatabase(tenantId: string, services: ExtractedService[], ho
 // structure (div cards, SPAs, React/Vue/Angular, iframes) because Firecrawl
 // renders JS first, then the LLM extracts from the visible content.
 
-function findServicePageUrls(content: string): string[] {
+// Common service page paths to probe at the root domain.
+// Covers: generic service pages, beauty/salon specific, restaurant menus,
+// medical/spa/automotive, and common CMS slug patterns.
+const COMMON_SERVICE_PATHS = [
+  '/services', '/service', '/menu', '/our-menu', '/treatments', '/our-services',
+  '/service-menu', '/pricing', '/packages', '/offerings', '/what-we-do',
+  '/services-menu', '/beauty-services', '/hair-services', '/salon-services',
+  '/spa-menu', '/spa-services', '/medical-services', '/our-work',
+  '/services-and-pricing', '/services-pricing', '/services/menu',
+];
+
+async function findServicePageUrls(content: string, inputUrl: string): Promise<string[]> {
   const serviceUrlPattern = /service|treatment|menu|pricing|package|offering|our-work|what-we-do/i;
   const skipPattern = /blog|news|cart|checkout|login|wp-admin|sitemap|tag|category/i;
   const seen = new Set<string>();
   const urls: string[] = [];
+
+  // 1. URLs already found in the crawled content
   const pageRe = /=== PAGE\s+\d+:\s+(https?:\/\/[^\s\n]+)\s+===/g;
   let m: RegExpExecArray | null;
   while ((m = pageRe.exec(content)) !== null) {
@@ -932,7 +945,38 @@ function findServicePageUrls(content: string): string[] {
       urls.push(u);
     }
   }
-  return urls.slice(0, 3); // max 3 service pages
+
+  // 2. Probe common service paths at the ROOT domain.
+  // This handles cases where crawl started from a location-specific subpath
+  // (e.g. /raleigh-nc-ridgewood) and Firecrawl never visited /services.
+  try {
+    const root = new URL(inputUrl).origin;
+    const probes = COMMON_SERVICE_PATHS.map(p => root + p).filter(u => !seen.has(u));
+
+    // Quick existence check — HEAD request, no body downloaded
+    const checks = probes.slice(0, 10).map(async (probeUrl) => {
+      try {
+        const r = await fetch(probeUrl, {
+          method: 'HEAD',
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)' },
+          signal: AbortSignal.timeout(5000),
+          redirect: 'follow',
+        });
+        if (r.ok) return probeUrl;
+      } catch { /* ignore */ }
+      return null;
+    });
+
+    const found = (await Promise.all(checks)).filter(Boolean) as string[];
+    for (const u of found) {
+      if (!seen.has(u)) { seen.add(u); urls.push(u); }
+    }
+    if (found.length > 0) console.log(`Root domain service pages found: ${found.join(', ')}`);
+  } catch (e) {
+    console.warn('Service page probe error:', (e as Error).message);
+  }
+
+  return urls.slice(0, 5); // max 5 service pages
 }
 
 async function extractServicesWithFirecrawlExtract(servicePageUrls: string[]): Promise<ExtractedService[]> {
@@ -1085,7 +1129,7 @@ serve(async (req) => {
     // because Firecrawl renders JS first, then LLM extracts structured data.
     let firecrawlExtractServices: ExtractedService[] = [];
     if (FIRECRAWL_API_KEY) {
-      const serviceUrls = findServicePageUrls(content);
+      const serviceUrls = await findServicePageUrls(content, url);
       if (serviceUrls.length > 0) {
         console.log(`Running Firecrawl extract on ${serviceUrls.length} service page(s):`, serviceUrls);
         firecrawlExtractServices = await extractServicesWithFirecrawlExtract(serviceUrls);
