@@ -31,6 +31,9 @@ const BOOKING_PLATFORMS = [
   { name: 'Timely',           domains: ['gettimely.com'],                       servicesPath: null },
   { name: 'Jane App',         domains: ['janeapp.com'],                         servicesPath: null },
   { name: 'Booksy',           domains: ['booksy.com'],                          servicesPath: null },
+  { name: 'Growthzilla',     domains: ['appt.cm', 'book.appt.cm', 'growthzilla.com', 'uzeli.com'], servicesPath: null },
+  { name: 'Rosy',            domains: ['rosysalon.com'],                         servicesPath: null },
+  { name: 'SalonBiz',        domains: ['salonbiz.com', 'salonbizapps.com'],      servicesPath: null },
 ];
 
 interface DetectedPlatform {
@@ -581,13 +584,26 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
       }
     }
 
-    // List items
+    // List items — extract with price if present, or without price on service pages
+    const isServicePage = /service|menu|treatment|pricing|package/i.test(url);
+    const navWords = /^(home|menu|blog|news|contact|about|login|sign[\s-]?up|faq|privacy|terms|cart|shop|search|locations?|franchise|deals?|memberships?|gift\s*cards?|book\s*(now|online)?|view\s*(our\s*)?services|next\s*steps?|request|hairstyle|gallery|portfolio|our\s*story|team|staff|reviews?|careers?|press|sitemap|accessibility|cookie|logout|account|profile|schedule|appointment|call\s*us)$/i;
     const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
     let li: RegExpExecArray | null;
     while ((li = liRegex.exec(html)) !== null) {
       const text = clean(li[1]);
+      if (!text || text.length < 3 || text.length > 120) continue;
+      // Try with price first
       const mt = text.match(/^(.{2,100}?)[\s:,-]*\s*(\$?\d[\d.+]*)(?:\s|$)/);
-      if (mt) pushService(mt[1], mt[2]);
+      if (mt) { pushService(mt[1], mt[2]); continue; }
+      // On service/menu pages: extract list items even without price,
+      // filtering out navigation items, URLs, and obvious non-service text
+      if (isServicePage &&
+          !navWords.test(text) &&
+          !/^https?:\/\//.test(text) &&
+          !/^\d+$/.test(text) &&
+          !/[<>{}]/.test(text)) {
+        pushService(text);
+      }
     }
 
     // Plain text lines: "Name $price"
@@ -686,11 +702,13 @@ NOTE: Some sections labelled "BOOKING PLATFORM" contain data from a third-party 
 
 INSTRUCTIONS:
 1. Extract ONLY legitimate service names — not navigation, headers, or contact phrases
-2. For prices, use only explicitly stated values ($50, $85, Starting $116, etc.)
-3. For ranges like "$50-$80" use the starting price
-4. Never invent prices
-5. Extract all business hours, phone, email, and addresses found
-6. Service names from booking platforms are authoritative — include ALL of them
+2. Extract service names EVEN WHEN NO PRICE IS PRESENT — a service list on a services/menu page is valid even without prices. Many salons and franchises don't publish prices publicly.
+3. For prices, use only explicitly stated values ($50, $85, Starting $116, etc.)
+4. For ranges like "$50-$80" use the starting price
+5. Never invent prices — omit the price field entirely if not explicitly stated
+6. Extract all business hours, phone, email, and addresses found
+7. Service names from booking platforms are authoritative — include ALL of them
+8. If a page is a services/menu/treatments page, extract EVERY item listed, even without a price
 
 Return ONLY valid JSON:
 {
