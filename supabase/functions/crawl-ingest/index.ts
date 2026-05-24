@@ -502,36 +502,95 @@ async function fetchHeuristic(url: string, options: CrawlOptions): Promise<{ con
 
 // ── Structured data extraction (JSON-LD, schema.org) ─────────────────────────
 
+function parseDuration(iso: string): number | undefined {
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  return m ? (parseInt(m[1] || '0') * 60) + parseInt(m[2] || '0') : undefined;
+}
+
 function extractStructuredData(html: string): { services: ExtractedService[]; hours: ExtractedHours[] } {
   const services: ExtractedService[] = [];
   const hours: ExtractedHours[] = [];
 
-  const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis;
+  const pushService = (name: string, desc?: string, price?: string | number, dur?: string) => {
+    const n = (name || '').replace(/<[^>]+>/g, '').trim();
+    if (!n || n.length < 2 || n.length > 100) return;
+    const priceStr = price != null && price !== '' ? `$${String(price).replace(/^\$/, '')}` : undefined;
+    const durMin = dur ? parseDuration(dur) : undefined;
+    services.push({ name: n, description: desc?.replace(/<[^>]+>/g, '').trim() || undefined, price: priceStr, duration_minutes: durMin });
+  };
+
+  const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = jsonLdPattern.exec(html)) !== null) {
     try {
-      let jsonData = JSON.parse(match[1].trim());
-      if (Array.isArray(jsonData)) jsonData = jsonData[0];
-      else if (jsonData['@graph']) jsonData = jsonData['@graph'][0];
+      const raw = JSON.parse(match[1].trim());
+      // Normalize: handle @graph arrays, plain arrays, and single objects
+      const items: any[] = raw['@graph'] ? raw['@graph'] : Array.isArray(raw) ? raw : [raw];
 
-      if (jsonData.hasOfferCatalog?.itemListElement) {
-        for (const item of jsonData.hasOfferCatalog.itemListElement) {
-          services.push({
-            name: item.name || 'Unnamed Service',
-            description: item.description,
-            price: item.offers?.price ? `$${item.offers.price}` : undefined,
-            duration_minutes: item.offers?.duration ? parseInt(item.offers.duration) : undefined
-          });
+      for (const item of items) {
+        const type = ([] as string[]).concat(item['@type'] ?? []).join(',');
+
+        // hasOfferCatalog (on LocalBusiness, Service, etc.)
+        if (item.hasOfferCatalog?.itemListElement) {
+          for (const e of ([] as any[]).concat(item.hasOfferCatalog.itemListElement)) {
+            const n = e.name || e.itemOffered?.name;
+            if (n) pushService(n, e.description || e.itemOffered?.description,
+              e.offers?.price ?? e.price, e.offers?.duration);
+          }
         }
-      }
 
-      if (jsonData.openingHours || jsonData.openingHoursSpecification) {
-        const hoursSpec = jsonData.openingHoursSpecification || jsonData.openingHours;
-        if (Array.isArray(hoursSpec)) {
-          for (const spec of hoursSpec) {
-            const dayName = spec.dayOfWeek?.replace('https://schema.org/', '') || spec.dayOfWeek;
-            hours.push({ day: dayName, open_time: spec.opens, close_time: spec.closes, is_closed: !spec.opens || !spec.closes });
+        // makesOffer / offers array
+        const offerList = ([] as any[]).concat(item.makesOffer ?? item.offers ?? []);
+        for (const offer of offerList) {
+          if (typeof offer !== 'object' || !offer) continue;
+          const n = offer.name || offer.itemOffered?.name;
+          if (n) pushService(n, offer.description || offer.itemOffered?.description,
+            offer.price ?? offer.priceSpecification?.price);
+        }
+
+        // ItemList / OfferCatalog (standalone service catalog)
+        if (/ItemList|OfferCatalog/.test(type) && item.itemListElement) {
+          for (const el of ([] as any[]).concat(item.itemListElement)) {
+            const sub = el.item ?? el;
+            pushService(sub.name, sub.description, sub.offers?.price ?? sub.price);
+          }
+        }
+
+        // Service type directly
+        if (/Service|Product/.test(type) && item.name) {
+          pushService(item.name, item.description, item.offers?.price ?? item.price);
+        }
+
+        // Menu / MenuItem (restaurants, food)
+        if (/Menu$/.test(type) && item.hasMenuSection) {
+          for (const sec of ([] as any[]).concat(item.hasMenuSection)) {
+            for (const mi of ([] as any[]).concat(sec.hasMenuItem ?? [])) {
+              pushService(mi.name, mi.description, mi.offers?.price ?? mi.suitableForDiet);
+            }
+          }
+        }
+
+        // Business hours — openingHoursSpecification (array of objects)
+        if (item.openingHoursSpecification) {
+          for (const spec of ([] as any[]).concat(item.openingHoursSpecification)) {
+            for (const d of ([] as any[]).concat(spec.dayOfWeek ?? [])) {
+              const day = (typeof d === 'string' ? d : '').replace(/^.*\//, '');
+              if (day) hours.push({ day, open_time: spec.opens, close_time: spec.closes, is_closed: !spec.opens });
+            }
+          }
+        }
+
+        // Business hours — openingHours string format: "Mo-Fr 09:00-17:00"
+        if (item.openingHours) {
+          const abbr = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+          const names = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+          for (const spec of ([] as any[]).concat(item.openingHours)) {
+            const m2 = /^([A-Z][a-z])(?:-([A-Z][a-z]))?\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(spec);
+            if (!m2) continue;
+            const si = abbr.indexOf(m2[1]), ei = m2[2] ? abbr.indexOf(m2[2]) : si;
+            if (si >= 0) for (let i = si; i <= ei; i++)
+              hours.push({ day: names[i], open_time: m2[3], close_time: m2[4], is_closed: false });
           }
         }
       }
@@ -603,6 +662,49 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
           !/^\d+$/.test(text) &&
           !/[<>{}]/.test(text)) {
         pushService(text);
+      }
+    }
+
+    // Definition lists: <dl><dt>Service</dt><dd>$price or description</dd></dl>
+    const dlRegex = /<dl[^>]*>([\s\S]*?)<\/dl>/gi;
+    let dl: RegExpExecArray | null;
+    while ((dl = dlRegex.exec(html)) !== null) {
+      const dtMatches = [...dl[1].matchAll(/<dt[^>]*>([\s\S]*?)<\/dt>/gi)].map(m => clean(m[1]));
+      const ddMatches = [...dl[1].matchAll(/<dd[^>]*>([\s\S]*?)<\/dd>/gi)].map(m => clean(m[1]));
+      for (let i = 0; i < dtMatches.length; i++) {
+        const name = dtMatches[i];
+        if (name && name.length > 2 && name.length < 100) {
+          pushService(name, ddMatches[i]);
+        }
+      }
+    }
+
+    // Div/article/section cards with service-related class names
+    // Matches: <div class="service-card">, <article class="treatment">, etc.
+    const cardRe = /<(?:div|article|section|li|figure)[^>]*class=["'][^"']*(?:service|treatment|menu[-_]?item|package|offering|product[-_]?item|price[-_]?item)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|article|section|li|figure)>/gi;
+    let card: RegExpExecArray | null;
+    while ((card = cardRe.exec(html)) !== null) {
+      const inner = card[1];
+      // Name: first heading or strong/b tag inside the card
+      const nameMatch = inner.match(/<(?:h[2-6]|strong|b|[^>]*class=["'][^"']*(?:title|name|heading)[^"']*["'])[^>]*>([\s\S]*?)<\/(?:h[2-6]|strong|b|[^>]*)>/i);
+      if (!nameMatch) continue;
+      const cardName = clean(nameMatch[1]);
+      if (!cardName || cardName.length < 3 || cardName.length > 100) continue;
+      // Price: look for $ amount anywhere in the card
+      const priceMatch = inner.match(/\$\s*(\d[\d,.]*)/);
+      pushService(cardName, priceMatch ? `$${priceMatch[1]}` : undefined);
+    }
+
+    // Heading + adjacent price pattern: <h3>Service</h3> ... <span>$45</span>
+    // Captures service names from heading-based layouts used by many modern CMSes
+    const headingPriceRe = /<h([2-5])[^>]*>([\s\S]*?)<\/h\1>([\s\S]{0,300}?)(\$\s*\d[\d,.]*)/gi;
+    let hp: RegExpExecArray | null;
+    while ((hp = headingPriceRe.exec(html)) !== null) {
+      const headingText = clean(hp[2]);
+      const priceText = hp[4].trim();
+      if (headingText && headingText.length > 2 && headingText.length < 80 &&
+          !/^(our\s|about|contact|menu|home|gallery|team|staff|book|call|welcome|follow)/i.test(headingText)) {
+        pushService(headingText, priceText);
       }
     }
 
@@ -811,6 +913,92 @@ async function saveToDatabase(tenantId: string, services: ExtractedService[], ho
   }
 }
 
+// ── Firecrawl LLM extract mode ────────────────────────────────────────────────
+// Uses Firecrawl's built-in AI extraction on a rendered page. Handles any HTML
+// structure (div cards, SPAs, React/Vue/Angular, iframes) because Firecrawl
+// renders JS first, then the LLM extracts from the visible content.
+
+function findServicePageUrls(content: string): string[] {
+  const serviceUrlPattern = /service|treatment|menu|pricing|package|offering|our-work|what-we-do/i;
+  const skipPattern = /blog|news|cart|checkout|login|wp-admin|sitemap|tag|category/i;
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  const pageRe = /=== PAGE\s+\d+:\s+(https?:\/\/[^\s\n]+)\s+===/g;
+  let m: RegExpExecArray | null;
+  while ((m = pageRe.exec(content)) !== null) {
+    const u = m[1].trim();
+    if (serviceUrlPattern.test(u) && !skipPattern.test(u) && !seen.has(u)) {
+      seen.add(u);
+      urls.push(u);
+    }
+  }
+  return urls.slice(0, 3); // max 3 service pages
+}
+
+async function extractServicesWithFirecrawlExtract(servicePageUrls: string[]): Promise<ExtractedService[]> {
+  if (!FIRECRAWL_API_KEY || servicePageUrls.length === 0) return [];
+  const all: ExtractedService[] = [];
+
+  for (const url of servicePageUrls) {
+    console.log(`Firecrawl extract mode: ${url}`);
+    try {
+      const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${FIRECRAWL_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          formats: ['extract'],
+          waitFor: 4000,
+          extract: {
+            prompt: 'Extract ALL services, treatments, packages, and menu items this business offers. For each item include: name (required), price if shown, description if shown, duration in minutes if shown. Extract every single service/treatment/package even if no price is listed.',
+            schema: {
+              type: 'object',
+              properties: {
+                services: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      price: { type: 'string' },
+                      description: { type: 'string' },
+                      duration_minutes: { type: 'number' }
+                    },
+                    required: ['name']
+                  }
+                }
+              }
+            }
+          }
+        }),
+        signal: AbortSignal.timeout(35000),
+      });
+
+      if (!resp.ok) { console.warn(`Firecrawl extract ${resp.status} for ${url}`); continue; }
+      const data = await resp.json();
+      const extracted: any[] = data?.data?.extract?.services ?? data?.extract?.services ?? [];
+      console.log(`Firecrawl extract: ${extracted.length} services from ${url}`);
+
+      for (const svc of extracted) {
+        const name = (svc.name || '').trim();
+        if (name.length < 2 || name.length > 100) continue;
+        const priceRaw = svc.price ? String(svc.price).replace(/[^\d.]/g, '') : '';
+        all.push({
+          name,
+          price: priceRaw ? `$${priceRaw}` : undefined,
+          description: svc.description?.trim() || undefined,
+          duration_minutes: svc.duration_minutes || undefined,
+        });
+      }
+    } catch (err) {
+      console.error(`Firecrawl extract error for ${url}:`, (err as Error).message);
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  return all;
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -892,17 +1080,45 @@ serve(async (req) => {
       }
     }
 
+    // ── Step 3c: Firecrawl LLM extract on detected service pages ────────────
+    // This handles any HTML structure (div cards, SPAs, any CSS framework)
+    // because Firecrawl renders JS first, then LLM extracts structured data.
+    let firecrawlExtractServices: ExtractedService[] = [];
+    if (FIRECRAWL_API_KEY) {
+      const serviceUrls = findServicePageUrls(content);
+      if (serviceUrls.length > 0) {
+        console.log(`Running Firecrawl extract on ${serviceUrls.length} service page(s):`, serviceUrls);
+        firecrawlExtractServices = await extractServicesWithFirecrawlExtract(serviceUrls);
+        console.log(`Firecrawl extract total: ${firecrawlExtractServices.length} services`);
+      }
+    }
+
     // ── Step 4: Multi-method data extraction ─────────────────────────────────
     const structuredData = extractStructuredData(content);
     const deterministicServices = extractServicesProgrammatically(content);
     const aiData = await extractWithAI(content);
 
-    const allServices = [...deterministicServices, ...structuredData.services, ...aiData.services];
+    // Merge all sources: Firecrawl extract first (highest quality), then others
+    const allServices = [
+      ...firecrawlExtractServices,
+      ...deterministicServices,
+      ...structuredData.services,
+      ...aiData.services,
+    ];
     const allHours = [...structuredData.hours, ...aiData.hours];
 
-    const uniqueServices = allServices.filter((s, i, arr) =>
-      arr.findIndex(x => x.name.toLowerCase() === s.name.toLowerCase()) === i
-    );
+    // Fuzzy dedup: normalize name (lowercase, strip punctuation, collapse spaces)
+    const normName = (n: string) => n.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    const seen = new Set<string>();
+    const uniqueServices = allServices.filter(s => {
+      const key = normName(s.name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    // Prefer entries that have a price over duplicates without
+    // (done by ordering firecrawlExtractServices first — they're most complete)
+
     const uniqueHours = allHours.filter((h, i, arr) =>
       arr.findIndex(x => x.day.toLowerCase() === h.day.toLowerCase()) === i
     );
@@ -920,7 +1136,7 @@ serve(async (req) => {
       business_info: aiData.business_info,
       pages_fetched,
       used_firecrawl,
-      extraction_method: `${extraction_method}+deterministic+ai${detected.length ? '+booking-platforms' : ''}`,
+      extraction_method: `${extraction_method}+llm-extract+deterministic+ai${detected.length ? '+booking-platforms' : ''}`,
       detected_platforms: detected,
     };
 
