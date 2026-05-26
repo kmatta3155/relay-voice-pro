@@ -979,12 +979,58 @@ async function findServicePageUrls(content: string, inputUrl: string): Promise<s
   return urls.slice(0, 5); // max 5 service pages
 }
 
+// Fetch service pages directly as plain HTML and inject into the content buffer.
+// This lets extractServicesProgrammatically process all <li>/<dt>/<div> items
+// without LLM token limits or price hallucination.
+// Returns: updated content and any URLs that appear to be SPAs (need Firecrawl).
+async function fetchAndInjectServicePages(
+  urls: string[],
+  content: string
+): Promise<{ content: string; spaUrls: string[] }> {
+  const spaUrls: string[] = [];
+  let pageCount = (content.match(/=== PAGE \d+:/g) || []).length + 1;
+
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)',
+          'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!resp.ok) { console.log(`Skip ${url}: HTTP ${resp.status}`); continue; }
+
+      const html = await resp.text();
+      const textOnly = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+      if (textOnly.length < 500) {
+        // Tiny text content → likely a SPA that needs JS rendering
+        spaUrls.push(url);
+        console.log(`SPA detected at ${url} (${textOnly.length} text chars) — queued for Firecrawl`);
+        continue;
+      }
+
+      // Plain HTML — inject for all extraction methods to process
+      content += `\n\n=== PAGE ${pageCount++}: ${url} ===\n[HTML_CONTENT]\n${html}\n[/HTML_CONTENT]\n`;
+      console.log(`Injected service page: ${url} (${html.length} HTML chars, ${textOnly.length} text chars)`);
+    } catch (err) {
+      console.error(`Failed to fetch ${url}:`, (err as Error).message);
+    }
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  return { content, spaUrls };
+}
+
+// Firecrawl LLM extract — used ONLY for SPA pages where plain HTML fetch returns
+// minimal content (JS-rendered sites like Zenoti, Mindbody, Vagaro).
 async function extractServicesWithFirecrawlExtract(servicePageUrls: string[]): Promise<ExtractedService[]> {
   if (!FIRECRAWL_API_KEY || servicePageUrls.length === 0) return [];
   const all: ExtractedService[] = [];
 
   for (const url of servicePageUrls) {
-    console.log(`Firecrawl extract mode: ${url}`);
+    console.log(`Firecrawl extract mode (SPA): ${url}`);
     try {
       const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
@@ -992,9 +1038,14 @@ async function extractServicesWithFirecrawlExtract(servicePageUrls: string[]): P
         body: JSON.stringify({
           url,
           formats: ['extract'],
-          waitFor: 4000,
+          waitFor: 6000,
           extract: {
-            prompt: 'Extract ALL services, treatments, packages, and menu items this business offers. For each item include: name (required), price if shown, description if shown, duration in minutes if shown. Extract every single service/treatment/package even if no price is listed.',
+            prompt: `Extract ALL services, treatments, packages, and menu items from this page.
+CRITICAL RULES:
+- Extract EVERY service listed, no matter how many there are — do not stop early
+- NEVER invent or guess prices. If no price is shown next to a service, omit the price field completely
+- Many businesses deliberately do not publish prices; that is normal
+- Include service name (required), price only if explicitly displayed, description if available`,
             schema: {
               type: 'object',
               properties: {
@@ -1015,7 +1066,7 @@ async function extractServicesWithFirecrawlExtract(servicePageUrls: string[]): P
             }
           }
         }),
-        signal: AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(40000),
       });
 
       if (!resp.ok) { console.warn(`Firecrawl extract ${resp.status} for ${url}`); continue; }
@@ -1026,13 +1077,10 @@ async function extractServicesWithFirecrawlExtract(servicePageUrls: string[]): P
       for (const svc of extracted) {
         const name = (svc.name || '').trim();
         if (name.length < 2 || name.length > 100) continue;
+        // Only use price if it looks like a real dollar amount, not a hallucination
         const priceRaw = svc.price ? String(svc.price).replace(/[^\d.]/g, '') : '';
-        all.push({
-          name,
-          price: priceRaw ? `$${priceRaw}` : undefined,
-          description: svc.description?.trim() || undefined,
-          duration_minutes: svc.duration_minutes || undefined,
-        });
+        const price = priceRaw && parseFloat(priceRaw) > 0 ? `$${priceRaw}` : undefined;
+        all.push({ name, price, description: svc.description?.trim() || undefined, duration_minutes: svc.duration_minutes || undefined });
       }
     } catch (err) {
       console.error(`Firecrawl extract error for ${url}:`, (err as Error).message);
@@ -1124,16 +1172,25 @@ serve(async (req) => {
       }
     }
 
-    // ── Step 3c: Firecrawl LLM extract on detected service pages ────────────
-    // This handles any HTML structure (div cards, SPAs, any CSS framework)
-    // because Firecrawl renders JS first, then LLM extracts structured data.
+    // ── Step 3c: Inject missed service pages + SPA fallback ─────────────────
+    // Phase 1: Probe root domain for service pages not reached by the main crawl
+    //          (e.g. user entered /raleigh-nc-ridgewood, missed /services).
+    //          Fetch their HTML directly and inject into content so all
+    //          extraction methods (especially programmatic <li> parsing) can use them.
+    // Phase 2: Pages that return minimal HTML (SPAs) are queued for Firecrawl
+    //          LLM extract which renders JS before extracting.
     let firecrawlExtractServices: ExtractedService[] = [];
-    if (FIRECRAWL_API_KEY) {
-      const serviceUrls = await findServicePageUrls(content, url);
-      if (serviceUrls.length > 0) {
-        console.log(`Running Firecrawl extract on ${serviceUrls.length} service page(s):`, serviceUrls);
-        firecrawlExtractServices = await extractServicesWithFirecrawlExtract(serviceUrls);
-        console.log(`Firecrawl extract total: ${firecrawlExtractServices.length} services`);
+    const serviceUrls = await findServicePageUrls(content, url);
+    if (serviceUrls.length > 0) {
+      console.log(`Service pages to process: ${serviceUrls.join(', ')}`);
+      const { content: injectedContent, spaUrls } = await fetchAndInjectServicePages(serviceUrls, content);
+      content = injectedContent;
+
+      // SPA pages need Firecrawl to render JS before extracting
+      if (FIRECRAWL_API_KEY && spaUrls.length > 0) {
+        console.log(`Firecrawl extract on ${spaUrls.length} SPA page(s):`, spaUrls);
+        firecrawlExtractServices = await extractServicesWithFirecrawlExtract(spaUrls);
+        console.log(`Firecrawl SPA extract total: ${firecrawlExtractServices.length} services`);
       }
     }
 
