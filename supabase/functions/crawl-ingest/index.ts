@@ -1204,7 +1204,28 @@ serve(async (req) => {
     const finalTenantId = tenant_id || tenantId;
     const mergedOptions: CrawlOptions = { ...crawlOptions, ...options };
 
-    if (!url || !finalTenantId) throw new Error('url and tenant_id are required');
+    if (!url || !finalTenantId) {
+      return new Response(JSON.stringify({ error: 'url and tenant_id are required', services: [], hours: [], pages_fetched: 0, used_firecrawl: false, extraction_method: 'failed' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // verify_jwt is off (public demo uses tenant 'demo' with no DB writes).
+    // Writes into a REAL tenant require a valid user who is a member of it —
+    // otherwise anyone with the anon key could overwrite a tenant's services.
+    if (finalTenantId !== 'demo') {
+      const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+      const { data: userData, error: userErr } = await supabase.auth.getUser(jwt);
+      if (userErr || !userData?.user) {
+        return new Response(JSON.stringify({ error: 'Authentication required for tenant crawls' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const { data: mem } = await supabase.from('memberships')
+        .select('user_id').eq('tenant_id', finalTenantId).eq('user_id', userData.user.id).maybeSingle();
+      if (!mem) {
+        return new Response(JSON.stringify({ error: 'Not authorized for this tenant' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
 
     console.log(`Starting extraction for ${url}`);
 

@@ -17,6 +17,20 @@ const corsHeaders = {
 const stripe = new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" });
 const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+// verify_jwt is disabled for this function (the Stripe webhook has no JWT),
+// so checkout/portal must validate the caller themselves: a valid user token
+// AND membership in the target tenant. Without this, anyone holding the public
+// anon key could open any tenant's Stripe billing portal.
+async function requireMember(req: Request, tenantId: string) {
+  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!jwt) return null;
+  const { data, error } = await admin.auth.getUser(jwt);
+  if (error || !data?.user) return null;
+  const { data: mem } = await admin.from("memberships")
+    .select("user_id").eq("tenant_id", tenantId).eq("user_id", data.user.id).maybeSingle();
+  return mem ? data.user : null;
+}
+
 async function getTenant(tenantId: string){
   const { data, error } = await admin.from("tenants").select("id, stripe_customer_id").eq("id", tenantId).single();
   if(error) throw error;
@@ -106,12 +120,18 @@ serve(async (req) => {
 
     if (action === "checkout" && method === "POST") {
       if (!tenantId || !priceId) return new Response("Missing args", { status: 400, headers: corsHeaders });
+      if (!(await requireMember(req, tenantId))) {
+        return new Response(JSON.stringify({ error: "Not authorized for this tenant" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }});
+      }
       const out = await createCheckout(tenantId, priceId);
       return new Response(JSON.stringify(out), { headers: { ...corsHeaders, "Content-Type": "application/json" }});
     }
 
     if (action === "portal" && method === "POST") {
       if (!tenantId) return new Response("Missing tenant", { status: 400, headers: corsHeaders });
+      if (!(await requireMember(req, tenantId))) {
+        return new Response(JSON.stringify({ error: "Not authorized for this tenant" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }});
+      }
       const out = await createPortal(tenantId);
       return new Response(JSON.stringify(out), { headers: { ...corsHeaders, "Content-Type": "application/json" }});
     }
