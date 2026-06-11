@@ -27,6 +27,7 @@ import {
   Users,
   Settings,
   Sparkles,
+  ChevronDown,
 } from "lucide-react";
 
 import { VoiceRelayLogo } from "@/components/VoiceRelayLogo";
@@ -236,6 +237,20 @@ function Hero() {
       <div className="absolute inset-x-0 top-[-120px] -z-10 h-[300px] bg-[radial-gradient(700px_200px_at_80%_0%,theme(colors.violet.500),transparent_60%)]" />
       <div className="max-w-6xl mx-auto px-4 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
         <div>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="inline-flex items-center gap-2 mb-5 px-3 py-1.5 rounded-full border bg-card/70 backdrop-blur text-sm shadow-sm"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+            </span>
+            <span className="text-muted-foreground">New:</span>
+            <span className="font-medium">Instant training from any website</span>
+          </motion.div>
+
           <motion.h1
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -605,8 +620,8 @@ function Pricing() {
                   </li>
                 ))}
               </ul>
-              <Button className="w-full rounded-2xl" variant={t.highlighted ? "default" : "outline"}>
-                {t.cta}
+              <Button asChild className="w-full rounded-2xl" variant={t.highlighted ? "default" : "outline"}>
+                <a href={t.cta === "Talk to sales" ? "#demo" : "/#app"}>{t.cta}</a>
               </Button>
               <p className="text-[11px] text-muted-foreground text-center mt-3">14-day free trial • No credit card • Cancel anytime</p>
             </CardContent>
@@ -639,7 +654,7 @@ function FAQ() {
           <details key={i} className="group p-6">
             <summary className="flex items-center justify-between cursor-pointer list-none">
               <span className="font-medium">{f.q}</span>
-              <span className="text-muted-foreground group-open:rotate-180 transition-transform">⌄</span>
+              <ChevronDown className="w-4 h-4 text-muted-foreground group-open:rotate-180 transition-transform duration-200" />
             </summary>
             <p className="mt-3 text-muted-foreground">{f.a}</p>
           </details>
@@ -687,17 +702,60 @@ function Security() {
    Footer + Floating Contact
    ========================= */
 function Footer() {
-  const session = useSessionState();
+  const columns = [
+    {
+      title: "Product",
+      links: [
+        { label: "Features", href: "#features" },
+        { label: "Pricing", href: "#pricing" },
+        { label: "Live Demo", href: "#interactive-demo" },
+        { label: "Dashboard", href: "#dashboard" },
+      ],
+    },
+    {
+      title: "Company",
+      links: [
+        { label: "Security", href: "#security" },
+        { label: "FAQ", href: "#faq" },
+        { label: "Contact sales", href: "#demo" },
+        { label: "Status", href: `https://status.${CONFIG.DOMAIN}` },
+      ],
+    },
+    {
+      title: "Get started",
+      links: [
+        { label: "Start free trial", href: "/#app" },
+        { label: "Sign in", href: "/#signin" },
+        { label: "Book a walkthrough", href: "#demo" },
+      ],
+    },
+  ];
   return (
-    <footer className="px-4 pb-12">
-      <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6 items-center">
-        <div className="text-sm text-muted-foreground">© {new Date().getFullYear()} {CONFIG.COMPANY}. All rights reserved.</div>
-        <div className="flex gap-4 justify-start md:justify-end text-sm">
-          <a href="#security" className="underline">Security</a>
-          <a href="#faq" className="underline">FAQ</a>
-          <a href="#pricing" className="underline">Pricing</a>
-          <a href="#interactive-demo" className="underline">Demo</a>
-          <a href="#dashboard" className="underline">Dashboard</a>
+    <footer className="border-t bg-card/60">
+      <div className="max-w-6xl mx-auto px-4 py-12 grid gap-10 md:grid-cols-4">
+        <div>
+          <VoiceRelayLogo size="md" />
+          <p className="mt-3 text-sm text-muted-foreground max-w-xs leading-relaxed">
+            The AI voice receptionist that trains itself from your website — answering, booking, and delighting callers 24/7.
+          </p>
+        </div>
+        {columns.map((col) => (
+          <div key={col.title}>
+            <div className="text-sm font-semibold mb-3">{col.title}</div>
+            <ul className="space-y-2 text-sm">
+              {col.links.map((l) => (
+                <li key={l.label}>
+                  <a href={l.href} className="text-muted-foreground hover:text-foreground transition-colors">{l.label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="border-t">
+        <div className="max-w-6xl mx-auto px-4 py-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} {CONFIG.COMPANY}. All rights reserved.</span>
+          <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> Encrypted in transit & at rest</span>
         </div>
       </div>
     </footer>

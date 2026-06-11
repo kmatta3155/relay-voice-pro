@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { signUpWithPassword } from "@/lib/auth";
+import { VoiceRelayLogo } from "@/components/VoiceRelayLogo";
 
 export default function SignInScreen() {
   const [email, setEmail] = useState("");
@@ -91,8 +92,12 @@ export default function SignInScreen() {
   };
 
   return (
-    <main className="min-h-screen bg-background grid place-items-center px-4 py-10">
-      <Card className="w-full max-w-md">
+    <main className="min-h-screen bg-[image:var(--gradient-hero)] grid place-items-center px-4 py-10">
+      <div className="w-full max-w-md">
+        <div className="flex justify-center mb-6">
+          <a href="/#overview" aria-label="Voice Relay Pro home"><VoiceRelayLogo size="lg" /></a>
+        </div>
+        <Card className="w-full shadow-[var(--shadow-premium)] border-border/60 backdrop-blur">
         {stage === "login" && (
           <>
             <CardHeader>
@@ -112,31 +117,33 @@ export default function SignInScreen() {
                   <AlertDescription>{ok}</AlertDescription>
                 </Alert>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
-              </div>
-              <Button onClick={handleLogin} disabled={loading} className="w-full">
-                {loading ? "Signing in…" : "Sign in"}
-              </Button>
+              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full">
+                  {loading ? "Signing in…" : "Sign in"}
+                </Button>
+              </form>
               <div className="flex items-center justify-between text-sm">
                 <button className="underline" onClick={() => { setStage("signup"); setError(""); setOk(""); }}>Create account</button>
                 <button className="underline" onClick={() => { setStage("forgot"); setError(""); setOk(""); }}>Forgot password?</button>
@@ -164,17 +171,19 @@ export default function SignInScreen() {
                   <AlertDescription>{ok}</AlertDescription>
                 </Alert>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="su-email">Email</Label>
-                <Input id="su-email" type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="su-password">Password</Label>
-                <Input id="su-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </div>
-              <Button onClick={handleSignUp} disabled={loading} className="w-full">
-                {loading ? "Creating…" : "Create account"}
-              </Button>
+              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleSignUp(); }}>
+                <div className="space-y-2">
+                  <Label htmlFor="su-email">Email</Label>
+                  <Input id="su-email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="su-password">Password</Label>
+                  <Input id="su-password" type="password" autoComplete="new-password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full">
+                  {loading ? "Creating…" : "Create account"}
+                </Button>
+              </form>
               <div className="text-sm text-muted-foreground">
                 Already have an account? <button className="underline" onClick={() => { setStage("login"); setError(""); setOk(""); }}>Sign in</button>
               </div>
@@ -201,13 +210,15 @@ export default function SignInScreen() {
                   <AlertDescription>{ok}</AlertDescription>
                 </Alert>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="fp-email">Email</Label>
-                <Input id="fp-email" type="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <Button onClick={handleForgot} disabled={loading} className="w-full">
-                {loading ? "Sending…" : "Send reset link"}
-              </Button>
+              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleForgot(); }}>
+                <div className="space-y-2">
+                  <Label htmlFor="fp-email">Email</Label>
+                  <Input id="fp-email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full">
+                  {loading ? "Sending…" : "Send reset link"}
+                </Button>
+              </form>
               <div className="text-sm text-muted-foreground">
                 Remembered your password? <button className="underline" onClick={() => { setStage("login"); setError(""); setOk(""); }}>Back to sign in</button>
               </div>
@@ -228,25 +239,28 @@ export default function SignInScreen() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="otp">Authenticator code</Label>
-                <Input
-                  id="otp"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  placeholder="123456"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                />
-              </div>
-              <Button onClick={handleVerifyOtp} disabled={loading} className="w-full">
-                {loading ? "Verifying…" : "Verify code"}
-              </Button>
+              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleVerifyOtp(); }}>
+                <div className="space-y-2">
+                  <Label htmlFor="otp">Authenticator code</Label>
+                  <Input
+                    id="otp"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full">
+                  {loading ? "Verifying…" : "Verify code"}
+                </Button>
+              </form>
             </CardContent>
           </>
         )}
-      </Card>
+        </Card>
+      </div>
     </main>
   );
 }
