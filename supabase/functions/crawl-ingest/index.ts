@@ -645,14 +645,15 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
 
     // List items — extract with price if present, or without price on service pages
     const isServicePage = /service|menu|treatment|pricing|package/i.test(url);
-    const navWords = /^(home|menu|blog|news|contact|about|login|sign[\s-]?up|faq|privacy|terms|cart|shop|search|locations?|franchise|deals?|memberships?|gift\s*cards?|book\s*(now|online)?|view\s*(our\s*)?services|next\s*steps?|request|hairstyle|gallery|portfolio|our\s*story|team|staff|reviews?|careers?|press|sitemap|accessibility|cookie|logout|account|profile|schedule|appointment|call\s*us)$/i;
+    const navWords = /^(home|welcome|menu|blog|news|contact(\s*us)?|about(\s*us)?|login|sign[\s-]?up|faqs?|privacy(\s*policy)?|terms.*|cart|shop|search|locations?|franchise.*|deals?|memberships?|e?gift\s*cards?|book\s*(now|online|an?\s+\w+)?|view\s*(our\s*)?services|next\s*steps?|request(\s*more\s*info)?|costs?\/?fees?|hairstyle|gallery|portfolio|our\s*story|team|staff|reviews?|careers?|press|sitemap|accessibility|cookie|logout|account|profile|schedule|appointment|call\s*us|services)$/i;
     const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
     let li: RegExpExecArray | null;
     while ((li = liRegex.exec(html)) !== null) {
       const text = clean(li[1]);
       if (!text || text.length < 3 || text.length > 120) continue;
-      // Try with price first
-      const mt = text.match(/^(.{2,100}?)[\s:,-]*\s*(\$?\d[\d.+]*)(?:\s|$)/);
+      // Try with price first — require explicit $ so numbers inside names
+      // ("Child 12 and Under", "10 Single Process Colors") aren't treated as prices
+      const mt = text.match(/^(.{2,100}?)[\s:,-]*\s*(\$\d[\d.+]*)(?:\s|$)/);
       if (mt) { pushService(mt[1], mt[2]); continue; }
       // On service/menu pages: extract list items even without price,
       // filtering out navigation items, URLs, and obvious non-service text
@@ -708,8 +709,8 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
       }
     }
 
-    // Plain text lines: "Name $price"
-    const lineRegex = /([A-Za-z][A-Za-z0-9\s()\/&.-]{2,80})\s+(?:–|-|:)?\s*(\$?\d[\d.+]*)(?=\s|$)/g;
+    // Plain text lines: "Name $price" — $ required to avoid corrupting names with numbers
+    const lineRegex = /([A-Za-z][A-Za-z0-9\s()\/&.-]{2,80})\s+(?:–|-|:)?\s*(\$\d[\d.+]*)(?=\s|$)/g;
     const text = clean(html);
     let lineMatch: RegExpExecArray | null;
     while ((lineMatch = lineRegex.exec(text)) !== null) pushService(lineMatch[1], lineMatch[2]);
@@ -1091,6 +1092,41 @@ CRITICAL RULES:
   return all;
 }
 
+// ── Final quality pass ────────────────────────────────────────────────────────
+
+// Repair UTF-8 bytes that were decoded as Latin-1 ("Womenâ\x80\x99s" → "Women's").
+// Re-encodes char codes as bytes and decodes as UTF-8; throws (→ keep original)
+// when the string isn't actually mojibake.
+function fixMojibake(s: string): string {
+  if (!s || !/[Â-ä]/.test(s)) return s;
+  try {
+    const codes = [...s].map(c => c.charCodeAt(0));
+    if (codes.some(c => c > 255)) return s;
+    return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(codes));
+  } catch { return s; }
+}
+
+const SENTENCE_FRAGMENT = /\b(may be subject|are subject to|prices? (may )?vary|please call|please contact|disclaimer|terms and conditions)\b/i;
+const JUNK_EXACT = /^(disclaimer|notes?|important|attention|pricing|prices)$/i;
+
+function finalServiceFilter(list: ExtractedService[]): ExtractedService[] {
+  return list
+    .map(s => ({
+      ...s,
+      name: fixMojibake(s.name).replace(/\s{2,}/g, ' ').trim(),
+      description: s.description ? fixMojibake(s.description) : undefined,
+    }))
+    .filter(s => {
+      const words = s.name.split(/\s+/).length;
+      if (words >= 12) return false;                        // sentence fragments
+      if (SENTENCE_FRAGMENT.test(s.name)) return false;     // disclaimer text
+      if (JUNK_EXACT.test(s.name)) return false;
+      // ALL-CAPS short names with no digits are category headers (BLOWOUTS, WAX - THREADING)
+      if (/^[^a-z]+$/.test(s.name) && words <= 4 && !/\d/.test(s.name)) return false;
+      return true;
+    });
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -1199,19 +1235,38 @@ serve(async (req) => {
     const deterministicServices = extractServicesProgrammatically(content);
     const aiData = await extractWithAI(content);
 
+    // Guard against AI hallucination: when deterministic methods already found
+    // a solid catalog, the AI list only adds invented generics ("Haircut $50",
+    // "Massage $90"). When deterministic found little, AI services are kept but
+    // each name must actually appear somewhere in the crawled content.
+    const nonAiCount = deterministicServices.length + structuredData.services.length + firecrawlExtractServices.length;
+    let aiServices = aiData.services;
+    if (nonAiCount >= 15) {
+      console.log(`Deterministic extraction found ${nonAiCount} services — discarding ${aiServices.length} AI-extracted services (hallucination guard)`);
+      aiServices = [];
+    } else {
+      const contentTextLower = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+      const before = aiServices.length;
+      aiServices = aiServices.filter(s => contentTextLower.includes(s.name.toLowerCase()));
+      if (before !== aiServices.length) console.log(`AI verification: ${before} → ${aiServices.length} services (dropped names not present in content)`);
+    }
+
     // Merge all sources: Firecrawl extract first (highest quality), then others
     const allServices = [
       ...firecrawlExtractServices,
       ...deterministicServices,
       ...structuredData.services,
-      ...aiData.services,
+      ...aiServices,
     ];
     const allHours = [...structuredData.hours, ...aiData.hours];
 
-    // Fuzzy dedup: normalize name (lowercase, strip punctuation, collapse spaces)
+    // Quality pass first (mojibake repair, category headers, fragments),
+    // then fuzzy dedup so "Women's Haircut" and mojibaked "Womenâ€™s Haircut"
+    // resolve to the same key after repair.
+    const cleanedServices = finalServiceFilter(allServices);
     const normName = (n: string) => n.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
     const seen = new Set<string>();
-    const uniqueServices = allServices.filter(s => {
+    const uniqueServices = cleanedServices.filter(s => {
       const key = normName(s.name);
       if (seen.has(key)) return false;
       seen.add(key);

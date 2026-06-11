@@ -104,38 +104,87 @@ serve(async (req) => {
 
     console.log(`Consolidating ${dataSources.length} data sources for tenant: ${tenantId}`);
 
+    // ── Collect structured services deterministically ────────────────────────
+    // The crawl already extracted services. They are the source of truth and
+    // MUST NOT round-trip through the LLM: LLMs truncate long lists (~10 items)
+    // and hallucinate prices. The LLM below only consolidates name/address/hours
+    // and extracts services from unstructured sources (PDFs, manual text).
+    const normName = (n: string) => n.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    const junkPattern = /^(home|welcome|about( us)?|contact( us)?|blog|news|login|sign ?up|faqs?|book (now|online|a \w+)|view (our )?services|our story|galler(y|ies)|locations?|franchise.*|gift ?cards?|e?gift ?cards?|memberships?|shop|deals?|services|pricing|prices|menu|privacy policy|terms.*|careers?|press|request more info|costs?\/?fees?|disclaimer|notes?|important)$/i;
+    // Fix common UTF-8-as-Latin-1 mojibake (â€™ → ', â€" → –, etc.)
+    const fixEncoding = (s: string) => s
+      .replace(/â€™|Ã¢â‚¬â„¢/g, "'").replace(/â€œ|â€/g, '"')
+      .replace(/â€“|â€”/g, '–').replace(/â€/g, '"')
+      .replace(/Â/g, '').replace(/â/g, "'");
+
+    // Byte-level mojibake repair: UTF-8 bytes decoded as Latin-1 become control
+    // chars after the 0xE2 lead byte; re-encode the char codes as bytes and
+    // decode as UTF-8. Throws (-> fall back to literal replacements) when the
+    // string isn't actually mojibake.
+    const fixMojibake = (s: string) => {
+      if (!s) return s;
+      try {
+        const codes = [...s].map(c => c.charCodeAt(0));
+        if (codes.some(c => c > 255)) return fixEncoding(s);
+        return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(codes));
+      } catch { return fixEncoding(s); }
+    };
+    const fragmentPattern = /\b(may be subject|are subject to|prices? (may )?vary|please call|please contact|disclaimer|terms and conditions)\b/i;
+
+    const structuredServices: Service[] = [];
+    const seenNames = new Set<string>();
+    const collectServices = (list: any[]) => {
+      for (const s of list) {
+        const name = fixMojibake((s.name || '').trim()).replace(/\s{2,}/g, ' ');
+        if (!name || name.length < 2 || name.length > 100 || junkPattern.test(name)) continue;
+        const words = name.split(/\s+/).length;
+        if (words >= 12 || fragmentPattern.test(name)) continue;                  // sentence fragments
+        if (/^[^a-z]+$/.test(name) && words <= 4 && !/\d/.test(name)) continue;   // ALL-CAPS category headers
+        const key = normName(name);
+        if (seenNames.has(key)) continue;
+        seenNames.add(key);
+        const priceNum = s.price != null ? String(s.price).replace(/[^\d.]/g, '') : '';
+        structuredServices.push({
+          name,
+          description: s.description ? fixMojibake(String(s.description).trim()) : undefined,
+          price: priceNum && parseFloat(priceNum) > 0 ? `$${priceNum}` : undefined,
+        });
+      }
+    };
+
     // Prepare consolidated content for AI processing
     let consolidatedContent = '';
-    
+
     for (let i = 0; i < dataSources.length; i++) {
       const source = dataSources[i];
       consolidatedContent += `\n\n=== DATA SOURCE ${i + 1}: ${source.type.toUpperCase()} ===\n`;
-      
+
       if (source.type === 'website' && source.metadata?.url) {
         consolidatedContent += `URL: ${source.metadata.url}\n`;
       } else if (source.type === 'file' && source.metadata?.filename) {
         consolidatedContent += `File: ${source.metadata.filename}\n`;
       }
-      
+
       // If content is already parsed JSON from website crawl, extract the relevant parts
       try {
         const parsed = JSON.parse(source.content);
         if (parsed.services || parsed.hours || parsed.business_info) {
-          consolidatedContent += `Services found: ${parsed.services?.length || 0}\n`;
-          consolidatedContent += `Hours found: ${parsed.hours?.length || 0}\n`;
+          if (Array.isArray(parsed.services)) collectServices(parsed.services);
+          consolidatedContent += `Services: already extracted programmatically (${parsed.services?.length || 0} items) — do NOT include services from this source in your response.\n`;
+          consolidatedContent += `Hours data: ${JSON.stringify(parsed.hours ?? [])}\n`;
           if (parsed.business_info) {
             consolidatedContent += `Business info: ${JSON.stringify(parsed.business_info)}\n`;
           }
-          // Add raw data for AI to process
-          consolidatedContent += `Raw data: ${JSON.stringify(parsed)}\n`;
         } else {
-          consolidatedContent += source.content;
+          consolidatedContent += source.content.slice(0, 60000);
         }
       } catch {
         // If not JSON, add as plain text
-        consolidatedContent += source.content;
+        consolidatedContent += source.content.slice(0, 60000);
       }
     }
+
+    console.log(`Structured services collected deterministically: ${structuredServices.length}`);
 
     console.log(`Processing ${consolidatedContent.length} characters of consolidated content`);
 
@@ -149,12 +198,11 @@ serve(async (req) => {
 CRITICAL INSTRUCTIONS:
 1. Merge and deduplicate information from all sources
 2. Resolve conflicts by choosing the most complete/recent information
-3. Extract ONLY legitimate business services - no navigation text or fragments
+3. SERVICES: Only extract services from UNSTRUCTURED sources (PDF text, manual text). Sources marked "already extracted programmatically" are handled separately — return an EMPTY services array if all sources are marked that way.
 4. Consolidate business addresses (remove duplicates, standardize format)
 5. Merge business hours from all sources (most complete wins)
-6. Clean up service names and remove junk data
-7. Standardize pricing format
-8. Provide a confidence score (0-1) based on data consistency
+6. Standardize pricing format — NEVER invent a price that is not explicitly in the source data
+7. Provide a confidence score (0-1) based on data consistency
 
 Return ONLY valid JSON in this exact format:
 {
@@ -191,10 +239,10 @@ ADDRESS CONSOLIDATION:
 - Use most complete format (include city, state, zip)
 - If multiple legitimate locations exist, include all
 
-SERVICE CONSOLIDATION:
+SERVICE CONSOLIDATION (unstructured sources only):
 - Merge similar services (e.g., "Haircut" and "Hair Cut" = "Haircut")
 - Remove fragments like "Call us for", "We offer", navigation items
-- Prefer services with pricing information
+- Include services WITHOUT prices — many businesses don't publish prices
 - Keep only actual service names, not descriptions or contact info
 - Remove any service longer than 100 characters (likely junk)
 
@@ -244,7 +292,18 @@ ${consolidatedContent}`;
     aiResponse = aiResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
     
     const consolidatedData: ConsolidatedData = JSON.parse(aiResponse);
-    
+
+    // ── Merge: deterministic services (source of truth) + AI extras ──────────
+    // AI may have found additional services in unstructured sources (PDF/text).
+    // Add those, but the structured list is never reduced or re-priced by AI.
+    const aiExtras = (consolidatedData.services || []).filter(s => {
+      const name = (s.name || '').trim();
+      if (!name || name.length < 2 || name.length > 100 || junkPattern.test(name)) return false;
+      return !seenNames.has(normName(name));
+    });
+    consolidatedData.services = [...structuredServices, ...aiExtras];
+    console.log(`Final services: ${structuredServices.length} structured + ${aiExtras.length} AI extras = ${consolidatedData.services.length}`);
+
     console.log(`Consolidated data: ${consolidatedData.services?.length || 0} services, confidence: ${consolidatedData.confidence}`);
 
     // Save consolidated services to database
