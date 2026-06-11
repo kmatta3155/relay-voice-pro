@@ -1471,11 +1471,11 @@ Remember: You represent ${this.businessName} professionally - be knowledgeable, 
       
       // General RAG search using the embeddings system with fallback mechanism
       try {
-        const { data: results, error } = await supabase.rpc('search_knowledge', {
-          tenant_id: tenantId,
-          query_text: userQuery,
-          match_threshold: 0.3,
-          match_count: 3
+        // DB function is search_knowledge_keywords(p_tenant, p_query, p_match_count)
+        const { data: results, error } = await supabase.rpc('search_knowledge_keywords', {
+          p_tenant: tenantId,
+          p_query: userQuery,
+          p_match_count: 3
         });
         
         if (error) {

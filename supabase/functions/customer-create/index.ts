@@ -29,6 +29,25 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") || "";
     const sb = createClient(url, key);
 
+    // Derive the user from the verified JWT — never trust a userId in the body
+    // (anyone holding the anon key could otherwise create tenants for other users)
+    const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const { data: userData, error: userErr } = await sb.auth.getUser(jwt);
+    if (userErr || !userData?.user) {
+      return new Response(JSON.stringify({ ok: false, error: "Authentication required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "content-type": "application/json" },
+      });
+    }
+    body.userId = userData.user.id;
+
+    if (!body.name || !body.name.trim()) {
+      return new Response(JSON.stringify({ ok: false, error: "Business name is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "content-type": "application/json" },
+      });
+    }
+
     console.log(`Creating tenant: ${body.name} for user: ${body.userId}`);
 
     // Create tenant with slug

@@ -603,11 +603,13 @@ class RealtimeAudioBridge {
         
         const supabase = createClient(supabaseUrl, supabaseKey)
         
-        const { data, error } = await supabase.rpc('search_knowledge', {
-          tenant_id: this.tenantId,
-          query_text: query,
-          match_threshold: 0.3,
-          match_count: 3
+        // NOTE: the DB function is search_knowledge_keywords(p_tenant, p_query, p_match_count).
+        // 'search_knowledge' with (tenant_id, query_text, ...) does not exist — calling it
+        // made every in-call knowledge lookup fail silently.
+        const { data, error } = await supabase.rpc('search_knowledge_keywords', {
+          p_tenant: this.tenantId,
+          p_query: query,
+          p_match_count: 3
         })
         
         if (error) {

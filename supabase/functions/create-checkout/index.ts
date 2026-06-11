@@ -16,21 +16,18 @@ serve(async (req) => {
     if (!stripeKey) throw new Error("Missing STRIPE_SECRET_KEY");
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
 
-    const { planId } = await req.json();
-    const origin = req.headers.get("origin") || "https://gnqqktmslswgjtvxfvdo.supabase.co";
+    const { planId } = await req.json().catch(() => ({}));
+    const origin = req.headers.get("origin") || "https://voicerelaypro.taskara.ai";
 
-    // If a real Stripe price id is provided (starts with price_), use it. Otherwise fallback to test price_data
-    const lineItem = planId && planId.startsWith("price_")
-      ? { price: planId, quantity: 1 }
-      : {
-          price_data: {
-            currency: "usd",
-            product_data: { name: planId || "Receptionist + CRM" },
-            unit_amount: 799, // $7.99 test amount
-            recurring: { interval: "month" },
-          },
-          quantity: 1,
-        };
+    // Require a real Stripe price id — never create ad-hoc priced sessions
+    // (previously an empty request created a live $7.99 subscription session)
+    if (!planId || !planId.startsWith("price_")) {
+      return new Response(JSON.stringify({ error: "A valid Stripe price id (price_...) is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+    const lineItem = { price: planId, quantity: 1 };
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],

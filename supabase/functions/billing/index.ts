@@ -7,7 +7,12 @@ const STRIPE_SECRET = Deno.env.get("STRIPE_SECRET_KEY")!;
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "http://localhost:5173";
+const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "https://voicerelaypro.taskara.ai";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 const stripe = new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" });
 const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -87,23 +92,36 @@ serve(async (req) => {
   const url = new URL(req.url);
   const method = req.method;
 
+  // CORS preflight — required for browser calls via supabase.functions.invoke
+  if (method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   if (url.pathname.endsWith("/webhook") && method === "POST") {
     return await handleWebhook(req);
   }
 
-  const { action, tenantId, priceId } = await req.json().catch(()=> ({}));
+  try {
+    const { action, tenantId, priceId } = await req.json().catch(()=> ({}));
 
-  if (action === "checkout" && method === "POST") {
-    if (!tenantId || !priceId) return new Response("Missing args", { status: 400 });
-    const out = await createCheckout(tenantId, priceId);
-    return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" }});
+    if (action === "checkout" && method === "POST") {
+      if (!tenantId || !priceId) return new Response("Missing args", { status: 400, headers: corsHeaders });
+      const out = await createCheckout(tenantId, priceId);
+      return new Response(JSON.stringify(out), { headers: { ...corsHeaders, "Content-Type": "application/json" }});
+    }
+
+    if (action === "portal" && method === "POST") {
+      if (!tenantId) return new Response("Missing tenant", { status: 400, headers: corsHeaders });
+      const out = await createPortal(tenantId);
+      return new Response(JSON.stringify(out), { headers: { ...corsHeaders, "Content-Type": "application/json" }});
+    }
+
+    return new Response("billing ok", { headers: corsHeaders });
+  } catch (err) {
+    console.error("billing error:", err);
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
-
-  if (action === "portal" && method === "POST") {
-    if (!tenantId) return new Response("Missing tenant", { status: 400 });
-    const out = await createPortal(tenantId);
-    return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" }});
-  }
-
-  return new Response("billing ok");
 });

@@ -614,7 +614,7 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ').trim();
 
-  const pushService = (name: string, priceText?: string) => {
+  const pushService = (name: string, priceText?: string, description?: string) => {
     const nameClean = name.trim().replace(/\s{2,}/g, ' ');
     if (!nameClean || nameClean.length < 2 || nameClean.length > 100) return;
     let price: string | undefined;
@@ -622,8 +622,19 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
       const numMatch = priceText.match(/(\d{1,4}(?:\.\d{1,2})?)/);
       if (numMatch) price = `$${numMatch[1]}`;
     }
-    if (services.find(s => s.name.toLowerCase() === nameClean.toLowerCase())) return;
-    services.push({ name: nameClean, price });
+    const descClean = description?.trim().replace(/\s{2,}/g, ' ');
+    const existing = services.find(s => s.name.toLowerCase() === nameClean.toLowerCase());
+    if (existing) {
+      // Enrich an earlier hit that lacked price/description
+      if (!existing.price && price) existing.price = price;
+      if (!existing.description && descClean) existing.description = descClean;
+      return;
+    }
+    services.push({
+      name: nameClean,
+      price,
+      description: descClean && descClean.length >= 10 && descClean.length <= 300 ? descClean : undefined,
+    });
   };
 
   let m: RegExpExecArray | null;
@@ -643,27 +654,76 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
       }
     }
 
-    // List items — extract with price if present, or without price on service pages
+    // List items — extract with price if present, or without price when the
+    // list sits under a service-category heading ("Hair Services" yes,
+    // "Locations" no). Headings are tracked in document order so multi-column
+    // lists under one heading all inherit it.
     const isServicePage = /service|menu|treatment|pricing|package/i.test(url);
     const navWords = /^(home|welcome|menu|blog|news|contact(\s*us)?|about(\s*us)?|login|sign[\s-]?up|faqs?|privacy(\s*policy)?|terms.*|cart|shop|search|locations?|franchise.*|deals?|memberships?|e?gift\s*cards?|book\s*(now|online|an?\s+\w+)?|view\s*(our\s*)?services|next\s*steps?|request(\s*more\s*info)?|costs?\/?fees?|hairstyle|gallery|portfolio|our\s*story|team|staff|reviews?|careers?|press|sitemap|accessibility|cookie|logout|account|profile|schedule|appointment|call\s*us|services)$/i;
-    const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-    let li: RegExpExecArray | null;
-    while ((li = liRegex.exec(html)) !== null) {
-      const text = clean(li[1]);
-      if (!text || text.length < 3 || text.length > 120) continue;
-      // Try with price first — require explicit $ so numbers inside names
-      // ("Child 12 and Under", "10 Single Process Colors") aren't treated as prices
-      const mt = text.match(/^(.{2,100}?)[\s:,-]*\s*(\$\d[\d.+]*)(?:\s|$)/);
-      if (mt) { pushService(mt[1], mt[2]); continue; }
-      // On service/menu pages: extract list items even without price,
-      // filtering out navigation items, URLs, and obvious non-service text
-      if (isServicePage &&
-          !navWords.test(text) &&
-          !/^https?:\/\//.test(text) &&
-          !/^\d+$/.test(text) &&
-          !/[<>{}]/.test(text)) {
-        pushService(text);
+    const SERVICE_HEADING = /(service|treatment|package|deal|pricing|menu|hair|beauty|colou?r|cut|styl|nail|lash|wax|facial|massage|makeup|bridal|wedding|prom|tan|spa|barber|shave|brow|skin|extension|keratin|perm|men|women|kid|child)/i;
+    const NEGATIVE_HEADING = /(location|hour|contact|about|find\s*us|visit|career|team|staff|review|follow|social|partner|press|blog|faq|map|direction|neighborhood|area)/i;
+
+    // Walk headings and lists in document order, tracking the last heading seen
+    const headingOrListRe = /<(h[1-5])[^>]*>([\s\S]*?)<\/\1>|<[ou]l[^>]*>([\s\S]*?)<\/[ou]l>/gi;
+    let lastHeading = '';
+    let node: RegExpExecArray | null;
+    while ((node = headingOrListRe.exec(html)) !== null) {
+      if (node[1]) { lastHeading = clean(node[2]); continue; }   // heading
+      const listHtml = node[3] ?? '';
+      const isServiceList = isServicePage &&
+        lastHeading !== '' &&
+        SERVICE_HEADING.test(lastHeading) &&
+        !NEGATIVE_HEADING.test(lastHeading);
+
+      const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      let li: RegExpExecArray | null;
+      while ((li = liRegex.exec(listHtml)) !== null) {
+        const text = clean(li[1]);
+        if (!text || text.length < 3 || text.length > 120) continue;
+        // With explicit $ price — strong signal, no heading gate needed.
+        // $ is required so numbers inside names ("Child 12 and Under") aren't prices.
+        const mt = text.match(/^(.{2,100}?)[\s:,-]*\s*(\$\d[\d.+]*)(?:\s|$)/);
+        if (mt) { pushService(mt[1], mt[2]); continue; }
+        // Without price: only inside a service-category section.
+        // Require capitalized/numeric start — prose fragments and link text
+        // ("check out our rotating mixtapes") start lowercase.
+        if (isServiceList &&
+            !navWords.test(text) &&
+            !/^[a-z]/.test(text) &&
+            !/^https?:\/\//.test(text) &&
+            !/^\d+$/.test(text) &&
+            !/[<>{}]/.test(text)) {
+          pushService(text);
+        }
       }
+    }
+
+    // Page-builder layouts (Elementor, Divi, Wix): price and name in adjacent
+    // headings, description in a nearby <p>. Handles both orders:
+    //   <h4>$39+</h4><h2>short cut</h2><p>desc</p>   (price first)
+    //   <h2>Balayage</h2><h4>$120</h4><p>desc</p>    (name first)
+    const blockRe = /<(h[1-6]|p)[^>]*>([\s\S]*?)<\/\1>/gi;
+    const blocks: { tag: string; text: string }[] = [];
+    let blk: RegExpExecArray | null;
+    while ((blk = blockRe.exec(html)) !== null) {
+      const t = clean(blk[2]);
+      if (t) blocks.push({ tag: blk[1].toLowerCase()[0] === 'h' ? 'h' : 'p', text: t });
+    }
+    const isPriceOnly = (t: string) => /^\$\s*\d[\d.,]*\s*\+?$/.test(t);
+    for (let i = 0; i < blocks.length; i++) {
+      if (!isPriceOnly(blocks[i].text)) continue;
+      const nameBlock = [blocks[i + 1], blocks[i - 1]].find(n =>
+        n && n.tag === 'h' && !isPriceOnly(n.text) &&
+        n.text.length >= 3 && n.text.length <= 80 && !navWords.test(n.text));
+      if (!nameBlock) continue;
+      let desc: string | undefined;
+      for (let j = i + 1; j <= i + 3 && j < blocks.length; j++) {
+        if (blocks[j].tag === 'p' && !isPriceOnly(blocks[j].text) &&
+            blocks[j].text !== nameBlock.text && blocks[j].text.length >= 15 && blocks[j].text.length <= 300) {
+          desc = blocks[j].text; break;
+        }
+      }
+      pushService(nameBlock.text, blocks[i].text, desc);
     }
 
     // Definition lists: <dl><dt>Service</dt><dd>$price or description</dd></dl>
@@ -713,7 +773,13 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
     const lineRegex = /([A-Za-z][A-Za-z0-9\s()\/&.-]{2,80})\s+(?:–|-|:)?\s*(\$\d[\d.+]*)(?=\s|$)/g;
     const text = clean(html);
     let lineMatch: RegExpExecArray | null;
-    while ((lineMatch = lineRegex.exec(text)) !== null) pushService(lineMatch[1], lineMatch[2]);
+    while ((lineMatch = lineRegex.exec(text)) !== null) {
+      const nm = lineMatch[1].trim();
+      // Skip prose fragments: lowercase start or sentence-ending punctuation
+      // ("...for every style, gender, and age. $39" is not a service)
+      if (/^[a-z]/.test(nm) || /[.!?]$/.test(nm)) continue;
+      pushService(nm, lineMatch[2]);
+    }
   }
 
   // Also parse BOOKING PLATFORM sections (don't require URL pattern)
@@ -1107,7 +1173,7 @@ function fixMojibake(s: string): string {
 }
 
 const SENTENCE_FRAGMENT = /\b(may be subject|are subject to|prices? (may )?vary|please call|please contact|disclaimer|terms and conditions)\b/i;
-const JUNK_EXACT = /^(disclaimer|notes?|important|attention|pricing|prices)$/i;
+const JUNK_EXACT = /^(disclaimer|notes?|important|attention|pricing|prices|map|directions?|parking|wifi|hours?)$/i;
 
 function finalServiceFilter(list: ExtractedService[]): ExtractedService[] {
   return list
@@ -1239,7 +1305,14 @@ serve(async (req) => {
     // a solid catalog, the AI list only adds invented generics ("Haircut $50",
     // "Massage $90"). When deterministic found little, AI services are kept but
     // each name must actually appear somewhere in the crawled content.
-    const nonAiCount = deterministicServices.length + structuredData.services.length + firecrawlExtractServices.length;
+    // IMPORTANT: count AFTER quality filtering so junk (nav items, category
+    // headers) can't suppress legitimate AI results.
+    const nonAiFiltered = finalServiceFilter([
+      ...firecrawlExtractServices,
+      ...deterministicServices,
+      ...structuredData.services,
+    ]);
+    const nonAiCount = nonAiFiltered.length;
     let aiServices = aiData.services;
     if (nonAiCount >= 15) {
       console.log(`Deterministic extraction found ${nonAiCount} services — discarding ${aiServices.length} AI-extracted services (hallucination guard)`);
@@ -1251,13 +1324,8 @@ serve(async (req) => {
       if (before !== aiServices.length) console.log(`AI verification: ${before} → ${aiServices.length} services (dropped names not present in content)`);
     }
 
-    // Merge all sources: Firecrawl extract first (highest quality), then others
-    const allServices = [
-      ...firecrawlExtractServices,
-      ...deterministicServices,
-      ...structuredData.services,
-      ...aiServices,
-    ];
+    // Merge: quality-filtered deterministic sources first, then verified AI
+    const allServices = [...nonAiFiltered, ...aiServices];
     const allHours = [...structuredData.hours, ...aiData.hours];
 
     // Quality pass first (mojibake repair, category headers, fragments),
