@@ -20,7 +20,7 @@ export default function MarketingShowcase() {
   const stats = [
     { value: "98.7%", label: "Call Success Rate", icon: CheckCircle, color: "text-green-600" },
     { value: "< 2s", label: "Avg Response Time", icon: Clock, color: "text-blue-600" },
-    { value: "24/7", label: "Availability", icon: Globe, color: "text-purple-600" },
+    { value: "24/7", label: "Availability", icon: Globe, color: "text-sky-600" },
     { value: "$2.4M+", label: "Revenue Generated", icon: DollarSign, color: "text-emerald-600" },
   ];
 

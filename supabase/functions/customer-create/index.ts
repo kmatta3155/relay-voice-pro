@@ -69,12 +69,14 @@ serve(async (req) => {
       slug = `${baseSlug}-${suffix}`;
     }
     
+    // tenants schema: id, name, slug, created_at, updated_at (+stripe columns).
+    // There is no created_by column — including it made every tenant creation
+    // fail with a schema-cache 400.
     const { data: tenant, error: terr } = await sb
       .from("tenants")
-      .insert({ 
-        name: body.name, 
+      .insert({
+        name: body.name,
         slug,
-        created_by: body.userId 
       })
       .select("id")
       .single();

@@ -23,7 +23,7 @@ export default function LineAreaChart({ data, gradientId="chartGrad", animated=t
           <defs>
             <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="var(--tw-gradient-from,#3b82f6)" stopOpacity={0.35}/>
-              <stop offset="100%" stopColor="var(--tw-gradient-to,#8b5cf6)" stopOpacity={0.02}/>
+              <stop offset="100%" stopColor="var(--tw-gradient-to,#0ea5e9)" stopOpacity={0.02}/>
             </linearGradient>
           </defs>
           <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.25}/>

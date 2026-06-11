@@ -50,7 +50,7 @@ const BUSINESS_TYPES = [
     description: 'Wellness centers, massage therapy, holistic health',
     icon: Flower2,
     features: ['Wellness consultations', 'Treatment packages', 'Relaxation focus', 'Gift services'],
-    color: 'bg-purple-100 text-purple-800'
+    color: 'bg-sky-100 text-sky-800'
   },
   {
     id: 'automotive',

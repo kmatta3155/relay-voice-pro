@@ -234,7 +234,7 @@ function Hero() {
   return (
     <section className="relative overflow-hidden">
       <div className="absolute inset-0 -z-10 opacity-[0.12] bg-[radial-gradient(600px_300px_at_20%_10%,theme(colors.primary.DEFAULT),transparent_60%)]" />
-      <div className="absolute inset-x-0 top-[-120px] -z-10 h-[300px] bg-[radial-gradient(700px_200px_at_80%_0%,theme(colors.violet.500),transparent_60%)]" />
+      <div className="absolute inset-x-0 top-[-120px] -z-10 h-[300px] bg-[radial-gradient(700px_200px_at_80%_0%,theme(colors.sky.400),transparent_60%)]" />
       <div className="max-w-6xl mx-auto px-4 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
         <div>
           <motion.div

@@ -67,8 +67,8 @@ export default function AnalyticsDashboard({ metrics }: AnalyticsDashboardProps)
       change: "calls saved",
       icon: Users,
       trend: "up",
-      color: "text-purple-600",
-      bgColor: "bg-purple-50"
+      color: "text-sky-600",
+      bgColor: "bg-sky-50"
     }
   ];
 
