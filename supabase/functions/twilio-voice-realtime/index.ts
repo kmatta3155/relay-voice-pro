@@ -158,6 +158,8 @@ class RealtimeAudioBridge {
   private agentInstructions: string = ''
   private voiceId: string = 'alloy'
   private greeting: string = ''
+  private bookingMode: 'native' | 'external' = 'native'
+  private externalBookingUrl: string = ''
   
   // Session state
   private isReady = false
@@ -234,10 +236,25 @@ class RealtimeAudioBridge {
         this.agentInstructions = 'You are a helpful AI assistant for phone calls.'
       }
       
+      // Load booking mode — controls whether the AI books directly or hands off
+      try {
+        const { data: bs } = await supabase
+          .from('booking_settings')
+          .select('mode,external_url,provider')
+          .eq('tenant_id', this.tenantId)
+          .maybeSingle()
+        if (bs?.mode === 'external') {
+          this.bookingMode = 'external'
+          this.externalBookingUrl = bs.external_url || ''
+          this.agentInstructions += `\n\nBOOKING MODE: EXTERNAL. Do NOT book appointments yourself. When a caller wants to book, help them choose a service and stylist, then direct them to book at ${this.externalBookingUrl || (bs.provider ? bs.provider : 'our online booking system')}. Offer to text them the link if you have their number.`
+        }
+      } catch { /* table may not exist yet — default to native */ }
+
       logger.info('Agent config loaded', {
         hasInstructions: !!this.agentInstructions,
         voice: this.voiceId,
-        hasGreeting: !!this.greeting
+        hasGreeting: !!this.greeting,
+        bookingMode: this.bookingMode
       })
     } catch (error) {
       logger.error('Error fetching agent config', {
@@ -659,6 +676,14 @@ class RealtimeAudioBridge {
       }
 
       if (name === 'book_appointment') {
+        if (this.bookingMode === 'external') {
+          this.sendToolOutput(call_id, {
+            success: false,
+            external: true,
+            message: `This business books through its own system. Direct the caller to ${this.externalBookingUrl || 'their online booking page'} and offer to text the link.`,
+          })
+          return
+        }
         const result = await bookAppointment(supabase, this.tenantId!, args)
         logger.info('Booking attempt', { success: result.success, staff: args.staff_name, start: args.start_time })
         this.sendToolOutput(call_id, result)

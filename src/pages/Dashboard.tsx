@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import * as repo from "@/lib/data";
+import StaffManager from "@/components/dashboard/StaffManager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,7 @@ export default function Dashboard() {
     | "overview"
     | "leads"
     | "appointments"
+    | "staff"
     | "messages"
     | "calls"
     | "analytics"
@@ -188,7 +190,8 @@ export default function Dashboard() {
       )}
       {tab === "leads" && <LeadsTab leads={leads} setLeads={setLeads} setThreads={setThreads} />}
       {tab === "appointments" && <ApptsTab appts={appts} setAppts={setAppts} />}
-      {tab === "messages" && <MessagesTab threads={threads} setThreads={setThreads} />} 
+      {tab === "staff" && <StaffManager />}
+      {tab === "messages" && <MessagesTab threads={threads} setThreads={setThreads} />}
       {tab === "calls" && <CallsTab calls={calls} />} 
       {tab === "analytics" && <AnalyticsTab leads={leads} calls={calls} />} 
       {tab === "knowledge" && <KnowledgeTab />} 
@@ -258,6 +261,7 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
     { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: "leads", label: "Leads", icon: <Users className="w-4 h-4" /> },
     { id: "appointments", label: "Appointments", icon: <CalendarIcon className="w-4 h-4" /> },
+    { id: "staff", label: "Staff & Booking", icon: <Users className="w-4 h-4" /> },
     { id: "messages", label: "Messages", icon: <MessageCircle className="w-4 h-4" /> },
     { id: "calls", label: "Calls", icon: <PhoneCall className="w-4 h-4" /> },
     { id: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
