@@ -64,9 +64,17 @@ interface ExtractedHours {
   is_closed: boolean;
 }
 
+interface ExtractedStaff {
+  name: string;
+  role?: string;
+  specialties?: string[];
+  schedule?: { day: string; start_time: string; end_time: string }[];
+}
+
 interface ExtractionResult {
   services: ExtractedService[];
   hours: ExtractedHours[];
+  staff?: ExtractedStaff[];
   business_info?: any;
   pages_fetched: number;
   used_firecrawl: boolean;
@@ -181,7 +189,7 @@ async function scrapeZenotiApi(url: string): Promise<string> {
     const base = parsed.origin; // e.g. https://tinavora.zenoti.com
     const headers = {
       'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       'Origin': base,
       'Referer': `${base}/webstoreNew/services`,
     };
@@ -336,7 +344,7 @@ async function scrapeBookingPlatformBasic(detected: DetectedPlatform[]): Promise
 
     try {
       const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)' },
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' },
         signal: AbortSignal.timeout(10000),
       });
       if (!resp.ok) continue;
@@ -440,7 +448,7 @@ async function fetchHeuristic(url: string, options: CrawlOptions): Promise<{ con
       console.log(`Fetching page ${pages_fetched + 1}: ${currentUrl}`);
       const response = await fetch(currentUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; Business-Info-Extractor/1.0)',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
         },
         signal: AbortSignal.timeout(10000),
@@ -815,35 +823,37 @@ function extractServicesProgrammatically(content: string): ExtractedService[] {
 
 // ── AI extraction ────────────────────────────────────────────────────────────
 
-async function extractWithAI(content: string): Promise<{ services: ExtractedService[]; hours: ExtractedHours[]; business_info?: any }> {
-  if (!OPENAI_API_KEY) return { services: [], hours: [] };
+async function extractWithAI(content: string): Promise<{ services: ExtractedService[]; hours: ExtractedHours[]; staff: ExtractedStaff[]; business_info?: any }> {
+  if (!OPENAI_API_KEY) return { services: [], hours: [], staff: [] };
 
   // Strip HTML tags to compress raw crawl HTML before sending to AI.
-  // Preserves section markers (=== PAGE / === BOOKING PLATFORM) so the
-  // prioritization below still works. Reduces 2MB+ to ~200-400KB.
-  const cleanContent = content
+  // Preserves section markers (=== PAGE / === BOOKING PLATFORM / === STAFF PAGE)
+  // so the prioritization below still works. Reduces 2MB+ to ~200-400KB.
+  const strippedAll = content
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#\d+;/g, ' ')
-    .replace(/\s{3,}/g, '\n')
-    .slice(0, 400000); // hard cap at 400KB after stripping
+    .replace(/\s{3,}/g, '\n');
+  const cleanContent = strippedAll.slice(0, 400000); // hard cap at 400KB after stripping
 
   console.log(`AI input: ${content.length} chars raw → ${cleanContent.length} chars stripped`);
 
   const serviceKeywords = ['service', 'treatment', 'pricing', 'price', 'package', 'facial', 'massage', 'hair', 'nail', 'spa', 'salon', 'menu', 'booking', 'platform'];
   const hoursKeywords = ['hours', 'open', 'close', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const staffKeywords = ['staff', 'stylist', 'team', 'barber', 'technician', 'esthetician', 'colorist'];
 
   const maxChunkSize = 25000;
   const maxChunks = 5;
   const chunks: string[] = [];
 
-  // Prioritize sections with service/platform keywords
-  const contentSections = cleanContent.split(/=== (?:PAGE \d+|BOOKING PLATFORM)/);
+  // Prioritize sections with service/platform/staff keywords
+  const contentSections = cleanContent.split(/=== (?:PAGE \d+|BOOKING PLATFORM|STAFF PAGE)/);
   const prioritized = contentSections.sort((a, b) => {
     const score = (s: string) =>
       serviceKeywords.reduce((n, k) => n + (s.toLowerCase().includes(k) ? 10 : 0), 0) +
-      hoursKeywords.reduce((n, k) => n + (s.toLowerCase().includes(k) ? 5 : 0), 0);
+      hoursKeywords.reduce((n, k) => n + (s.toLowerCase().includes(k) ? 5 : 0), 0) +
+      staffKeywords.reduce((n, k) => n + (s.toLowerCase().includes(k) ? 6 : 0), 0);
     return score(b) - score(a);
   });
 
@@ -859,8 +869,19 @@ async function extractWithAI(content: string): Promise<{ services: ExtractedServ
   }
   if (currentChunk && chunks.length < maxChunks) chunks.push(currentChunk);
 
+  // Staff pages are appended at the very end of the crawl content, so the 400KB
+  // cap or the chunk budget can silently drop them. Guarantee a dedicated chunk
+  // for all STAFF PAGE sections (from the un-capped stripped content).
+  const staffMatches = [...strippedAll.matchAll(/=== STAFF PAGE:[^\n]*\n[\s\S]*?(?=\n=== |$)/g)];
+  if (staffMatches.length > 0) {
+    const staffChunk = staffMatches.map(m => m[0]).join('\n').slice(0, maxChunkSize);
+    chunks.push(staffChunk);
+    console.log(`Dedicated staff chunk added (${staffChunk.length} chars, ${staffMatches.length} staff section(s))`);
+  }
+
   let allServices: ExtractedService[] = [];
   let allHours: ExtractedHours[] = [];
+  let allStaff: ExtractedStaff[] = [];
   let businessInfo: any = null;
 
   for (let i = 0; i < chunks.length; i++) {
@@ -878,11 +899,13 @@ INSTRUCTIONS:
 6. Extract all business hours, phone, email, and addresses found
 7. Service names from booking platforms are authoritative — include ALL of them
 8. If a page is a services/menu/treatments page, extract EVERY item listed, even without a price
+9. STAFF: sections labelled "STAFF PAGE" list employees (stylists, barbers, technicians). Extract each person's name, role/title, specialties, and their weekly working schedule if shown (e.g. "Tue 9am-5pm"). Only extract REAL person names actually present in the content — never invent staff. Omit schedule if not shown.
 
 Return ONLY valid JSON:
 {
   "services": [{"name": "...", "description": "...", "price": "$XX", "duration_minutes": 60}],
   "hours": [{"day": "Monday", "open_time": "10:00 AM", "close_time": "7:00 PM", "is_closed": false}],
+  "staff": [{"name": "Jane Doe", "role": "Senior Stylist", "specialties": ["color", "balayage"], "schedule": [{"day": "Tuesday", "start_time": "9:00 AM", "end_time": "5:00 PM"}]}],
   "business_info": {"name": "...", "addresses": ["..."], "phone": "...", "email": "..."}
 }
 
@@ -912,9 +935,10 @@ ${chunk}`;
       const parsed = JSON.parse(aiResp);
       if (parsed.services?.length) allServices.push(...parsed.services);
       if (parsed.hours?.length) allHours.push(...parsed.hours);
+      if (parsed.staff?.length) allStaff.push(...parsed.staff);
       if (parsed.business_info && !businessInfo) businessInfo = parsed.business_info;
 
-      console.log(`Chunk ${i + 1}: ${parsed.services?.length ?? 0} services, ${parsed.hours?.length ?? 0} hours`);
+      console.log(`Chunk ${i + 1}: ${parsed.services?.length ?? 0} services, ${parsed.hours?.length ?? 0} hours, ${parsed.staff?.length ?? 0} staff`);
     } catch (err) {
       console.error(`AI extraction failed for chunk ${i + 1}:`, err);
     }
@@ -928,9 +952,21 @@ ${chunk}`;
   const uniqueHours = allHours.filter((h, i, arr) =>
     arr.findIndex(x => x.day.toLowerCase() === h.day.toLowerCase()) === i
   );
+  // Dedupe staff by name, merging schedule/role from later chunks into the first hit
+  const staffByName = new Map<string, ExtractedStaff>();
+  for (const st of allStaff) {
+    const key = (st.name || '').toLowerCase().trim();
+    if (!key || key.length < 3) continue;
+    const existing = staffByName.get(key);
+    if (!existing) { staffByName.set(key, st); continue; }
+    if (!existing.role && st.role) existing.role = st.role;
+    if ((!existing.schedule || existing.schedule.length === 0) && st.schedule?.length) existing.schedule = st.schedule;
+    if ((!existing.specialties || existing.specialties.length === 0) && st.specialties?.length) existing.specialties = st.specialties;
+  }
+  const uniqueStaff = [...staffByName.values()];
 
-  console.log(`AI final: ${uniqueServices.length} services, ${uniqueHours.length} hours`);
-  return { services: uniqueServices, hours: uniqueHours, business_info: businessInfo };
+  console.log(`AI final: ${uniqueServices.length} services, ${uniqueHours.length} hours, ${uniqueStaff.length} staff`);
+  return { services: uniqueServices, hours: uniqueHours, staff: uniqueStaff, business_info: businessInfo };
 }
 
 // ── Database save ─────────────────────────────────────────────────────────────
@@ -949,6 +985,54 @@ function normalizeTime(t: string): string {
     return `${h12}:${m[2]} ${ap}`;
   }
   return t;
+}
+
+function to24h(t: string): string | null {
+  const m = (t || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2] ?? '00';
+  const ap = m[3]?.toLowerCase();
+  if (ap === 'pm' && h !== 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  if (h > 23) return null;
+  return `${String(h).padStart(2, '0')}:${min}:00`;
+}
+
+async function saveStaff(tenantId: string, staff: ExtractedStaff[]) {
+  for (const st of staff) {
+    const name = (st.name || '').trim();
+    if (!name) continue;
+    const { data: row, error } = await supabase.from('staff').upsert({
+      tenant_id: tenantId,
+      name,
+      role: st.role || null,
+      specialties: st.specialties?.length ? st.specialties : null,
+      source: 'website',
+      active: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'tenant_id,name' }).select('id').single();
+
+    if (error) { console.error('Failed to save staff:', name, error.message); continue; }
+    if (!row?.id || !st.schedule?.length) continue;
+
+    // Replace this person's schedule with the freshly extracted one
+    await supabase.from('staff_schedules').delete().eq('staff_id', row.id);
+    const rows = st.schedule
+      .map(s => ({
+        tenant_id: tenantId,
+        staff_id: row.id,
+        dow: mapDayToNumber(s.day),
+        start_time: to24h(s.start_time),
+        end_time: to24h(s.end_time),
+      }))
+      .filter(r => r.start_time && r.end_time);
+    if (rows.length) {
+      const { error: schedErr } = await supabase.from('staff_schedules').insert(rows);
+      if (schedErr) console.error('Failed to save schedule for', name, schedErr.message);
+    }
+  }
+  console.log(`Saved ${staff.length} staff members`);
 }
 
 async function saveToDatabase(tenantId: string, services: ExtractedService[], hours: ExtractedHours[]) {
@@ -1025,7 +1109,7 @@ async function findServicePageUrls(content: string, inputUrl: string): Promise<s
       try {
         const r = await fetch(probeUrl, {
           method: 'HEAD',
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)' },
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' },
           signal: AbortSignal.timeout(5000),
           redirect: 'follow',
         });
@@ -1061,7 +1145,7 @@ async function fetchAndInjectServicePages(
     try {
       const resp = await fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; VoiceRelayBot/1.0)',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
         },
         signal: AbortSignal.timeout(12000),
@@ -1193,6 +1277,143 @@ function finalServiceFilter(list: ExtractedService[]): ExtractedService[] {
     });
 }
 
+// ── Staff page discovery & fetch ──────────────────────────────────────────────
+// Salons often publish stylists + schedules on /staff or /team pages, or on
+// their booking platform (e.g. vagaro.com/<slug>/staff). Fetch those pages and
+// inject them as "=== STAFF PAGE ===" sections for AI staff extraction.
+
+const COMMON_STAFF_PATHS = [
+  '/staff', '/team', '/our-team', '/meet-the-team', '/stylists', '/our-staff',
+  '/about/team', '/meet-our-team', '/artists', '/professionals',
+];
+
+// Slugs that are Vagaro site sections, not business names
+const VAGARO_NON_BUSINESS = /^(login|signup|book|listings?|blog|pro|business|about|terms|privacy|help|search|salons?|spas?|fitness|cdn|images?|css|js|api)$/i;
+
+function deriveVagaroStaffUrl(inputUrl: string, detected: DetectedPlatform[]): string | null {
+  // Collect candidate vagaro URLs: the crawl input itself + everything detection saw
+  const urls: string[] = [inputUrl];
+  for (const d of detected) {
+    if (d.platform === 'Vagaro') urls.push(d.url, ...(d.rawUrls ?? []));
+  }
+  for (const raw of urls) {
+    try {
+      const u = new URL(raw);
+      // Only the main host — CDN subdomains (images.vagaro.com) have no business slug
+      if (!/^(www\.)?vagaro\.com$/i.test(u.hostname)) continue;
+      const slug = u.pathname.split('/').filter(Boolean)[0];
+      if (!slug || slug.length < 4 || VAGARO_NON_BUSINESS.test(slug)) continue;
+      return `https://www.vagaro.com/${slug}/staff`;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+interface StaffFetchDebug { attempted: string[]; injected: string[]; errors: string[]; sample?: string }
+
+async function fetchStaffPages(inputUrl: string, detected: DetectedPlatform[], existingContent: string): Promise<{ content: string; debug: StaffFetchDebug }> {
+  const debug: StaffFetchDebug = { attempted: [], injected: [], errors: [] };
+  const candidates: string[] = [];
+
+  // Vagaro publishes a per-business staff page at vagaro.com/<slug>/staff
+  const vagaroStaffUrl = deriveVagaroStaffUrl(inputUrl, detected);
+  if (vagaroStaffUrl) candidates.push(vagaroStaffUrl);
+
+  // Root-domain staff paths (skip ones already crawled). Don't probe when the
+  // input itself is a booking-platform domain — vagaro.com/staff etc. are the
+  // platform's own corporate pages, not the business's.
+  try {
+    const rootUrl = new URL(inputUrl);
+    const isPlatformDomain = BOOKING_PLATFORMS.some(p => p.domains.some(d => rootUrl.hostname.endsWith(d)));
+    if (!isPlatformDomain) {
+      for (const p of COMMON_STAFF_PATHS) {
+        const u = rootUrl.origin + p;
+        if (!existingContent.includes(`: ${u} ===`)) candidates.push(u);
+      }
+    }
+  } catch { /* ignore */ }
+
+  let combined = '';
+
+  for (const url of candidates) {
+    if (debug.injected.length >= 2) break; // budget: max 2 staff pages
+    const isVagaro = url.includes('vagaro.com');
+    debug.attempted.push(url);
+    try {
+      if (!isVagaro) {
+        // Cheap existence check first
+        const head = await fetch(url, {
+          method: 'HEAD',
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' },
+          signal: AbortSignal.timeout(5000),
+          redirect: 'follow',
+        }).catch(() => null);
+        if (!head?.ok) { debug.errors.push(`${url}: HEAD ${head ? head.status : 'failed'}`); continue; }
+
+        const resp = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36', 'Accept': 'text/html' },
+          signal: AbortSignal.timeout(12000),
+        });
+        if (!resp.ok) { debug.errors.push(`${url}: GET ${resp.status}`); continue; }
+        const html = await resp.text();
+        const text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (text.length < 400) { debug.errors.push(`${url}: SPA-thin (${text.length} text chars)`); continue; }
+        combined += `\n\n=== STAFF PAGE: ${url} ===\n${html.slice(0, 150000)}`;
+        debug.injected.push(url);
+        console.log(`Staff page injected: ${url} (${html.length} chars)`);
+        continue;
+      }
+
+      // Vagaro staff pages are JS-rendered — use Firecrawl
+      if (!FIRECRAWL_API_KEY) { debug.errors.push(`${url}: no FIRECRAWL_API_KEY`); continue; }
+      const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${FIRECRAWL_API_KEY}`, 'Content-Type': 'application/json' },
+        // Vagaro sits behind aggressive bot protection (plain fetches get 403
+        // and naive renders get marketing pages) — stealth proxy gets the real page
+        body: JSON.stringify({
+          url,
+          formats: ['markdown'],
+          waitFor: 12000,
+          onlyMainContent: false,
+          proxy: 'stealth',
+          actions: [
+            { type: 'wait', milliseconds: 5000 },
+            { type: 'scroll', direction: 'down' },
+            { type: 'wait', milliseconds: 3000 },
+          ],
+        }),
+        signal: AbortSignal.timeout(75000),
+      });
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => '');
+        debug.errors.push(`${url}: firecrawl ${resp.status} ${errBody.slice(0, 150)}`);
+        console.warn(`Firecrawl staff scrape ${resp.status} for ${url}: ${errBody.slice(0, 200)}`);
+        continue;
+      }
+      const data = await resp.json();
+      const md = data?.data?.markdown ?? data?.markdown ?? '';
+      if (md && md.length > 200) {
+        combined += `\n\n=== STAFF PAGE: ${url} ===\n${md}`;
+        debug.injected.push(url);
+        console.log(`Vagaro staff page injected: ${url} (${md.length} chars)`);
+      } else {
+        debug.errors.push(`${url}: firecrawl returned ${md.length} chars`);
+      }
+    } catch (err) {
+      debug.errors.push(`${url}: ${(err as Error).message}`);
+      console.warn(`Staff page fetch failed for ${url}:`, (err as Error).message);
+    }
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  console.log(`Staff pages attempted: ${debug.attempted.join(', ') || 'none'} — injected ${debug.injected.length}`);
+  if (combined) debug.sample = combined.replace(/\s+/g, ' ').slice(0, 800);
+  return { content: combined, debug };
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -1317,6 +1538,21 @@ serve(async (req) => {
       }
     }
 
+    // ── Step 3d: Staff page discovery (salon stylists + schedules) ──────────
+    // Fetches /staff, /team etc. at the root domain and Vagaro's per-business
+    // staff page, injecting them as STAFF PAGE sections for AI extraction.
+    let staffDebug: StaffFetchDebug | undefined;
+    try {
+      const staffResult = await fetchStaffPages(url, detected, content);
+      staffDebug = staffResult.debug;
+      if (staffResult.content) {
+        content += staffResult.content;
+        console.log(`Staff pages: ${staffResult.content.length} chars injected`);
+      }
+    } catch (e) {
+      console.warn('Staff page discovery failed:', (e as Error).message);
+    }
+
     // ── Step 4: Multi-method data extraction ─────────────────────────────────
     const structuredData = extractStructuredData(content);
     const deterministicServices = extractServicesProgrammatically(content);
@@ -1370,19 +1606,39 @@ serve(async (req) => {
 
     console.log(`Final: ${uniqueServices.length} services, ${uniqueHours.length} hours`);
 
+    // Staff: verify each AI-extracted name actually appears in the crawled
+    // content (anti-hallucination), then clean up encoding
+    const contentLowerForStaff = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+    const verifiedStaff = (aiData.staff || [])
+      .filter(st => st.name && contentLowerForStaff.includes(st.name.toLowerCase().trim()))
+      .map(st => ({ ...st, name: fixMojibake(st.name).trim() }));
+    if (verifiedStaff.length !== (aiData.staff || []).length) {
+      console.log(`Staff verification: ${aiData.staff?.length ?? 0} → ${verifiedStaff.length}`);
+    }
+
     // ── Step 5: Save to database ─────────────────────────────────────────────
     if (finalTenantId !== 'demo') {
       await saveToDatabase(finalTenantId, uniqueServices, uniqueHours);
+      if (verifiedStaff.length > 0) {
+        try {
+          await saveStaff(finalTenantId, verifiedStaff);
+        } catch (e) {
+          // staff tables may not exist yet — don't fail the whole crawl
+          console.warn('Staff save failed (run the staff migration?):', (e as Error).message);
+        }
+      }
     }
 
-    const result: ExtractionResult = {
+    const result: ExtractionResult & { staff_debug?: StaffFetchDebug } = {
       services: uniqueServices,
       hours: uniqueHours,
+      staff: verifiedStaff,
       business_info: aiData.business_info,
       pages_fetched,
       used_firecrawl,
       extraction_method: `${extraction_method}+llm-extract+deterministic+ai${detected.length ? '+booking-platforms' : ''}`,
       detected_platforms: detected,
+      staff_debug: staffDebug,
     };
 
     return new Response(JSON.stringify(result), {

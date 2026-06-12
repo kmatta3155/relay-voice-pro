@@ -486,7 +486,7 @@ class RealtimeAudioBridge {
       return
     }
     
-    // Define RAG tool
+    // Define RAG + booking tools
     const tools = [{
       type: 'function',
       name: 'search_knowledge',
@@ -500,6 +500,33 @@ class RealtimeAudioBridge {
           }
         },
         required: ['query']
+      }
+    }, {
+      type: 'function',
+      name: 'check_availability',
+      description: 'Check REAL appointment availability for staff members. Use whenever the caller asks when a stylist is available, who is free, or wants to book a time. Never guess availability — always call this tool.',
+      parameters: {
+        type: 'object',
+        properties: {
+          staff_name: { type: 'string', description: 'Staff member name if the caller asked for a specific person; omit to check everyone' },
+          date: { type: 'string', description: 'Requested date in YYYY-MM-DD; omit to search the next 7 days' },
+          service_name: { type: 'string', description: 'The service requested, used to determine appointment length' }
+        }
+      }
+    }, {
+      type: 'function',
+      name: 'book_appointment',
+      description: 'Book an appointment. Only call AFTER confirming the service, time, staff member, and customer name with the caller. The booking is only complete when this tool returns success.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customer_name: { type: 'string', description: 'Caller full name' },
+          customer_phone: { type: 'string', description: 'Caller phone number if provided' },
+          service_name: { type: 'string', description: 'Service being booked' },
+          staff_name: { type: 'string', description: 'Staff member, if the caller chose one' },
+          start_time: { type: 'string', description: 'Appointment start as ISO 8601 local time, e.g. 2026-06-13T14:00:00' }
+        },
+        required: ['customer_name', 'service_name', 'start_time']
       }
     }]
     
@@ -585,71 +612,66 @@ class RealtimeAudioBridge {
     }
   }
   
+  private sendToolOutput(call_id: string, payload: unknown) {
+    this.openaiWs?.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: {
+        type: 'function_call_output',
+        call_id,
+        output: JSON.stringify(payload)
+      }
+    }))
+    this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
+  }
+
   private async handleToolCall(event: any) {
     const { name, call_id, arguments: argsJson } = event
-    
+
     logger.info('Tool call received', { name, call_id })
-    
-    if (name === 'search_knowledge') {
-      try {
-        const args = JSON.parse(argsJson)
-        const { query } = args
-        
-        logger.info('Searching knowledge base', { query })
-        
-        if (!supabaseUrl || !supabaseKey) {
-          throw new Error('Supabase not configured')
-        }
-        
-        const supabase = createClient(supabaseUrl, supabaseKey)
-        
+
+    try {
+      if (!supabaseUrl || !supabaseKey) throw new Error('Supabase not configured')
+      const supabase = createClient(supabaseUrl, supabaseKey)
+      const args = JSON.parse(argsJson || '{}')
+
+      if (name === 'search_knowledge') {
         // NOTE: the DB function is search_knowledge_keywords(p_tenant, p_query, p_match_count).
         // 'search_knowledge' with (tenant_id, query_text, ...) does not exist — calling it
         // made every in-call knowledge lookup fail silently.
         const { data, error } = await supabase.rpc('search_knowledge_keywords', {
           p_tenant: this.tenantId,
-          p_query: query,
+          p_query: args.query,
           p_match_count: 3
         })
-        
-        if (error) {
-          logger.error('Knowledge search failed', { error })
-          throw error
-        }
-        
-        logger.info('Knowledge search results', {
-          resultCount: data?.length || 0
-        })
-        
-        // Send results back to OpenAI
-        this.openaiWs?.send(JSON.stringify({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id: call_id,
-            output: JSON.stringify(data || [])
-          }
-        }))
-        
-        // Trigger response generation
-        this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
-      } catch (error) {
-        logger.error('Error handling tool call', {
-          error: error instanceof Error ? error.message : String(error)
-        })
-        
-        // Send error response
-        this.openaiWs?.send(JSON.stringify({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id: call_id,
-            output: JSON.stringify({ error: 'Failed to search knowledge base' })
-          }
-        }))
-        
-        this.openaiWs?.send(JSON.stringify({ type: 'response.create' }))
+        if (error) throw error
+        logger.info('Knowledge search results', { resultCount: data?.length || 0 })
+        this.sendToolOutput(call_id, data || [])
+        return
       }
+
+      if (name === 'check_availability') {
+        const slots = await computeAvailability(supabase, this.tenantId!, args.staff_name, args.date, args.service_name)
+        logger.info('Availability computed', { slots: slots.length, staff: args.staff_name })
+        this.sendToolOutput(call_id, slots.length > 0
+          ? { available_slots: slots }
+          : { available_slots: [], note: 'No open slots found in the requested window. Offer to take a message or suggest calling back.' })
+        return
+      }
+
+      if (name === 'book_appointment') {
+        const result = await bookAppointment(supabase, this.tenantId!, args)
+        logger.info('Booking attempt', { success: result.success, staff: args.staff_name, start: args.start_time })
+        this.sendToolOutput(call_id, result)
+        return
+      }
+
+      this.sendToolOutput(call_id, { error: `Unknown tool: ${name}` })
+    } catch (error) {
+      logger.error('Error handling tool call', {
+        tool: name,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      this.sendToolOutput(call_id, { error: 'Tool call failed — apologize and offer to take a message instead.' })
     }
   }
   
@@ -677,6 +699,176 @@ class RealtimeAudioBridge {
     } catch (error) {
       logger.error('Error closing Twilio WebSocket', { error })
     }
+  }
+}
+
+// ========== STAFF AVAILABILITY & BOOKING ==========
+// Availability = staff weekly schedule windows (staff_schedules) minus
+// existing appointments. Slots are offered on 30-minute boundaries; duration
+// comes from the matched service's duration_minutes (default 60).
+// NOTE: times are treated as the business's local wall-clock time.
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function slotLabel(d: Date): string {
+  const h = d.getUTCHours()
+  const ap = h >= 12 ? 'PM' : 'AM'
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCMonth() + 1}/${d.getUTCDate()} at ${h12}:${mm} ${ap}`
+}
+
+async function resolveDuration(supabase: any, tenantId: string, serviceName?: string): Promise<number> {
+  if (!serviceName) return 60
+  const { data } = await supabase.from('services')
+    .select('duration_minutes').eq('tenant_id', tenantId)
+    .ilike('name', `%${serviceName}%`).limit(1)
+  return data?.[0]?.duration_minutes || 60
+}
+
+async function computeAvailability(
+  supabase: any, tenantId: string,
+  staffName?: string, dateStr?: string, serviceName?: string
+): Promise<{ staff: string; start_time: string; spoken: string }[]> {
+  // 1. Staff roster (optionally filtered by name)
+  let staffQuery = supabase.from('staff').select('id,name').eq('tenant_id', tenantId).eq('active', true)
+  if (staffName) staffQuery = staffQuery.ilike('name', `%${staffName}%`)
+  const { data: staffRows } = await staffQuery
+  if (!staffRows?.length) return []
+
+  const staffIds = staffRows.map((s: any) => s.id)
+  let { data: schedules } = await supabase.from('staff_schedules')
+    .select('staff_id,dow,start_time,end_time').in('staff_id', staffIds)
+
+  // Most salons publish staff names but not schedules (those live inside their
+  // booking platform). Fall back to business hours as every stylist's window —
+  // conflicts with existing appointments are still respected.
+  if (!schedules?.length) {
+    const { data: bizHours } = await supabase.from('business_hours')
+      .select('dow,open_time,close_time,is_closed').eq('tenant_id', tenantId)
+    if (!bizHours?.length) return []
+    schedules = []
+    for (const s of staffRows) {
+      for (const h of bizHours) {
+        if (h.is_closed || !h.open_time || !h.close_time) continue
+        schedules.push({ staff_id: s.id, dow: h.dow, start_time: h.open_time, end_time: h.close_time })
+      }
+    }
+  }
+  if (!schedules.length) return []
+
+  // 2. Search window: requested day, or the next 7 days
+  const now = new Date()
+  const windowStart = dateStr ? new Date(`${dateStr}T00:00:00Z`) : now
+  const days = dateStr ? 1 : 7
+  const windowEnd = new Date(windowStart.getTime() + days * 86400000)
+
+  // 3. Existing appointments in the window (staff is stored by name)
+  const { data: appts } = await supabase.from('appointments')
+    .select('staff,start_at,end_at').eq('tenant_id', tenantId)
+    .gte('start_at', windowStart.toISOString()).lt('start_at', windowEnd.toISOString())
+
+  const durationMin = await resolveDuration(supabase, tenantId, serviceName)
+  const slots: { staff: string; start_time: string; spoken: string }[] = []
+
+  for (let d = 0; d < days && slots.length < 5; d++) {
+    const day = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), windowStart.getUTCDate() + d))
+    const dow = day.getUTCDay()
+
+    for (const sched of schedules) {
+      if (slots.length >= 5) break
+      if (sched.dow !== dow) continue
+      const person = staffRows.find((s: any) => s.id === sched.staff_id)
+      if (!person) continue
+
+      const [sh, sm] = String(sched.start_time).split(':').map(Number)
+      const [eh, em] = String(sched.end_time).split(':').map(Number)
+      const shiftStart = new Date(day); shiftStart.setUTCHours(sh, sm, 0, 0)
+      const shiftEnd = new Date(day); shiftEnd.setUTCHours(eh, em, 0, 0)
+
+      for (let t = shiftStart.getTime(); t + durationMin * 60000 <= shiftEnd.getTime(); t += 30 * 60000) {
+        if (slots.length >= 5) break
+        const slotStart = new Date(t)
+        const slotEnd = new Date(t + durationMin * 60000)
+        // Skip past times (when checking today)
+        if (slotStart.getTime() < now.getTime()) continue
+        // Conflict: overlapping appointment for the same person
+        const conflict = (appts || []).some((a: any) =>
+          a.staff && a.staff.toLowerCase().includes(person.name.toLowerCase().split(' ')[0].toLowerCase()) &&
+          new Date(a.start_at).getTime() < slotEnd.getTime() &&
+          new Date(a.end_at).getTime() > slotStart.getTime()
+        )
+        if (conflict) continue
+        slots.push({
+          staff: person.name,
+          start_time: slotStart.toISOString().replace('.000Z', ''),
+          spoken: `${person.name}: ${slotLabel(slotStart)}`,
+        })
+      }
+    }
+  }
+
+  return slots
+}
+
+async function bookAppointment(
+  supabase: any, tenantId: string,
+  args: { customer_name: string; customer_phone?: string; service_name: string; staff_name?: string; start_time: string }
+): Promise<{ success: boolean; message: string; alternatives?: unknown }> {
+  const { customer_name, customer_phone, service_name, staff_name, start_time } = args
+  if (!customer_name || !service_name || !start_time) {
+    return { success: false, message: 'Missing customer name, service, or start time.' }
+  }
+
+  const start = new Date(start_time.endsWith('Z') ? start_time : `${start_time}Z`)
+  if (isNaN(start.getTime())) return { success: false, message: 'Could not understand the requested time.' }
+
+  const durationMin = await resolveDuration(supabase, tenantId, service_name)
+  const end = new Date(start.getTime() + durationMin * 60000)
+
+  // Conflict check for the chosen staff member
+  if (staff_name) {
+    const { data: appts } = await supabase.from('appointments')
+      .select('staff,start_at,end_at').eq('tenant_id', tenantId)
+      .gte('start_at', new Date(start.getTime() - 86400000).toISOString())
+      .lt('start_at', end.toISOString())
+    const conflict = (appts || []).some((a: any) =>
+      a.staff && a.staff.toLowerCase().includes(staff_name.toLowerCase().split(' ')[0].toLowerCase()) &&
+      new Date(a.start_at).getTime() < end.getTime() &&
+      new Date(a.end_at).getTime() > start.getTime()
+    )
+    if (conflict) {
+      const alternatives = await computeAvailability(supabase, tenantId, staff_name, undefined, service_name)
+      return { success: false, message: `${staff_name} already has an appointment at that time.`, alternatives: alternatives.slice(0, 3) }
+    }
+  }
+
+  const customer = customer_phone ? `${customer_name} (${customer_phone})` : customer_name
+  const { error } = await supabase.from('appointments').insert({
+    tenant_id: tenantId,
+    title: service_name,
+    customer,
+    staff: staff_name || null,
+    start_at: start.toISOString(),
+    end_at: end.toISOString(),
+  })
+  if (error) return { success: false, message: `Could not save the appointment: ${error.message}` }
+
+  // Best-effort lead capture so the booking shows up in the CRM
+  try {
+    await supabase.from('leads').insert({
+      tenant_id: tenantId,
+      name: customer_name,
+      phone: customer_phone || '',
+      source: 'VoiceAI-Booking',
+      status: 'Booked',
+      notes: `Booked ${service_name}${staff_name ? ` with ${staff_name}` : ''} for ${slotLabel(start)}`,
+    })
+  } catch { /* non-fatal */ }
+
+  return {
+    success: true,
+    message: `Booked ${service_name}${staff_name ? ` with ${staff_name}` : ''} on ${slotLabel(start)} for ${customer_name}. Confirm this to the caller.`,
   }
 }
 
