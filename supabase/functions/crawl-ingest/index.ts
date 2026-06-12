@@ -68,6 +68,7 @@ interface ExtractedStaff {
   name: string;
   role?: string;
   specialties?: string[];
+  bio?: string;
   schedule?: { day: string; start_time: string; end_time: string }[];
 }
 
@@ -899,13 +900,13 @@ INSTRUCTIONS:
 6. Extract all business hours, phone, email, and addresses found
 7. Service names from booking platforms are authoritative — include ALL of them
 8. If a page is a services/menu/treatments page, extract EVERY item listed, even without a price
-9. STAFF: sections labelled "STAFF PAGE" list employees (stylists, barbers, technicians). Extract each person's name, role/title, specialties, and their weekly working schedule if shown (e.g. "Tue 9am-5pm"). Only extract REAL person names actually present in the content — never invent staff. Omit schedule if not shown.
+9. STAFF: sections labelled "STAFF PAGE" list employees (stylists, barbers, technicians). Extract each person's name, role/title, specialties, a short bio (1-2 sentences condensed from their profile text), and their weekly working schedule if shown (e.g. "Tue 9am-5pm"). Only extract REAL person names actually present in the content — never invent staff or bios. Omit fields not shown.
 
 Return ONLY valid JSON:
 {
   "services": [{"name": "...", "description": "...", "price": "$XX", "duration_minutes": 60}],
   "hours": [{"day": "Monday", "open_time": "10:00 AM", "close_time": "7:00 PM", "is_closed": false}],
-  "staff": [{"name": "Jane Doe", "role": "Senior Stylist", "specialties": ["color", "balayage"], "schedule": [{"day": "Tuesday", "start_time": "9:00 AM", "end_time": "5:00 PM"}]}],
+  "staff": [{"name": "Jane Doe", "role": "Senior Stylist", "specialties": ["color", "balayage"], "bio": "Jane has 12 years of experience specializing in dimensional color.", "schedule": [{"day": "Tuesday", "start_time": "9:00 AM", "end_time": "5:00 PM"}]}],
   "business_info": {"name": "...", "addresses": ["..."], "phone": "...", "email": "..."}
 }
 
@@ -960,6 +961,7 @@ ${chunk}`;
     const existing = staffByName.get(key);
     if (!existing) { staffByName.set(key, st); continue; }
     if (!existing.role && st.role) existing.role = st.role;
+    if (!existing.bio && st.bio) existing.bio = st.bio;
     if ((!existing.schedule || existing.schedule.length === 0) && st.schedule?.length) existing.schedule = st.schedule;
     if ((!existing.specialties || existing.specialties.length === 0) && st.specialties?.length) existing.specialties = st.specialties;
   }
@@ -1008,6 +1010,7 @@ async function saveStaff(tenantId: string, staff: ExtractedStaff[]) {
       name,
       role: st.role || null,
       specialties: st.specialties?.length ? st.specialties : null,
+      bio: st.bio?.trim() || null,
       source: 'website',
       active: true,
       updated_at: new Date().toISOString(),

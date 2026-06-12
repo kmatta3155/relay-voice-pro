@@ -6,8 +6,18 @@ export type Staff = {
   name: string;
   role?: string | null;
   specialties?: string[] | null;
+  bio?: string | null;
+  photo_url?: string | null;
   source?: string;
   active?: boolean;
+};
+
+export type TimeOff = {
+  id?: string;
+  staff_id: string;
+  start_date: string; // YYYY-MM-DD
+  end_date: string;
+  reason?: string | null;
 };
 
 export type StaffSchedule = {
@@ -54,6 +64,8 @@ export async function upsertStaff(s: Staff): Promise<Staff> {
     name: s.name.trim(),
     role: s.role || null,
     specialties: s.specialties && s.specialties.length ? s.specialties : null,
+    bio: s.bio?.trim() || null,
+    photo_url: s.photo_url?.trim() || null,
     source: s.source || "manual",
     active: s.active ?? true,
     updated_at: new Date().toISOString(),
@@ -93,6 +105,45 @@ export async function setSchedule(staffId: string, rows: Omit<StaffSchedule, "te
     const { error } = await supabase.from("staff_schedules").insert(clean);
     if (error) throw error;
   }
+}
+
+/* ---------------- Service assignments ---------------- */
+export async function listStaffServices(staffId: string): Promise<string[]> {
+  const t = await activeTenantId(); if (!t) return [];
+  const { data } = await supabase.from("staff_services").select("service_id").eq("tenant_id", t).eq("staff_id", staffId);
+  return (data || []).map((r: any) => r.service_id);
+}
+
+export async function setStaffServices(staffId: string, serviceIds: string[]): Promise<void> {
+  const t = await activeTenantId(); if (!t) throw new Error("No active workspace");
+  await supabase.from("staff_services").delete().eq("tenant_id", t).eq("staff_id", staffId);
+  if (serviceIds.length) {
+    const { error } = await supabase.from("staff_services")
+      .insert(serviceIds.map(sid => ({ tenant_id: t, staff_id: staffId, service_id: sid })));
+    if (error) throw error;
+  }
+}
+
+/* ---------------- Time off ---------------- */
+export async function listTimeOff(staffId?: string): Promise<TimeOff[]> {
+  const t = await activeTenantId(); if (!t) return [];
+  let q = supabase.from("staff_time_off").select("*").eq("tenant_id", t).order("start_date");
+  if (staffId) q = q.eq("staff_id", staffId);
+  const { data } = await q;
+  return data || [];
+}
+
+export async function addTimeOff(o: TimeOff): Promise<void> {
+  const t = await activeTenantId(); if (!t) throw new Error("No active workspace");
+  const { error } = await supabase.from("staff_time_off").insert({
+    tenant_id: t, staff_id: o.staff_id, start_date: o.start_date, end_date: o.end_date, reason: o.reason || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteTimeOff(id: string): Promise<void> {
+  const t = await activeTenantId(); if (!t) return;
+  await supabase.from("staff_time_off").delete().eq("tenant_id", t).eq("id", id);
 }
 
 /* ---------------- Booking settings ---------------- */
@@ -226,6 +277,7 @@ export type Slot = { staff: string; staff_id: string; start: Date; end: Date; la
 
 export async function computeAvailability(opts: {
   staffId?: string;
+  serviceId?: string;
   date?: Date;
   days?: number;
   durationMinutes?: number;
@@ -234,16 +286,29 @@ export async function computeAvailability(opts: {
   const dur = opts.durationMinutes || 60;
   const days = opts.days || 7;
 
-  const [{ data: staffRows }, { data: scheds }, { data: appts }, { data: bizHours }] = await Promise.all([
+  const [{ data: staffRows }, { data: scheds }, { data: appts }, { data: bizHours }, { data: timeOff }, { data: assignments }] = await Promise.all([
     supabase.from("staff").select("id,name").eq("tenant_id", t).eq("active", true),
     supabase.from("staff_schedules").select("staff_id,dow,start_time,end_time").eq("tenant_id", t),
     supabase.from("appointments").select("staff,staff_id,start_at,end_at").eq("tenant_id", t),
     supabase.from("business_hours").select("dow,open_time,close_time,is_closed").eq("tenant_id", t),
+    supabase.from("staff_time_off").select("staff_id,start_date,end_date").eq("tenant_id", t),
+    supabase.from("staff_services").select("staff_id,service_id").eq("tenant_id", t),
   ]);
 
   let roster = staffRows || [];
   if (opts.staffId) roster = roster.filter((s: any) => s.id === opts.staffId);
+  // Filter by service assignment — but only when assignments exist at all for
+  // this service (salons that haven't assigned services keep everyone bookable)
+  if (opts.serviceId && (assignments || []).some((a: any) => a.service_id === opts.serviceId)) {
+    const allowed = new Set((assignments || []).filter((a: any) => a.service_id === opts.serviceId).map((a: any) => a.staff_id));
+    roster = roster.filter((s: any) => allowed.has(s.id));
+  }
   if (!roster.length) return [];
+
+  const isOnTimeOff = (staffId: string, day: Date) => {
+    const ymd = day.toISOString().slice(0, 10);
+    return (timeOff || []).some((o: any) => o.staff_id === staffId && o.start_date <= ymd && o.end_date >= ymd);
+  };
 
   // Effective schedule per staff: their own, else business hours
   const schedFor = (staffId: string): { dow: number; start_time: string; end_time: string }[] => {
@@ -263,6 +328,7 @@ export async function computeAvailability(opts: {
     const day = new Date(base); day.setDate(base.getDate() + d);
     const dow = day.getDay();
     for (const person of roster) {
+      if (isOnTimeOff(person.id, day)) continue;
       for (const sc of schedFor(person.id)) {
         if (sc.dow !== dow) continue;
         const [sh, sm] = String(sc.start_time).split(":").map(Number);

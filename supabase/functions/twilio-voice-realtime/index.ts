@@ -545,6 +545,17 @@ class RealtimeAudioBridge {
         },
         required: ['customer_name', 'service_name', 'start_time']
       }
+    }, {
+      type: 'function',
+      name: 'cancel_appointment',
+      description: 'Cancel an existing upcoming appointment. Ask for the name the appointment is under (and phone number if the name alone is ambiguous). Only confirm cancellation after this tool returns success. For rescheduling: cancel first, then book the new time.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customer_name: { type: 'string', description: 'Name the appointment is booked under' },
+          customer_phone: { type: 'string', description: 'Phone number on the booking, if provided' }
+        }
+      }
     }]
     
     const sessionConfig = {
@@ -690,6 +701,13 @@ class RealtimeAudioBridge {
         return
       }
 
+      if (name === 'cancel_appointment') {
+        const result = await cancelAppointment(supabase, this.tenantId!, args)
+        logger.info('Cancellation attempt', { success: result.success, name: args.customer_name })
+        this.sendToolOutput(call_id, result)
+        return
+      }
+
       this.sendToolOutput(call_id, { error: `Unknown tool: ${name}` })
     } catch (error) {
       logger.error('Error handling tool call', {
@@ -758,8 +776,39 @@ async function computeAvailability(
   // 1. Staff roster (optionally filtered by name)
   let staffQuery = supabase.from('staff').select('id,name').eq('tenant_id', tenantId).eq('active', true)
   if (staffName) staffQuery = staffQuery.ilike('name', `%${staffName}%`)
-  const { data: staffRows } = await staffQuery
+  let { data: staffRows } = await staffQuery
   if (!staffRows?.length) return []
+
+  // Service assignments: when the requested service has assignments, only
+  // stylists who perform it are offered. No assignments → everyone bookable.
+  if (serviceName) {
+    try {
+      const { data: svc } = await supabase.from('services').select('id')
+        .eq('tenant_id', tenantId).ilike('name', `%${serviceName}%`).limit(1)
+      const serviceId = svc?.[0]?.id
+      if (serviceId) {
+        const { data: assigned } = await supabase.from('staff_services')
+          .select('staff_id').eq('tenant_id', tenantId).eq('service_id', serviceId)
+        if (assigned?.length) {
+          const allowed = new Set(assigned.map((a: any) => a.staff_id))
+          const filtered = staffRows.filter((s: any) => allowed.has(s.id))
+          if (filtered.length) staffRows = filtered
+        }
+      }
+    } catch { /* staff_services may not exist yet */ }
+  }
+
+  // Time off: exclude staff who are away on a given day
+  let timeOff: any[] = []
+  try {
+    const { data: toRows } = await supabase.from('staff_time_off')
+      .select('staff_id,start_date,end_date').eq('tenant_id', tenantId)
+    timeOff = toRows || []
+  } catch { /* table may not exist yet */ }
+  const isAway = (staffId: string, day: Date) => {
+    const ymd = day.toISOString().slice(0, 10)
+    return timeOff.some((o: any) => o.staff_id === staffId && o.start_date <= ymd && o.end_date >= ymd)
+  }
 
   const staffIds = staffRows.map((s: any) => s.id)
   let { data: schedules } = await supabase.from('staff_schedules')
@@ -805,6 +854,7 @@ async function computeAvailability(
       if (sched.dow !== dow) continue
       const person = staffRows.find((s: any) => s.id === sched.staff_id)
       if (!person) continue
+      if (isAway(person.id, day)) continue
 
       const [sh, sm] = String(sched.start_time).split(':').map(Number)
       const [eh, em] = String(sched.end_time).split(':').map(Number)
@@ -873,9 +923,12 @@ async function bookAppointment(
     tenant_id: tenantId,
     title: service_name,
     customer,
+    phone: customer_phone || null,
     staff: staff_name || null,
     start_at: start.toISOString(),
     end_at: end.toISOString(),
+    status: 'booked',
+    source: 'voice-ai',
   })
   if (error) return { success: false, message: `Could not save the appointment: ${error.message}` }
 
@@ -891,10 +944,96 @@ async function bookAppointment(
     })
   } catch { /* non-fatal */ }
 
+  // SMS confirmation (industry standard) — best effort, never blocks the booking
+  let smsSent = false
+  if (customer_phone) {
+    smsSent = await sendBookingSms(supabase, tenantId,
+      customer_phone,
+      `Your ${service_name} appointment${staff_name ? ` with ${staff_name}` : ''} is confirmed for ${slotLabel(start)}. Reply or call us to reschedule.`)
+  }
+
   return {
     success: true,
-    message: `Booked ${service_name}${staff_name ? ` with ${staff_name}` : ''} on ${slotLabel(start)} for ${customer_name}. Confirm this to the caller.`,
+    message: `Booked ${service_name}${staff_name ? ` with ${staff_name}` : ''} on ${slotLabel(start)} for ${customer_name}.${smsSent ? ' A text confirmation was sent.' : ''} Confirm this to the caller.`,
   }
+}
+
+// Send an SMS via Twilio from the tenant's own number. Best-effort.
+async function sendBookingSms(supabase: any, tenantId: string, to: string, body: string): Promise<boolean> {
+  try {
+    const sid = Deno.env.get('TWILIO_ACCOUNT_SID')
+    const token = Deno.env.get('TWILIO_AUTH_TOKEN')
+    if (!sid || !token) return false
+    const { data: settings } = await supabase.from('agent_settings')
+      .select('twilio_number').eq('tenant_id', tenantId).maybeSingle()
+    const from = settings?.twilio_number
+    if (!from) return false
+
+    const digits = to.replace(/[^\d+]/g, '')
+    const e164 = digits.startsWith('+') ? digits : (digits.length === 10 ? `+1${digits}` : `+${digits}`)
+    const resp = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa(`${sid}:${token}`),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ From: from, To: e164, Body: body }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!resp.ok) {
+      logger.warn('Booking SMS failed', { status: resp.status })
+      return false
+    }
+    return true
+  } catch (e) {
+    logger.warn('Booking SMS error', { error: (e as Error).message })
+    return false
+  }
+}
+
+// Cancel the caller's upcoming appointment, located by name (and phone if given)
+async function cancelAppointment(
+  supabase: any, tenantId: string,
+  args: { customer_name?: string; customer_phone?: string }
+): Promise<{ success: boolean; message: string; matches?: unknown }> {
+  const name = (args.customer_name || '').trim()
+  const phone = (args.customer_phone || '').replace(/[^\d]/g, '')
+  if (!name && !phone) return { success: false, message: 'Need the customer name or phone number to find the appointment.' }
+
+  const { data: appts } = await supabase.from('appointments')
+    .select('id,title,customer,staff,start_at,phone')
+    .eq('tenant_id', tenantId)
+    .gte('start_at', new Date().toISOString())
+    .order('start_at')
+    .limit(50)
+
+  const matches = (appts || []).filter((a: any) => {
+    const nameHit = name && a.customer && a.customer.toLowerCase().includes(name.toLowerCase())
+    const phoneHit = phone && ((a.phone || '').replace(/[^\d]/g, '').includes(phone) || (a.customer || '').replace(/[^\d]/g, '').includes(phone))
+    return nameHit || phoneHit
+  })
+
+  if (matches.length === 0) {
+    return { success: false, message: 'No upcoming appointment found under that name or number. Double-check the spelling or offer to take a message.' }
+  }
+  if (matches.length > 1) {
+    return {
+      success: false,
+      message: 'Multiple upcoming appointments match — ask the caller which one to cancel.',
+      matches: matches.slice(0, 4).map((m: any) => ({ service: m.title, staff: m.staff, when: slotLabel(new Date(m.start_at)) })),
+    }
+  }
+
+  const appt = matches[0]
+  const { error } = await supabase.from('appointments').delete().eq('tenant_id', tenantId).eq('id', appt.id)
+  if (error) return { success: false, message: `Could not cancel: ${error.message}` }
+
+  if (appt.phone) {
+    await sendBookingSms(supabase, tenantId, appt.phone,
+      `Your ${appt.title} appointment on ${slotLabel(new Date(appt.start_at))} has been cancelled. Call us anytime to rebook.`)
+  }
+
+  return { success: true, message: `Cancelled ${appt.title}${appt.staff ? ` with ${appt.staff}` : ''} on ${slotLabel(new Date(appt.start_at))}. Confirm this to the caller and offer to rebook.` }
 }
 
 // ========== MAIN HTTP HANDLER ==========

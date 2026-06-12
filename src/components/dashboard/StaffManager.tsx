@@ -16,11 +16,14 @@ import {
   Users, Calendar as CalendarIcon, Clock, Settings as SettingsIcon, Plus, Trash2,
   Pencil, Globe, Upload, Phone, Link2, Sparkles, CheckCircle2, AlertCircle, Loader2,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Staff, StaffSchedule, BookingSettings, Slot, DAYS,
+  Staff, StaffSchedule, BookingSettings, Slot, TimeOff, DAYS,
   listStaff, upsertStaff, deleteStaff, listSchedules, setSchedule,
   getBookingSettings, saveBookingSettings, importStaffFromWebsite, importStaffCSV,
   computeAvailability, bookAppointment, listServicesLite,
+  listStaffServices, setStaffServices, listTimeOff, addTimeOff, deleteTimeOff,
 } from "@/lib/staff";
 import { listAppointments, deleteAppointment } from "@/lib/data";
 
@@ -104,15 +107,32 @@ function StylistsTab({ staff, loading, onChange }: { staff: Staff[]; loading: bo
   const [open, setOpen] = useState(false);
   const [crawlUrl, setCrawlUrl] = useState("");
   const [crawling, setCrawling] = useState(false);
+  const [services, setServices] = useState<{ id: string; name: string }[]>([]);
+  const [assigned, setAssigned] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function newStylist() { setEditing({ name: "", role: "", specialties: [], active: true }); setOpen(true); }
-  function editStylist(s: Staff) { setEditing({ ...s }); setOpen(true); }
+  useEffect(() => { listServicesLite().then(setServices).catch(() => {}); }, []);
+
+  async function newStylist() {
+    setEditing({ name: "", role: "", specialties: [], bio: "", active: true });
+    setAssigned(new Set());
+    setOpen(true);
+  }
+  async function editStylist(s: Staff) {
+    setEditing({ ...s });
+    try { setAssigned(new Set(s.id ? await listStaffServices(s.id) : [])); }
+    catch { setAssigned(new Set()); }
+    setOpen(true);
+  }
 
   async function save() {
     if (!editing?.name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
     try {
-      await upsertStaff(editing);
+      const saved = await upsertStaff(editing);
+      if (saved.id) {
+        try { await setStaffServices(saved.id, [...assigned]); }
+        catch (e: any) { toast({ title: "Service assignment not saved", description: "Run the latest migration SQL, then retry.", variant: "destructive" }); }
+      }
       toast({ title: "Saved", description: `${editing.name} updated.` });
       setOpen(false); onChange();
     } catch (e: any) { toast({ title: "Save failed", description: e.message, variant: "destructive" }); }
@@ -235,6 +255,33 @@ function StylistsTab({ staff, loading, onChange }: { staff: Staff[]; loading: bo
                   onChange={e => setEditing({ ...editing, specialties: e.target.value.split(",").map(x => x.trim()).filter(Boolean) })}
                   placeholder="balayage, color correction, extensions" />
               </div>
+              <div className="space-y-1">
+                <Label>Bio</Label>
+                <Textarea rows={3} value={editing.bio || ""}
+                  onChange={e => setEditing({ ...editing, bio: e.target.value })}
+                  placeholder="Short intro the AI can share with callers, e.g. '12 years of experience specializing in dimensional color.'" />
+              </div>
+              {services.length > 0 && (
+                <div className="space-y-1">
+                  <Label>Services this stylist performs</Label>
+                  <p className="text-[11px] text-muted-foreground -mt-0.5">Leave all unchecked if they can take any service.</p>
+                  <div className="max-h-44 overflow-y-auto rounded-lg border p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {services.map(svc => (
+                      <label key={svc.id} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer">
+                        <Checkbox
+                          checked={assigned.has(svc.id)}
+                          onCheckedChange={(v) => {
+                            const next = new Set(assigned);
+                            if (v) next.add(svc.id); else next.delete(svc.id);
+                            setAssigned(next);
+                          }}
+                        />
+                        <span className="truncate">{svc.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <Label>Active (bookable)</Label>
                 <Switch checked={editing.active ?? true} onCheckedChange={v => setEditing({ ...editing, active: v })} />
@@ -292,6 +339,7 @@ function SchedulesTab({ staff }: { staff: Staff[] }) {
   if (!active.length) return <EmptyHint text="Add a stylist first, then set their weekly hours here." />;
 
   return (
+    <div className="space-y-4">
     <Card className="rounded-2xl shadow-sm">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Weekly availability</CardTitle>
@@ -332,6 +380,72 @@ function SchedulesTab({ staff }: { staff: Staff[] }) {
         </div>
       </CardContent>
     </Card>
+
+    {selId && <TimeOffCard staffId={selId} staffName={active.find(s => s.id === selId)?.name || ""} />}
+    </div>
+  );
+}
+
+function TimeOffCard({ staffId, staffName }: { staffId: string; staffName: string }) {
+  const { toast } = useToast();
+  const [rows, setRows] = useState<TimeOff[]>([]);
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [reason, setReason] = useState("");
+  const [unavailable, setUnavailable] = useState(false);
+
+  async function refresh() {
+    try { setRows(await listTimeOff(staffId)); setUnavailable(false); }
+    catch { setUnavailable(true); }
+  }
+  useEffect(() => { refresh(); }, [staffId]);
+
+  async function add() {
+    if (!start) { toast({ title: "Pick a start date", variant: "destructive" }); return; }
+    const endDate = end || start;
+    if (endDate < start) { toast({ title: "End date is before start date", variant: "destructive" }); return; }
+    try {
+      await addTimeOff({ staff_id: staffId, start_date: start, end_date: endDate, reason: reason.trim() || null });
+      setStart(""); setEnd(""); setReason("");
+      refresh();
+      toast({ title: "Time off added", description: `${staffName} won't be offered for bookings during that period.` });
+    } catch (e: any) { toast({ title: "Couldn't add time off", description: e.message, variant: "destructive" }); }
+  }
+
+  if (unavailable) return null; // table not migrated yet — keep the page clean
+
+  return (
+    <Card className="rounded-2xl shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2"><CalendarIcon className="w-4 h-4 text-primary" /> Time off — {staffName}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1"><Label className="text-xs">From</Label>
+            <Input type="date" value={start} onChange={e => setStart(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1"><Label className="text-xs">To (optional)</Label>
+            <Input type="date" value={end} onChange={e => setEnd(e.target.value)} className="w-40" /></div>
+          <div className="space-y-1 flex-1 min-w-40"><Label className="text-xs">Reason (optional)</Label>
+            <Input value={reason} onChange={e => setReason(e.target.value)} placeholder="Vacation" /></div>
+          <Button onClick={add} className="rounded-xl"><Plus className="w-4 h-4 mr-1" /> Add</Button>
+        </div>
+        {rows.length > 0 && (
+          <div className="divide-y">
+            {rows.map(r => (
+              <div key={r.id} className="flex items-center justify-between py-2 text-sm">
+                <span>
+                  {r.start_date === r.end_date ? r.start_date : `${r.start_date} → ${r.end_date}`}
+                  {r.reason ? <span className="text-muted-foreground"> · {r.reason}</span> : null}
+                </span>
+                <Button size="sm" variant="ghost" onClick={async () => { await deleteTimeOff(r.id!); refresh(); }}>
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -356,7 +470,12 @@ function BookingsTab({ staff }: { staff: Staff[] }) {
 
   async function loadSlots(staffId: string, serviceId: string) {
     const svc = services.find(s => s.id === serviceId);
-    setSlots(await computeAvailability({ staffId: staffId || undefined, durationMinutes: svc?.duration_minutes || 60, days: 7 }));
+    setSlots(await computeAvailability({
+      staffId: staffId || undefined,
+      serviceId: serviceId || undefined,
+      durationMinutes: svc?.duration_minutes || 60,
+      days: 7,
+    }));
   }
 
   useEffect(() => { if (open) loadSlots(form.staffId, form.serviceId); }, [open, form.staffId, form.serviceId]);

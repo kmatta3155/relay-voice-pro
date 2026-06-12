@@ -41,13 +41,14 @@ serve(async (req) => {
     }
 
     // 2. Get business data (hours, services, quick answers, knowledge, staff)
-    const [businessHours, services, quickAnswers, knowledgeChunks, staffRes, schedRes] = await Promise.all([
+    const [businessHours, services, quickAnswers, knowledgeChunks, staffRes, schedRes, staffSvcRes] = await Promise.all([
       supabase.from('business_hours').select('*').eq('tenant_id', tenant_id),
       supabase.from('services').select('*').eq('tenant_id', tenant_id).eq('active', true),
       supabase.from('business_quick_answers').select('*').eq('tenant_id', tenant_id),
       supabase.from('knowledge_chunks').select('content').eq('tenant_id', tenant_id).limit(20),
-      supabase.from('staff').select('id,name,role,specialties').eq('tenant_id', tenant_id).eq('active', true),
-      supabase.from('staff_schedules').select('staff_id,dow,start_time,end_time').eq('tenant_id', tenant_id)
+      supabase.from('staff').select('id,name,role,specialties,bio').eq('tenant_id', tenant_id).eq('active', true),
+      supabase.from('staff_schedules').select('staff_id,dow,start_time,end_time').eq('tenant_id', tenant_id),
+      supabase.from('staff_services').select('staff_id,service_id').eq('tenant_id', tenant_id)
     ]);
 
     // 3. Generate system prompt based on business data
@@ -58,7 +59,8 @@ serve(async (req) => {
       quickAnswers: quickAnswers.data || [],
       knowledge: knowledgeChunks.data?.map(k => k.content).join('\n') || '',
       staff: staffRes.data || [],
-      staffSchedules: schedRes.data || []
+      staffSchedules: schedRes.data || [],
+      staffServices: staffSvcRes.data || []
     };
 
     const systemPrompt = generateSystemPrompt(businessInfo, business_type);
@@ -388,7 +390,7 @@ SERVICE OPERATIONS:
 };
 
 function generateSystemPrompt(businessInfo: any, businessType: string = 'salon'): string {
-  const { name, hours, services, quickAnswers, knowledge, staff = [], staffSchedules = [] } = businessInfo;
+  const { name, hours, services, quickAnswers, knowledge, staff = [], staffSchedules = [], staffServices = [] } = businessInfo;
   const template = DOMAIN_TEMPLATES[businessType] || DOMAIN_TEMPLATES.salon;
   
   let prompt = `You are ${name}'s AI receptionist. You are professional, helpful, and knowledgeable about the business.
@@ -448,23 +450,34 @@ ${template.conversationalGuidelines}
       const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
       return `${h12}:${m[2]} ${ap}`;
     };
+    // Map service ids to names for per-stylist service assignments
+    const svcNameById = new Map<string, string>(services.map((s: any) => [s.id, s.name]));
     prompt += "OUR STAFF:\n";
     staff.forEach((st: any) => {
       prompt += `- ${st.name}`;
       if (st.role) prompt += ` (${st.role})`;
       if (st.specialties?.length) prompt += ` — specializes in ${st.specialties.join(', ')}`;
+      const assigned = (staffServices || [])
+        .filter((a: any) => a.staff_id === st.id)
+        .map((a: any) => svcNameById.get(a.service_id))
+        .filter(Boolean);
+      if (assigned.length) prompt += `. Performs: ${assigned.join(', ')}`;
       const sched = staffSchedules
         .filter((s: any) => s.staff_id === st.id)
         .sort((a: any, b: any) => a.dow - b.dow)
         .map((s: any) => `${dayNames[s.dow]} ${fmt(s.start_time)}-${fmt(s.end_time)}`);
       if (sched.length) prompt += `. Works: ${sched.join(', ')}`;
+      if (st.bio) prompt += `. About: ${String(st.bio).slice(0, 200)}`;
       prompt += "\n";
     });
     prompt += "\nSTAFF & BOOKING INSTRUCTIONS:\n";
     prompt += "- When a caller asks for a specific stylist, use the check_availability tool to get their real open time slots — never guess availability\n";
-    prompt += "- If the requested stylist has no openings, offer the next available slot or another stylist with the same specialty\n";
+    prompt += "- If a stylist has a 'Performs' list, only book them for those services; otherwise any stylist can take any service\n";
+    prompt += "- If the requested stylist has no openings, offer the next available slot or another stylist who performs the same service\n";
     prompt += "- To book, collect the caller's name and phone number, confirm service + stylist + time back to them, then use the book_appointment tool\n";
-    prompt += "- Only confirm a booking AFTER the book_appointment tool reports success\n\n";
+    prompt += "- Only confirm a booking AFTER the book_appointment tool reports success\n";
+    prompt += "- To cancel an existing appointment, ask for the name (and phone if needed), use cancel_appointment, and only confirm after it succeeds\n";
+    prompt += "- To reschedule: cancel the old appointment first, then book the new time\n\n";
   }
 
   // Quick answers
