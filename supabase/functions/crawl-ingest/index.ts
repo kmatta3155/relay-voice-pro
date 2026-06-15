@@ -1262,11 +1262,25 @@ function fixMojibake(s: string): string {
 const SENTENCE_FRAGMENT = /\b(may be subject|are subject to|prices? (may )?vary|please call|please contact|disclaimer|terms and conditions)\b/i;
 const JUNK_EXACT = /^(disclaimer|notes?|important|attention|pricing|prices|map|directions?|parking|wifi|hours?)$/i;
 
+// Strip trailing price-intro phrases and HTML entities that get glued onto
+// service names ("Shampoo & Style (Blowout) Starting at" → "Shampoo & Style (Blowout)").
+function cleanServiceName(raw: string): string {
+  let n = fixMojibake(raw)
+    .replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&').replace(/&#\d+;/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  // Remove a trailing "Starting at", "Starting from", "Price", "Free Free" etc.
+  n = n.replace(/\s+(starting\s+(at|from)|price|priced\s+from|from)\s*$/i, '');
+  n = n.replace(/(\s+free)\s+free\s*$/i, '$1');          // "Free Free" → "Free"
+  n = n.replace(/[\s,–-]+$/, '').trim();
+  return n;
+}
+
 function finalServiceFilter(list: ExtractedService[]): ExtractedService[] {
   return list
     .map(s => ({
       ...s,
-      name: fixMojibake(s.name).replace(/\s{2,}/g, ' ').trim(),
+      name: cleanServiceName(s.name),
       description: s.description ? fixMojibake(s.description) : undefined,
     }))
     .filter(s => {
