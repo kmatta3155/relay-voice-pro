@@ -27,6 +27,7 @@ import {
   uploadStaffPhoto,
   IntegrationStatus, getIntegrationStatus, connectVagaro, disconnectIntegration,
 } from "@/lib/staff";
+import { BOOKING_PROVIDERS, getProvider, liveSyncLabel } from "@/lib/bookingProviders";
 
 // Stylist avatar — photo if available, else colored initials
 function Avatar({ name, url, size = 40 }: { name: string; url?: string | null; size?: number }) {
@@ -671,26 +672,41 @@ function SettingsTab() {
 
       <VagaroConnect />
 
-      {s.mode === "external" && (
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Link2 className="w-4 h-4 text-primary" /> Existing system</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1"><Label>Provider</Label>
-              <Select value={s.provider || ""} onValueChange={v => setS({ ...s, provider: v })}>
-                <SelectTrigger><SelectValue placeholder="Select your booking platform" /></SelectTrigger>
-                <SelectContent>
-                  {["Vagaro", "Square", "Fresha", "Booksy", "Mindbody", "Boulevard", "GlossGenius", "Acuity", "Calendly", "Other"]
-                    .map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1"><Label>Booking link</Label>
-              <Input value={s.external_url || ""} onChange={e => setS({ ...s, external_url: e.target.value })} placeholder="https://www.vagaro.com/yoursalon" />
-              <p className="text-[11px] text-muted-foreground">The AI offers this link (or texts it) when a caller wants to book.</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {s.mode === "external" && (() => {
+        const prov = getProvider(s.provider);
+        const badge = prov ? liveSyncLabel(prov.liveSync) : null;
+        return (
+          <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Link2 className="w-4 h-4 text-primary" /> Your booking platform</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1"><Label>Provider</Label>
+                <Select value={prov?.id || ""} onValueChange={v => setS({ ...s, provider: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select your booking platform" /></SelectTrigger>
+                  <SelectContent>
+                    {BOOKING_PROVIDERS.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {prov && badge && (
+                <div className="rounded-lg border p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Badge className={badge.cls}>{badge.text}</Badge>
+                    <span className="text-xs text-muted-foreground">{prov.audience}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{prov.note}</p>
+                  {prov.liveSync === "available" && (
+                    <p className="text-[11px] text-primary">This platform supports live API sync — ask us to enable the {prov.name} connector for real-time availability &amp; booking.</p>
+                  )}
+                </div>
+              )}
+              <div className="space-y-1"><Label>Booking link</Label>
+                <Input value={s.external_url || ""} onChange={e => setS({ ...s, external_url: e.target.value })} placeholder={prov?.bookingUrlHint || "https://your-booking-link"} />
+                <p className="text-[11px] text-muted-foreground">The AI offers this link (or texts it) when a caller wants to book.</p>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-3"><CardTitle className="text-base">Slot rules</CardTitle></CardHeader>
