@@ -257,6 +257,16 @@ function NavBarApp() {
 }
 
 function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (t: any) => void; demoMode: boolean; toggleDemo: () => void }) {
+  // Demo toggle is an admin-only control; customers should never see it
+  const [isSiteAdmin, setIsSiteAdmin] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      const { data: p } = await supabase.from("profiles").select("is_site_admin").eq("id", u.user.id).maybeSingle();
+      setIsSiteAdmin(!!p?.is_site_admin);
+    })();
+  }, []);
   const items = [
     { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: "leads", label: "Leads", icon: <Users className="w-4 h-4" /> },
@@ -271,12 +281,14 @@ function Sidebar({ tab, setTab, demoMode, toggleDemo }: { tab: string; setTab: (
   return (
     <Card className="rounded-2xl shadow-sm sticky top-20 overflow-hidden">
       <CardContent className="p-0">
-        <div className="p-3 flex items-center justify-between bg-card/60 border-b">
-          <div className="text-xs text-slate-600">Demo mode</div>
-          <Button size="sm" variant={demoMode ? "default" : "outline"} className="rounded-xl h-7 px-3" onClick={toggleDemo}>
-            {demoMode ? "On" : "Off"}
-          </Button>
-        </div>
+        {isSiteAdmin && (
+          <div className="p-3 flex items-center justify-between bg-orange-50 border-b">
+            <div className="text-xs text-orange-700 font-medium">Demo mode (admin)</div>
+            <Button size="sm" variant={demoMode ? "default" : "outline"} className="rounded-xl h-7 px-3" onClick={toggleDemo}>
+              {demoMode ? "On" : "Off"}
+            </Button>
+          </div>
+        )}
         <nav className="grid p-2">
           {items.map((i) => (
             <button

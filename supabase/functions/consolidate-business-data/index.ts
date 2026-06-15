@@ -133,13 +133,20 @@ serve(async (req) => {
     const SERVICE_NOUN = /\b(cut|colou?r|hair|nail|wax|facial|massage|blowout|blow[\s-]?dry|style|styling|trim|shave|beard|braid|updo|perm|keratin|gloss|tone|toner|highlight|lowlight|balayage|ombre|extension|lash|brow|tint|tan|polish|mani|manicure|pedi|pedicure|treatment|condition|service|package|deal|makeup|spray|thread|silk|press|scalp|relaxer|smoothing|consultation|removal|session|process|head|body|wash|set|design|fill|soak|paraffin|peel|mask|masque|wrap|scrub|botox|filler|signature|partial|full|deep|express|single|root|touch|wave|curl|iron|hot|towel)\b/i;
     const personNameRe = /^[A-Z][a-z'’.-]{1,14}(?:\s+[A-Z][a-z'’.-]{1,15}){1,2}$/;
 
-    // Names of extracted staff (full + first) so they're never shown as services
+    // Names of extracted staff (full + first) so they're never shown as services.
+    // Also keep the full staff objects so we can persist them to this tenant —
+    // the onboarding crawl runs against the 'demo' tenant, so staff would
+    // otherwise never reach the real tenant created afterward.
     const staffKeys = new Set<string>();
+    const crawlStaff: any[] = [];
     let haveStaff = false;
     const addStaffKeys = (list: any[]) => {
       for (const st of list || []) {
         const n = normName(fixMojibake(st?.name || ''));
-        if (n) { staffKeys.add(n); staffKeys.add(n.split(' ')[0]); haveStaff = true; }
+        if (n) {
+          staffKeys.add(n); staffKeys.add(n.split(' ')[0]); haveStaff = true;
+          if (st?.name) crawlStaff.push(st);
+        }
       }
     };
     const isStaffName = (name: string): boolean => {
@@ -362,6 +369,57 @@ ${consolidatedContent}`;
       } else {
         console.log(`Successfully saved ${servicesToInsert.length} services`);
       }
+    }
+
+    // Persist staff (+schedules) extracted during the crawl into THIS tenant.
+    // The onboarding crawl ran against the 'demo' tenant, so without this the
+    // new tenant's Staff & Booking section would stay empty.
+    if (crawlStaff.length > 0) {
+      const dayNum: Record<string, number> = {
+        sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+      };
+      const to24 = (t?: string): string | null => {
+        const m = (t || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+        if (!m) return null;
+        let h = parseInt(m[1], 10); const min = m[2] ?? '00'; const ap = m[3]?.toLowerCase();
+        if (ap === 'pm' && h !== 12) h += 12;
+        if (ap === 'am' && h === 12) h = 0;
+        if (h > 23) return null;
+        return `${String(h).padStart(2, '0')}:${min}:00`;
+      };
+      let savedStaff = 0;
+      for (const st of crawlStaff) {
+        const name = fixMojibake(String(st.name || '')).trim();
+        if (!name) continue;
+        try {
+          const { data: row, error: stErr } = await supabase.from('staff').upsert({
+            tenant_id: tenantId,
+            name,
+            role: st.role || null,
+            specialties: Array.isArray(st.specialties) && st.specialties.length ? st.specialties : null,
+            bio: st.bio ? String(st.bio).trim() : null,
+            source: 'website',
+            active: true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'tenant_id,name' }).select('id').single();
+          if (stErr) { console.error('staff upsert failed:', name, stErr.message); continue; }
+          savedStaff++;
+          if (row?.id && Array.isArray(st.schedule) && st.schedule.length) {
+            await supabase.from('staff_schedules').delete().eq('staff_id', row.id);
+            const rows = st.schedule
+              .map((s: any) => ({
+                tenant_id: tenantId, staff_id: row.id,
+                dow: dayNum[String(s.day || '').toLowerCase()] ?? null,
+                start_time: to24(s.start_time), end_time: to24(s.end_time),
+              }))
+              .filter((r: any) => r.dow !== null && r.start_time && r.end_time);
+            if (rows.length) await supabase.from('staff_schedules').insert(rows);
+          }
+        } catch (e) {
+          console.error('staff save error (tables migrated?):', (e as Error).message);
+        }
+      }
+      console.log(`Saved ${savedStaff}/${crawlStaff.length} staff to tenant ${tenantId}`);
     }
 
     // Save consolidated business hours to database
