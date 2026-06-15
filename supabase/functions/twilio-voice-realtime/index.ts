@@ -246,7 +246,7 @@ class RealtimeAudioBridge {
         if (bs?.mode === 'external') {
           this.bookingMode = 'external'
           this.externalBookingUrl = bs.external_url || ''
-          this.agentInstructions += `\n\nBOOKING MODE: EXTERNAL. Do NOT book appointments yourself. When a caller wants to book, help them choose a service and stylist, then direct them to book at ${this.externalBookingUrl || (bs.provider ? bs.provider : 'our online booking system')}. Offer to text them the link if you have their number.`
+          this.agentInstructions += `\n\nBOOKING MODE: EXTERNAL (handoff). Do NOT book, check availability, or promise specific times yourself — the salon books through its own system. When a caller wants to book:\n1. Help them choose a service and (if they have a preference) a stylist, using your knowledge of the team.\n2. Ask for their mobile number and call the send_booking_link tool to text them the booking link so they can pick their exact time.\n3. If they can't receive a text, read the booking link aloud: ${this.externalBookingUrl || 'the salon booking page'}.\nBooking link: ${this.externalBookingUrl || '(not set)'}.`
         }
       } catch { /* table may not exist yet — default to native */ }
 
@@ -556,6 +556,18 @@ class RealtimeAudioBridge {
           customer_phone: { type: 'string', description: 'Phone number on the booking, if provided' }
         }
       }
+    }, {
+      type: 'function',
+      name: 'send_booking_link',
+      description: 'Text the salon\'s online booking link to the caller so they can pick their time. Use this when booking is handled by the salon\'s existing system (handoff): after helping them choose a service and stylist, collect their mobile number and call this tool.',
+      parameters: {
+        type: 'object',
+        properties: {
+          customer_phone: { type: 'string', description: 'Caller mobile number to text the booking link to' },
+          customer_name: { type: 'string', description: 'Caller name, if provided' }
+        },
+        required: ['customer_phone']
+      }
     }]
     
     const sessionConfig = {
@@ -678,6 +690,10 @@ class RealtimeAudioBridge {
       }
 
       if (name === 'check_availability') {
+        if (this.bookingMode === 'external') {
+          this.sendToolOutput(call_id, { external: true, message: 'Availability is in the salon\'s own booking system. Do not quote times — instead collect the caller\'s mobile number and use send_booking_link so they can pick a time.' })
+          return
+        }
         const slots = await computeAvailability(supabase, this.tenantId!, args.staff_name, args.date, args.service_name)
         logger.info('Availability computed', { slots: slots.length, staff: args.staff_name })
         this.sendToolOutput(call_id, slots.length > 0
@@ -705,6 +721,25 @@ class RealtimeAudioBridge {
         const result = await cancelAppointment(supabase, this.tenantId!, args)
         logger.info('Cancellation attempt', { success: result.success, name: args.customer_name })
         this.sendToolOutput(call_id, result)
+        return
+      }
+
+      if (name === 'send_booking_link') {
+        const url = this.externalBookingUrl
+        if (!url) {
+          this.sendToolOutput(call_id, { success: false, message: 'No booking link is configured. Offer to take a message or read the phone number instead.' })
+          return
+        }
+        if (!args.customer_phone) {
+          this.sendToolOutput(call_id, { success: false, message: 'Ask the caller for their mobile number first.' })
+          return
+        }
+        const sent = await sendBookingSms(supabase, this.tenantId!, args.customer_phone,
+          `Book your appointment here: ${url}`)
+        logger.info('Booking link SMS', { sent, to: args.customer_phone })
+        this.sendToolOutput(call_id, sent
+          ? { success: true, message: `Booking link texted. Tell the caller it's on its way and they can tap it to pick their time.` }
+          : { success: false, message: `Could not send the text. Read the booking link aloud instead: ${url}` })
         return
       }
 
