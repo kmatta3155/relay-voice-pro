@@ -406,3 +406,36 @@ export async function listServicesLite(): Promise<{ id: string; name: string; du
   const { data } = await supabase.from("services").select("id,name,duration_minutes").eq("tenant_id", t).eq("active", true).order("name");
   return data || [];
 }
+
+/* ---------------- Booking platform integration (Vagaro) ---------------- */
+export type IntegrationStatus = {
+  provider?: string;
+  region?: string;
+  status: "disconnected" | "connected" | "error";
+  external_business_id?: string | null;
+  last_synced_at?: string | null;
+  last_error?: string | null;
+};
+
+export async function getIntegrationStatus(): Promise<IntegrationStatus> {
+  const t = await activeTenantId(); if (!t) return { status: "disconnected" };
+  const { data, error } = await supabase.functions.invoke("vagaro-integration", {
+    body: { action: "status", tenantId: t },
+  });
+  if (error) return { status: "disconnected" };
+  return data?.integration || { status: "disconnected" };
+}
+
+export async function connectVagaro(creds: { region: string; clientId: string; clientSecret: string; scope?: string }): Promise<void> {
+  const t = await activeTenantId(); if (!t) throw new Error("No active workspace");
+  const { data, error } = await supabase.functions.invoke("vagaro-integration", {
+    body: { action: "connect", tenantId: t, provider: "vagaro", ...creds },
+  });
+  if (error) throw new Error(error.message || "Connection failed");
+  if (data?.error) throw new Error(data.error);
+}
+
+export async function disconnectIntegration(): Promise<void> {
+  const t = await activeTenantId(); if (!t) return;
+  await supabase.functions.invoke("vagaro-integration", { body: { action: "disconnect", tenantId: t } });
+}

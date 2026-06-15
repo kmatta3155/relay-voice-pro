@@ -25,6 +25,7 @@ import {
   computeAvailability, bookAppointment, listServicesLite,
   listStaffServices, setStaffServices, listTimeOff, addTimeOff, deleteTimeOff,
   uploadStaffPhoto,
+  IntegrationStatus, getIntegrationStatus, connectVagaro, disconnectIntegration,
 } from "@/lib/staff";
 
 // Stylist avatar — photo if available, else colored initials
@@ -668,6 +669,8 @@ function SettingsTab() {
         </CardContent>
       </Card>
 
+      <VagaroConnect />
+
       {s.mode === "external" && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Link2 className="w-4 h-4 text-primary" /> Existing system</CardTitle></CardHeader>
@@ -710,6 +713,91 @@ function EmptyHint({ text }: { text: string }) {
   return (
     <Card className="rounded-2xl shadow-sm">
       <CardContent className="py-10 text-center text-sm text-muted-foreground">{text}</CardContent>
+    </Card>
+  );
+}
+
+/* ============================ VAGARO LIVE SYNC ============================ */
+function VagaroConnect() {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<IntegrationStatus>({ status: "disconnected" });
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ region: "", clientId: "", clientSecret: "", scope: "" });
+  const [connecting, setConnecting] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    try { setStatus(await getIntegrationStatus()); } finally { setLoading(false); }
+  }
+  useEffect(() => { refresh(); }, []);
+
+  async function connect() {
+    if (!form.region || !form.clientId || !form.clientSecret) {
+      toast({ title: "Fill in region, client ID, and client secret", variant: "destructive" }); return;
+    }
+    setConnecting(true);
+    try {
+      await connectVagaro(form);
+      toast({ title: "Connected to Vagaro", description: "Your live booking data is now linked." });
+      setForm({ region: "", clientId: "", clientSecret: "", scope: "" });
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Couldn't connect", description: e.message, variant: "destructive" });
+    } finally { setConnecting(false); }
+  }
+
+  async function disconnect() {
+    if (!confirm("Disconnect Vagaro? The AI will stop using live Vagaro data.")) return;
+    await disconnectIntegration(); refresh();
+  }
+
+  const connected = status.status === "connected";
+
+  return (
+    <Card className="rounded-2xl shadow-sm border-primary/30">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-primary" /> Live sync with Vagaro
+          {connected && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Connected</Badge>}
+          {status.status === "error" && <Badge variant="destructive">Error</Badge>}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loading ? <div className="text-sm text-muted-foreground">Checking…</div> : connected ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Your AI receptionist reads real stylists and availability from Vagaro and keeps bookings in sync.
+              {status.last_synced_at ? ` Last synced ${new Date(status.last_synced_at).toLocaleString()}.` : ""}
+            </p>
+            <Button variant="outline" className="rounded-xl" onClick={disconnect}>Disconnect</Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-accent/40 p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">To connect, the salon needs Vagaro API access:</p>
+              <p>1. In Vagaro: <span className="font-medium">Settings → Developers → APIs &amp; Webhooks</span> (requires a paid plan with credit-card processing; approval can take up to 7 business days).</p>
+              <p>2. Generate API credentials, then paste them here.</p>
+            </div>
+            {status.status === "error" && status.last_error && (
+              <div className="text-xs text-destructive flex items-start gap-1"><AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{status.last_error}</div>
+            )}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1"><Label>Region</Label>
+                <Input value={form.region} onChange={e => setForm({ ...form, region: e.target.value })} placeholder="e.g. us02" /></div>
+              <div className="space-y-1"><Label>Scope (if provided)</Label>
+                <Input value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value })} placeholder="optional" /></div>
+              <div className="space-y-1"><Label>Client ID</Label>
+                <Input value={form.clientId} onChange={e => setForm({ ...form, clientId: e.target.value })} /></div>
+              <div className="space-y-1"><Label>Client Secret</Label>
+                <Input type="password" value={form.clientSecret} onChange={e => setForm({ ...form, clientSecret: e.target.value })} /></div>
+            </div>
+            <Button onClick={connect} disabled={connecting} className="rounded-xl">
+              {connecting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Link2 className="w-4 h-4 mr-1" />}
+              {connecting ? "Connecting…" : "Connect Vagaro"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }
