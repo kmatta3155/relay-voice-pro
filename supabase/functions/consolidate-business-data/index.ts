@@ -130,6 +130,27 @@ serve(async (req) => {
       } catch { return fixEncoding(s); }
     };
     const fragmentPattern = /\b(may be subject|are subject to|prices? (may )?vary|please call|please contact|disclaimer|terms and conditions)\b/i;
+    const SERVICE_NOUN = /\b(cut|colou?r|hair|nail|wax|facial|massage|blowout|blow[\s-]?dry|style|styling|trim|shave|beard|braid|updo|perm|keratin|gloss|tone|toner|highlight|lowlight|balayage|ombre|extension|lash|brow|tint|tan|polish|mani|manicure|pedi|pedicure|treatment|condition|service|package|deal|makeup|spray|thread|silk|press|scalp|relaxer|smoothing|consultation|removal|session|process|head|body|wash|set|design|fill|soak|paraffin|peel|mask|masque|wrap|scrub|botox|filler|signature|partial|full|deep|express|single|root|touch|wave|curl|iron|hot|towel)\b/i;
+    const personNameRe = /^[A-Z][a-z'’.-]{1,14}(?:\s+[A-Z][a-z'’.-]{1,15}){1,2}$/;
+
+    // Names of extracted staff (full + first) so they're never shown as services
+    const staffKeys = new Set<string>();
+    let haveStaff = false;
+    const addStaffKeys = (list: any[]) => {
+      for (const st of list || []) {
+        const n = normName(fixMojibake(st?.name || ''));
+        if (n) { staffKeys.add(n); staffKeys.add(n.split(' ')[0]); haveStaff = true; }
+      }
+    };
+    const isStaffName = (name: string): boolean => {
+      const key = normName(name);
+      if (staffKeys.has(key)) return true;
+      if (/^staff\b/i.test(name.trim())) return true;
+      const first = key.split(' ')[0];
+      if (staffKeys.has(first) && key.split(' ').length <= 3) return true;
+      if (haveStaff && personNameRe.test(name.trim().replace(/^staff\s+/i, '')) && !SERVICE_NOUN.test(name)) return true;
+      return false;
+    };
 
     const structuredServices: Service[] = [];
     const seenNames = new Set<string>();
@@ -140,6 +161,7 @@ serve(async (req) => {
         const words = name.split(/\s+/).length;
         if (words >= 12 || fragmentPattern.test(name)) continue;                  // sentence fragments
         if (/^[^a-z]+$/.test(name) && words <= 4 && !/\d/.test(name)) continue;   // ALL-CAPS category headers
+        if (isStaffName(name)) continue;                                          // stylist names, not services
         const key = normName(name);
         if (seenNames.has(key)) continue;
         seenNames.add(key);
@@ -151,6 +173,15 @@ serve(async (req) => {
         });
       }
     };
+
+    // First pass: gather staff names from every crawl source so service
+    // collection below can exclude stylist names regardless of source order.
+    for (const source of dataSources) {
+      try {
+        const parsed = JSON.parse(source.content);
+        if (Array.isArray(parsed.staff)) addStaffKeys(parsed.staff);
+      } catch { /* not JSON */ }
+    }
 
     // Prepare consolidated content for AI processing
     let consolidatedContent = '';

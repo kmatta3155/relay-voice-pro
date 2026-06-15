@@ -1588,29 +1588,11 @@ serve(async (req) => {
     const allServices = [...nonAiFiltered, ...aiServices];
     const allHours = [...structuredData.hours, ...aiData.hours];
 
-    // Quality pass first (mojibake repair, category headers, fragments),
-    // then fuzzy dedup so "Women's Haircut" and mojibaked "Womenâ€™s Haircut"
-    // resolve to the same key after repair.
-    const cleanedServices = finalServiceFilter(allServices);
     const normName = (n: string) => n.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
-    const seen = new Set<string>();
-    const uniqueServices = cleanedServices.filter(s => {
-      const key = normName(s.name);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    // Prefer entries that have a price over duplicates without
-    // (done by ordering firecrawlExtractServices first — they're most complete)
-
-    const uniqueHours = allHours.filter((h, i, arr) =>
-      arr.findIndex(x => x.day.toLowerCase() === h.day.toLowerCase()) === i
-    );
-
-    console.log(`Final: ${uniqueServices.length} services, ${uniqueHours.length} hours`);
 
     // Staff: verify each AI-extracted name actually appears in the crawled
-    // content (anti-hallucination), then clean up encoding
+    // content (anti-hallucination), then clean up encoding. Computed BEFORE the
+    // service list so staff names can be excluded from services below.
     const contentLowerForStaff = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
     const verifiedStaff = (aiData.staff || [])
       .filter(st => st.name && contentLowerForStaff.includes(st.name.toLowerCase().trim()))
@@ -1618,6 +1600,55 @@ serve(async (req) => {
     if (verifiedStaff.length !== (aiData.staff || []).length) {
       console.log(`Staff verification: ${aiData.staff?.length ?? 0} → ${verifiedStaff.length}`);
     }
+    // Person/staff names must never appear as services. Build a lookup of staff
+    // names (full + first-name) plus a generic "looks like a person's name" test.
+    const staffKeys = new Set<string>();
+    for (const st of verifiedStaff) {
+      const n = normName(st.name);
+      if (n) { staffKeys.add(n); staffKeys.add(n.split(' ')[0]); }
+    }
+    // Words that mark a string as a real service, never a person's name.
+    const SERVICE_NOUN = /\b(cut|color|colour|hair|nail|wax|facial|massage|blowout|blow[\s-]?dry|style|styling|trim|shave|beard|braid|updo|perm|keratin|gloss|tone|toner|highlight|lowlight|balayage|ombre|extension|lash|brow|tint|tan|polish|mani|manicure|pedi|pedicure|treatment|condition|conditioner|conditioning|service|package|deal|makeup|spray|thread|threading|silk|press|scalp|relaxer|smoothing|consultation|removal|add|session|process|head|body|wash|set|design|fill|soak|paraffin|microblading|peel|mask|masque|wrap|scrub|reflexology|botox|filler|hydra|derma|men|women|kid|child|bridal|wedding|prom|signature|partial|full|deep|express|single|double|root|touch|wave|curl|straighten|flat|iron|hot|towel)\b/i;
+    // A staff list was found on this site → person names in services are leaks.
+    const haveStaffList = verifiedStaff.length > 0;
+    const personNameRe = /^[A-Z][a-z'’.-]{1,14}(?:\s+[A-Z][a-z'’.-]{1,15}){1,2}$/;
+
+    const looksLikeStaff = (rawName: string): boolean => {
+      const trimmed = rawName.trim();
+      const n = normName(rawName);
+      if (!n) return false;
+      if (staffKeys.has(n)) return true;                       // exact staff match
+      if (/^staff\b/i.test(trimmed)) return true;              // "Staff Mariz Ferig"
+      const first = n.split(' ')[0];
+      if (staffKeys.has(first) && n.split(' ').length <= 3) return true;  // known first name
+      // Generic "Firstname Lastname" with no service word — only when this site
+      // actually has a staff section (so we don't nuke services on plain sites).
+      if (haveStaffList && personNameRe.test(trimmed.replace(/^staff\s+/i, '')) && !SERVICE_NOUN.test(trimmed)) {
+        return true;
+      }
+      return false;
+    };
+
+    // Quality pass first (mojibake repair, category headers, fragments),
+    // then fuzzy dedup so "Women's Haircut" and mojibaked "Womenâ€™s Haircut"
+    // resolve to the same key after repair. Staff names are dropped here too.
+    const cleanedServices = finalServiceFilter(allServices);
+    const seen = new Set<string>();
+    let staffDropped = 0;
+    const uniqueServices = cleanedServices.filter(s => {
+      if (looksLikeStaff(s.name)) { staffDropped++; return false; }
+      const key = normName(s.name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (staffDropped) console.log(`Dropped ${staffDropped} staff name(s) that leaked into services`);
+
+    const uniqueHours = allHours.filter((h, i, arr) =>
+      arr.findIndex(x => x.day.toLowerCase() === h.day.toLowerCase()) === i
+    );
+
+    console.log(`Final: ${uniqueServices.length} services, ${uniqueHours.length} hours, ${verifiedStaff.length} staff`);
 
     // ── Step 5: Save to database ─────────────────────────────────────────────
     if (finalTenantId !== 'demo') {
