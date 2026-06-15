@@ -398,6 +398,7 @@ ${consolidatedContent}`;
             role: st.role || null,
             specialties: Array.isArray(st.specialties) && st.specialties.length ? st.specialties : null,
             bio: st.bio ? String(st.bio).trim() : null,
+            photo_url: st.photo_url || null,
             source: 'website',
             active: true,
             updated_at: new Date().toISOString(),

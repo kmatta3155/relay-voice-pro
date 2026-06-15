@@ -24,7 +24,23 @@ import {
   getBookingSettings, saveBookingSettings, importStaffFromWebsite, importStaffCSV,
   computeAvailability, bookAppointment, listServicesLite,
   listStaffServices, setStaffServices, listTimeOff, addTimeOff, deleteTimeOff,
+  uploadStaffPhoto,
 } from "@/lib/staff";
+
+// Stylist avatar — photo if available, else colored initials
+function Avatar({ name, url, size = 40 }: { name: string; url?: string | null; size?: number }) {
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("") || "?";
+  const hue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  if (url) {
+    return <img src={url} alt={name} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
+  }
+  return (
+    <div className="rounded-full grid place-items-center shrink-0 font-semibold text-white"
+      style={{ width: size, height: size, fontSize: size * 0.36, background: `hsl(${hue} 60% 55%)` }}>
+      {initials}
+    </div>
+  );
+}
 import { listAppointments, deleteAppointment } from "@/lib/data";
 
 type SubTab = "stylists" | "schedules" | "bookings" | "settings";
@@ -109,7 +125,9 @@ function StylistsTab({ staff, loading, onChange }: { staff: Staff[]; loading: bo
   const [crawling, setCrawling] = useState(false);
   const [services, setServices] = useState<{ id: string; name: string }[]>([]);
   const [assigned, setAssigned] = useState<Set<string>>(new Set());
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { listServicesLite().then(setServices).catch(() => {}); }, []);
 
@@ -212,16 +230,22 @@ function StylistsTab({ staff, loading, onChange }: { staff: Staff[]; loading: bo
           ) : (
             <div className="divide-y">
               {staff.map(s => (
-                <div key={s.id} className="flex items-center justify-between py-3 gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{s.name}</span>
-                      {!s.active && <Badge variant="secondary" className="text-[10px]">inactive</Badge>}
-                      {s.source && s.source !== "manual" && <Badge variant="outline" className="text-[10px]">{s.source}</Badge>}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {s.role}{s.role && s.specialties?.length ? " · " : ""}
-                      {s.specialties?.length ? s.specialties.join(", ") : ""}
+                <div key={s.id} className="flex items-start justify-between py-3 gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Avatar name={s.name} url={s.photo_url} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{s.name}</span>
+                        {!s.active && <Badge variant="secondary" className="text-[10px]">inactive</Badge>}
+                        {s.source && s.source !== "manual" && <Badge variant="outline" className="text-[10px]">{s.source}</Badge>}
+                      </div>
+                      {(s.role || s.specialties?.length) && (
+                        <div className="text-xs text-muted-foreground truncate">
+                          {s.role}{s.role && s.specialties?.length ? " · " : ""}
+                          {s.specialties?.length ? s.specialties.join(", ") : ""}
+                        </div>
+                      )}
+                      {s.bio && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{s.bio}</div>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -241,6 +265,32 @@ function StylistsTab({ staff, loading, onChange }: { staff: Staff[]; loading: bo
           <DialogHeader><DialogTitle>{editing?.id ? "Edit stylist" : "Add stylist"}</DialogTitle></DialogHeader>
           {editing && (
             <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Avatar name={editing.name || "?"} url={editing.photo_url} size={56} />
+                <div className="space-y-1">
+                  <Label>Photo</Label>
+                  <div className="flex items-center gap-2">
+                    <input ref={photoRef} type="file" accept="image/*" className="hidden"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        setUploading(true);
+                        try {
+                          const url = await uploadStaffPhoto(f);
+                          setEditing(cur => cur ? { ...cur, photo_url: url } : cur);
+                        } catch (err: any) {
+                          toast({ title: "Photo upload failed", description: err.message?.includes("Bucket") ? "Create the 'staff-photos' storage bucket first (see setup SQL)." : err.message, variant: "destructive" });
+                        } finally { setUploading(false); if (photoRef.current) photoRef.current.value = ""; }
+                      }} />
+                    <Button type="button" size="sm" variant="outline" className="rounded-xl" disabled={uploading} onClick={() => photoRef.current?.click()}>
+                      {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span className="ml-1">{uploading ? "Uploading…" : "Upload"}</span>
+                    </Button>
+                    {editing.photo_url && (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(cur => cur ? { ...cur, photo_url: null } : cur)}>Remove</Button>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="space-y-1">
                 <Label>Name</Label>
                 <Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="Jane Doe" />

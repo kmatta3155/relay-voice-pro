@@ -84,6 +84,19 @@ export async function deleteStaff(id: string): Promise<void> {
   await supabase.from("staff").delete().eq("tenant_id", t).eq("id", id);
 }
 
+// Upload a stylist photo to the public 'staff-photos' bucket, return its URL.
+export async function uploadStaffPhoto(file: File): Promise<string> {
+  const t = await activeTenantId(); if (!t) throw new Error("No active workspace");
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${t}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from("staff-photos").upload(path, file, {
+    cacheControl: "3600", upsert: true, contentType: file.type || "image/jpeg",
+  });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from("staff-photos").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /* ---------------- Schedules ---------------- */
 export async function listSchedules(staffId?: string): Promise<StaffSchedule[]> {
   const t = await activeTenantId(); if (!t) return [];

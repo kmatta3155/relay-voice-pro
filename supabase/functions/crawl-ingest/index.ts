@@ -69,6 +69,7 @@ interface ExtractedStaff {
   role?: string;
   specialties?: string[];
   bio?: string;
+  photo_url?: string;
   schedule?: { day: string; start_time: string; end_time: string }[];
 }
 
@@ -1001,6 +1002,35 @@ function to24h(t: string): string | null {
   return `${String(h).padStart(2, '0')}:${min}:00`;
 }
 
+// Conservative photo matching: scan STAFF PAGE sections for <img> tags whose
+// alt/title attribute contains a stylist's name. Only confident matches returned.
+function matchStaffPhotos(content: string, names: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (names.length === 0) return out;
+  const staffSections = [...content.matchAll(/=== STAFF PAGE:[^\n]*\n([\s\S]*?)(?=\n=== |$)/g)].map(m => m[1]).join('\n');
+  if (!staffSections) return out;
+
+  const imgRe = /<img\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = imgRe.exec(staffSections)) !== null) {
+    const tag = m[0];
+    const alt = (tag.match(/\balt=["']([^"']+)["']/i)?.[1] || '') + ' ' + (tag.match(/\btitle=["']([^"']+)["']/i)?.[1] || '');
+    const src = tag.match(/\bsrc=["']([^"']+)["']/i)?.[1] || tag.match(/\bdata-src=["']([^"']+)["']/i)?.[1] || '';
+    if (!src || !/^https?:\/\//.test(src)) continue;
+    if (/logo|icon|sprite|placeholder|blank|spacer|pixel/i.test(src)) continue;
+    const altLower = alt.toLowerCase();
+    for (const name of names) {
+      const nl = name.toLowerCase();
+      const first = nl.split(' ')[0];
+      // Require the full name, or first name + (last initial or last name) in alt
+      if (altLower.includes(nl) || (first.length >= 3 && altLower.includes(first) && nl.split(' ').slice(1).some(p => p.length >= 2 && altLower.includes(p)))) {
+        if (!out.has(nl)) out.set(nl, src);
+      }
+    }
+  }
+  return out;
+}
+
 async function saveStaff(tenantId: string, staff: ExtractedStaff[]) {
   for (const st of staff) {
     const name = (st.name || '').trim();
@@ -1011,6 +1041,7 @@ async function saveStaff(tenantId: string, staff: ExtractedStaff[]) {
       role: st.role || null,
       specialties: st.specialties?.length ? st.specialties : null,
       bio: st.bio?.trim() || null,
+      photo_url: (st as any).photo_url || null,
       source: 'website',
       active: true,
       updated_at: new Date().toISOString(),
@@ -1614,6 +1645,17 @@ serve(async (req) => {
     if (verifiedStaff.length !== (aiData.staff || []).length) {
       console.log(`Staff verification: ${aiData.staff?.length ?? 0} → ${verifiedStaff.length}`);
     }
+    // Best-effort photo match: only assign an image whose alt text clearly names
+    // the stylist (avoids putting the wrong face on the wrong person).
+    try {
+      const photoMap = matchStaffPhotos(content, verifiedStaff.map(s => s.name));
+      for (const st of verifiedStaff) {
+        const url = photoMap.get(st.name.toLowerCase());
+        if (url) (st as any).photo_url = url;
+      }
+      const matched = verifiedStaff.filter(s => (s as any).photo_url).length;
+      if (matched) console.log(`Matched ${matched} staff photo(s) from page images`);
+    } catch (e) { console.warn('Photo match failed:', (e as Error).message); }
     // Person/staff names must never appear as services. Build a lookup of staff
     // names (full + first-name) plus a generic "looks like a person's name" test.
     const staffKeys = new Set<string>();
